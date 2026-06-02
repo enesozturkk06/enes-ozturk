@@ -90,7 +90,11 @@ const mn = (r: any): Notification => ({
   createdAt: r.created_at ?? "",
 });
 
-/* Student → DB row */
+/**
+ * Supabase'de her zaman olan temel kolonlar.
+ * package_id / custom_price yeni eklendi — kolon yoksa hata fırlatmamak için
+ * ayrı sRowExtra() ile gönderiliyor.
+ */
 function sRow(s: Partial<Student>): Record<string, unknown> {
   const r: Record<string, unknown> = {};
   if (s.code              !== undefined) r.code               = s.code;
@@ -99,8 +103,6 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.email             !== undefined) r.email              = s.email;
   if (s.level             !== undefined) r.level              = s.level;
   if (s.packageType       !== undefined) r.package_type       = s.packageType;
-  if (s.packageId         !== undefined) r.package_id         = s.packageId || null;
-  if (s.customPrice       !== undefined) r.custom_price       = s.customPrice ?? null;
   if (s.totalLessons      !== undefined) r.total_lessons      = s.totalLessons;
   if (s.remainingLessons  !== undefined) r.remaining_lessons  = s.remainingLessons;
   if (s.completedLessons  !== undefined) r.completed_lessons  = s.completedLessons;
@@ -114,6 +116,20 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.weight            !== undefined) r.weight             = s.weight;
   if (s.age               !== undefined) r.age                = s.age;
   return r;
+}
+
+/** Yeni kolonlar (package_id, custom_price) — Supabase'de yoksa hata almamak için try ile gönderilir */
+async function trySetPackageFields(studentId: string, packageId?: string, customPrice?: number) {
+  if (packageId === undefined && customPrice === undefined) return;
+  try {
+    const extra: Record<string, unknown> = {};
+    if (packageId  !== undefined) extra.package_id   = packageId || null;
+    if (customPrice !== undefined) extra.custom_price = customPrice ?? null;
+    await db().from("students").update(extra).eq("id", studentId);
+  } catch (e) {
+    // Kolon henüz yoksa sessizce geç — SQL çalıştırılmadığında hata vermez
+    console.warn("[trySetPackageFields] package_id/custom_price kolonları bulunamadı — supabase-duet-package.sql çalıştırıldı mı?", e);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -141,14 +157,21 @@ export async function getStudentByCode(code: string): Promise<Student | null> {
 }
 
 export async function createStudent(student: Omit<Student, "id" | "createdAt">): Promise<Student> {
+  // Temel kolonlarla insert
   const { data, error } = await db().from("students").insert(sRow(student)).select().single();
   if (error) fail("createStudent", error);
-  return ms(data);
+  const created = ms(data);
+  // package_id / custom_price kolonları varsa ekle (migration sonrası)
+  await trySetPackageFields(created.id, student.packageId, student.customPrice);
+  return created;
 }
 
 export async function updateStudent(id: string, updates: Partial<Student>): Promise<Student> {
+  // Temel kolonları güncelle
   const { data, error } = await db().from("students").update(sRow(updates)).eq("id", id).select().single();
   if (error) fail("updateStudent", error);
+  // package_id / custom_price varsa güncelle
+  await trySetPackageFields(id, updates.packageId, updates.customPrice);
   return ms(data);
 }
 
