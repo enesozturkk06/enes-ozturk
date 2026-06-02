@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { getAppointments, getStudents, getAdminNotifications, completeAppointment } from "@/lib/db";
-import type { Appointment, Student, Notification } from "@/lib/types";
+import { getAppointments, getStudents, getAdminNotifications, completeAppointment, getAppointmentStudents } from "@/lib/db";
+import type { Appointment, Student, Notification, AppointmentStudent } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
 import { STATUS_LABELS } from "@/lib/constants";
 import { createLessonRecord } from "@/lib/db";
@@ -32,19 +32,47 @@ export default function AdminDashboard() {
   });
   const [noteText, setNoteText] = useState("");
   const [saving, setSaving] = useState(false);
+  // Düet: randevuya bağlı öğrenci isimleri {aptId → [ad1, ad2]}
+  const [aptStudentNames, setAptStudentNames] = useState<Record<string, AppointmentStudent[]>>({});
+
+  const reloadApts = async () => {
+    const apts = await getAppointments({ date: today });
+    setTodayApts(apts);
+    // Düet/grup randevular için appointment_students yükle
+    const duet = apts.filter(a => a.lessonType && a.lessonType !== "bireysel");
+    const entries = await Promise.all(
+      duet.map(async a => ({ id: a.id, students: await getAppointmentStudents(a.id) }))
+    );
+    const map: Record<string, AppointmentStudent[]> = {};
+    entries.forEach(e => { map[e.id] = e.students; });
+    setAptStudentNames(map);
+  };
 
   useEffect(() => {
-    Promise.all([
-      getAppointments({ date: today }),
-      getStudents(),
-      getAdminNotifications(),
-    ]).then(([a, s, n]) => {
-      setTodayApts(a);
+    Promise.all([reloadApts(), getStudents(), getAdminNotifications()]).then(([, s, n]) => {
       setStudents(s);
       setNotifs(n);
       setLoading(false);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today]);
+
+  /** Randevu için görünen ad — düet: "Ahmet + Mehmet", bireysel: "Ahmet" */
+  const aptDisplayName = (apt: Appointment): string => {
+    if (apt.lessonType === "bireysel" || !aptStudentNames[apt.id]) {
+      return apt.studentName;
+    }
+    const names = (aptStudentNames[apt.id] ?? [])
+      .map(s => s.studentName ?? "?")
+      .filter(Boolean);
+    if (names.length <= 1) return apt.studentName;
+    return names.join(" + ");
+  };
+
+  const aptTypeLabel = (apt: Appointment): string | null => {
+    if (!apt.lessonType || apt.lessonType === "bireysel") return null;
+    return apt.lessonType === "duet" ? "Düet Ders" : "Grup Ders";
+  };
 
   const handleComplete = async (apt: Appointment) => {
     try {
@@ -53,7 +81,7 @@ export default function AdminDashboard() {
       if (result.warnings.length > 0) {
         alert("⚠️ Ders tamamlandı — Uyarılar:\n\n" + result.warnings.join("\n"));
       }
-      setTodayApts(prev => prev.map(a => a.id === apt.id ? { ...a, status: "tamamlandi" as const } : a));
+      await reloadApts();
       setNoteModal(apt);
     } catch (err: unknown) {
       alert("Hata: " + (err instanceof Error ? err.message : String(err)));
@@ -126,7 +154,17 @@ export default function AdminDashboard() {
                       <span className="text-crimson text-sm font-display" style={{ fontFamily: "var(--font-bebas)" }}>{apt.startTime}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{apt.studentName}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                          {aptDisplayName(apt)}
+                        </span>
+                        {aptTypeLabel(apt) && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background: "rgba(139,92,246,0.15)", color: "#A855F7", fontFamily: "var(--font-barlow-condensed)", border: "1px solid rgba(139,92,246,0.25)" }}>
+                            {aptTypeLabel(apt)}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
                         {apt.studentCode} · {apt.startTime}–{apt.endTime}
                       </div>

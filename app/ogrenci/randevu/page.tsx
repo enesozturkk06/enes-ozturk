@@ -1,291 +1,649 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
-import { getTimeSlots, getAppointments, createAppointment, cancelAppointment } from "@/lib/db";
-import type { TimeSlot, Appointment } from "@/lib/types";
-import { Card, Button, Badge, PageHeader, Modal } from "@/app/components/ui";
+import {
+  getTimeSlots, getAppointments, createAppointment,
+  cancelAppointment, getStudentByCode,
+} from "@/lib/db";
+import type { TimeSlot, Appointment, Student, LessonType } from "@/lib/types";
+import { PageHeader } from "@/app/components/ui";
 import { TRAINER_NAME, TRAINER_WHATSAPP, CANCEL_LIMIT_HOURS } from "@/lib/constants";
-import { Calendar, Clock, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import {
+  Calendar, Clock, CheckCircle, XCircle, AlertTriangle,
+  Users, User, Search, ChevronRight,
+} from "lucide-react";
 import { format, addDays, parseISO, differenceInHours, isFuture } from "date-fns";
 import { tr } from "date-fns/locale";
 
-const STATUS_COLOR: Record<string, "green" | "red" | "gold" | "gray"> = {
-  onaylandi: "green", iptal: "red", tamamlandi: "gold", gelmedi: "gray",
+/* ── Stil sabitleri ───────────────────────────────────────────────── */
+const CARD = {
+  background: "rgba(15,15,22,0.95)",
+  border: "1px solid rgba(139,92,246,0.12)",
+  backdropFilter: "blur(20px)",
 };
+const VIOLET = "#8B5CF6";
+
 const STATUS_TR: Record<string, string> = {
   onaylandi: "Onaylandı", iptal: "İptal", tamamlandi: "Tamamlandı", gelmedi: "Gelmedi",
 };
+const STATUS_COLOR: Record<string, string> = {
+  onaylandi: "#22c55e", iptal: "#ef4444", tamamlandi: "#d97706", gelmedi: "#6b7280",
+};
 
+const LESSON_TYPES: { value: LessonType; label: string; icon: React.ReactNode; desc: string }[] = [
+  { value: "bireysel", label: "Bireysel", icon: <User size={16}/>, desc: "Sadece sen" },
+  { value: "duet",     label: "Düet",     icon: <Users size={16}/>, desc: "İki öğrenci" },
+];
+
+/* ── Küçük bileşenler ────────────────────────────────────────────── */
+function InfoRow({ label, val }: { label: string; val: string }) {
+  return (
+    <div className="flex justify-between py-2 border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+      <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>{label}</span>
+      <span className="text-xs font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{val}</span>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ANA BILEŞEN
+   ════════════════════════════════════════════════════════════════════ */
 export default function RandevuPage() {
   const { student } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [slots, setSlots] = useState<TimeSlot[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [confirmModal, setConfirmModal] = useState(false);
-  const [successModal, setSuccessModal] = useState(false);
-  const [newApt, setNewApt] = useState<Appointment | null>(null);
-  const [cancelId, setCancelId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const dates = Array.from({ length: 14 }, (_, i) => format(addDays(new Date(), i), "yyyy-MM-dd"));
+  /* Tarih + slotlar */
+  const [selectedDate, setSelectedDate]   = useState(format(new Date(), "yyyy-MM-dd"));
+  const [slots, setSlots]                 = useState<TimeSlot[]>([]);
+  const [appointments, setAppointments]   = useState<Appointment[]>([]);
+  const [selectedSlot, setSelectedSlot]   = useState<TimeSlot | null>(null);
+  const [loadingSlots, setLoadingSlots]   = useState(false);
 
-  useEffect(() => {
+  /* Ders tipi */
+  const [lessonType, setLessonType]       = useState<LessonType>("bireysel");
+
+  /* Düet: ikinci öğrenci */
+  const [partnerCode, setPartnerCode]     = useState("");
+  const [partner, setPartner]             = useState<Student | null>(null);
+  const [partnerError, setPartnerError]   = useState("");
+  const [searchingPartner, setSearching]  = useState(false);
+
+  /* Modal durumları */
+  const [confirmOpen, setConfirmOpen]     = useState(false);
+  const [successOpen, setSuccessOpen]     = useState(false);
+  const [cancelId, setCancelId]           = useState<string | null>(null);
+  const [saving, setSaving]               = useState(false);
+  const [bookError, setBookError]         = useState("");
+
+  const dates = Array.from({ length: 14 }, (_, i) =>
+    format(addDays(new Date(), i), "yyyy-MM-dd")
+  );
+
+  /* ── Yükle ───────────────────────────────────────────────────────── */
+  const reload = useCallback(async () => {
     if (!student) return;
-    Promise.all([getTimeSlots(selectedDate), getAppointments({ studentId: student.id })]).then(([s, a]) => {
-      setSlots(s);
-      setAppointments(a);
-    });
+    setLoadingSlots(true);
+    const [s, a] = await Promise.all([
+      getTimeSlots(selectedDate),
+      getAppointments({ studentId: student.id }),
+    ]);
+    setSlots(s);
+    setAppointments(a);
+    setLoadingSlots(false);
   }, [selectedDate, student]);
 
-  const myAptOnDate = appointments.find(a => a.date === selectedDate && a.status === "onaylandi");
-  const upcoming = appointments.filter(a => a.status === "onaylandi" && isFuture(parseISO(`${a.date}T${a.startTime}`))).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
-  const past = appointments.filter(a => a.status !== "onaylandi").slice(0, 5);
+  useEffect(() => { reload(); }, [reload]);
 
-  const confirmBook = async () => {
-    if (!selectedSlot || !student) return;
-    setLoading(true);
-    const apt = await createAppointment({
-      studentId: student.id,
-      studentName: student.fullName,
-      studentCode: student.code,
-      studentPhone: student.phone,
-      date: selectedDate,
-      startTime: selectedSlot.startTime,
-      endTime: selectedSlot.endTime,
-      status: "onaylandi",
-    });
-    setLoading(false);
-    if (apt) {
-      setNewApt(apt);
-      setConfirmModal(false);
-      setSuccessModal(true);
-      const [s] = await Promise.all([getTimeSlots(selectedDate)]);
-      setSlots(s);
+  /* ── Partner kod araması ─────────────────────────────────────────── */
+  const searchPartner = async () => {
+    const code = partnerCode.trim().toUpperCase();
+    if (!code) return;
+    if (code === student?.code) {
+      setPartnerError("Kendi kodunuzu giremezsiniz.");
+      return;
+    }
+    setSearching(true);
+    setPartnerError("");
+    setPartner(null);
+    try {
+      const found = await getStudentByCode(code);
+      if (!found) {
+        setPartnerError("Bu kodla kayıtlı öğrenci bulunamadı.");
+      } else if (!found.isActive) {
+        setPartnerError("Bu öğrenci aktif değil.");
+      } else {
+        setPartner(found);
+      }
+    } catch {
+      setPartnerError("Arama sırasında hata oluştu.");
+    } finally {
+      setSearching(false);
     }
   };
 
-  const handleCancel = async (id: string) => {
-    const apt = appointments.find(a => a.id === id);
-    if (!apt) return;
+  /* ── Saat seçince onay ekranını aç ──────────────────────────────── */
+  const handleSlotClick = (slot: TimeSlot) => {
+    setBookError("");
+    setSelectedSlot(slot);
+    setConfirmOpen(true);
+  };
+
+  /* ── Randevu oluştur ─────────────────────────────────────────────── */
+  const confirmBook = async () => {
+    if (!selectedSlot || !student) return;
+    setBookError("");
+
+    // ── Validasyonlar ────────────────────────────────────────────────
+    // 1. Kendi dersi var mı?
+    if (student.remainingLessons <= 0) {
+      setBookError("Paketinizde ders kalmadı. Yeni paket alın.");
+      return;
+    }
+
+    // 2. Düet için ikinci öğrenci seçildi mi?
+    if (lessonType === "duet") {
+      if (!partner) {
+        setBookError("Düet ders için ikinci öğrenci seçilmedi.");
+        return;
+      }
+      if (partner.remainingLessons <= 0) {
+        setBookError(`${partner.fullName} adlı öğrencinin kalan dersi yok. Randevu oluşturulamaz.`);
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const secondIds = lessonType === "duet" && partner ? [partner.id] : [];
+      await createAppointment({
+        studentId:        student.id,
+        studentName:      student.fullName,
+        studentCode:      student.code,
+        studentPhone:     student.phone,
+        date:             selectedDate,
+        startTime:        selectedSlot.startTime,
+        endTime:          selectedSlot.endTime,
+        lessonType,
+        secondStudentIds: secondIds,
+        status:           "onaylandi",
+      });
+      setConfirmOpen(false);
+      setSuccessOpen(true);
+      await reload();
+    } catch (err: unknown) {
+      setBookError(err instanceof Error ? err.message : "Randevu oluşturulamadı.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ── İptal ───────────────────────────────────────────────────────── */
+  const handleCancelClick = (apt: Appointment) => {
     const hoursLeft = differenceInHours(parseISO(`${apt.date}T${apt.startTime}`), new Date());
     if (hoursLeft < CANCEL_LIMIT_HOURS) {
       alert(`${CANCEL_LIMIT_HOURS} saatten az kalan randevular iptal edilemez.`);
       return;
     }
-    setCancelId(id);
+    setCancelId(apt.id);
   };
 
   const confirmCancel = async () => {
     if (!cancelId) return;
     await cancelAppointment(cancelId);
-    const [, a] = await Promise.all([getTimeSlots(selectedDate), getAppointments({ studentId: student!.id })]);
-    setSlots(await getTimeSlots(selectedDate));
-    setAppointments(a);
     setCancelId(null);
+    await reload();
   };
 
-  const waMsg = newApt
-    ? `Merhaba ${newApt.studentName}! ${TRAINER_NAME} ile dersiniz oluşturuldu.\nTarih: ${format(parseISO(newApt.date), "dd MMMM yyyy (EEEE)", { locale: tr })}\nSaat: ${newApt.startTime} – ${newApt.endTime}\nGörüşmek üzere 🥊`
+  /* ── Yardımcı hesaplamalar ───────────────────────────────────────── */
+  const myAptOnDate = appointments.find(
+    a => a.date === selectedDate && a.status === "onaylandi"
+  );
+  const upcoming = appointments
+    .filter(a => a.status === "onaylandi" && isFuture(parseISO(`${a.date}T${a.startTime}`)))
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  const past = appointments.filter(a => a.status !== "onaylandi").slice(0, 6);
+
+  const waMsg = student
+    ? `Merhaba! ${TRAINER_NAME} ile randevum oluşturuldu.\nTarih: ${format(parseISO(selectedDate), "dd MMMM yyyy (EEEE)", { locale: tr })}\nSaat: ${selectedSlot?.startTime} – ${selectedSlot?.endTime}\n${lessonType === "duet" ? `Düet: ${student.fullName} + ${partner?.fullName}\n` : ""}Görüşmek üzere 🥊`
     : "";
 
+  /* ════════════════════════════════════════════════════════════════
+     RENDER
+     ════════════════════════════════════════════════════════════════ */
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <PageHeader title="Randevu Sistemi" subtitle="Boş saatleri görerek randevu alın" accent="Özel Ders" />
+    <div className="max-w-5xl mx-auto space-y-5">
+      <PageHeader title="Randevu Al" subtitle="Saat seç, ders tipini belirle" accent="Özel Ders" />
 
+      {/* Kalan ders uyarısı */}
       {student && student.remainingLessons === 0 && (
-        <div className="flex items-center gap-3 p-4 bg-crimson/5 border border-crimson/20">
-          <AlertTriangle size={18} className="text-crimson flex-shrink-0" />
-          <span className="text-sm text-white/70" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            Paketinizde ders kalmadı. Randevu alabilmek için yeni paket satın alın.
+        <div className="flex items-center gap-3 p-4 rounded-xl"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+          <AlertTriangle size={18} className="text-red-400 flex-shrink-0" />
+          <span className="text-sm text-red-300" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            Paketinizde ders kalmadı. Yeni paket almadan randevu oluşturamazsınız.
           </span>
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Calendar & Slots */}
+      <div className="grid lg:grid-cols-3 gap-5">
+
+        {/* ── Sol/Ana alan ──────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Date selector */}
-          <Card className="p-4">
-            <h3 className="text-sm text-white/50 tracking-widest uppercase mb-3" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-              <Calendar size={14} className="inline mr-2" />Tarih Seçin
-            </h3>
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+
+          {/* 1. Ders Tipi */}
+          <div className="rounded-2xl p-5" style={CARD}>
+            <p className="text-xs tracking-widest uppercase mb-3"
+              style={{ color: VIOLET, fontFamily: "var(--font-barlow-condensed)" }}>
+              Ders Tipi Seç
+            </p>
+            <div className="flex gap-3">
+              {LESSON_TYPES.map(t => (
+                <button key={t.value} onClick={() => { setLessonType(t.value); setPartner(null); setPartnerCode(""); setPartnerError(""); }}
+                  className="flex-1 flex flex-col items-center gap-1.5 py-3.5 px-3 rounded-xl transition-all"
+                  style={{
+                    background: lessonType === t.value ? `${VIOLET}18` : "rgba(255,255,255,0.03)",
+                    border: lessonType === t.value ? `1px solid ${VIOLET}55` : "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: lessonType === t.value ? `0 0 20px ${VIOLET}20` : "none",
+                  }}>
+                  <span style={{ color: lessonType === t.value ? VIOLET : "rgba(255,255,255,0.35)" }}>{t.icon}</span>
+                  <span className="text-sm font-semibold"
+                    style={{ color: lessonType === t.value ? "#fff" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    {t.label}
+                  </span>
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    {t.desc}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Düet: İkinci öğrenci */}
+          <AnimatePresence>
+            {lessonType === "duet" && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden">
+                <div className="rounded-2xl p-5" style={{
+                  ...CARD, border: partner
+                    ? "1px solid rgba(34,197,94,0.3)"
+                    : partnerError ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(139,92,246,0.25)",
+                }}>
+                  <p className="text-xs tracking-widest uppercase mb-3"
+                    style={{ color: VIOLET, fontFamily: "var(--font-barlow-condensed)" }}>
+                    Düet Partneri — Öğrenci Kodu ile Ara
+                  </p>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      value={partnerCode}
+                      onChange={e => { setPartnerCode(e.target.value.toUpperCase()); setPartnerError(""); setPartner(null); }}
+                      onKeyDown={e => e.key === "Enter" && searchPartner()}
+                      placeholder="örn: ENES002"
+                      className="flex-1 px-4 py-2.5 text-sm rounded-xl outline-none"
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(139,92,246,0.2)",
+                        color: "#fff",
+                        fontFamily: "var(--font-bebas)",
+                        fontSize: "1.1rem",
+                        letterSpacing: "0.15em",
+                      }}
+                    />
+                    <button onClick={searchPartner} disabled={!partnerCode.trim() || searchingPartner}
+                      className="px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase transition-all disabled:opacity-40"
+                      style={{
+                        background: `linear-gradient(135deg,${VIOLET},#A855F7)`,
+                        color: "#fff",
+                        fontFamily: "var(--font-barlow-condensed)",
+                      }}>
+                      <Search size={14} />
+                      {searchingPartner ? "Arıyor..." : "Ara"}
+                    </button>
+                  </div>
+
+                  {/* Partner bulundu */}
+                  {partner && (
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center justify-between p-3 rounded-xl"
+                      style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)" }}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={{ background: "rgba(34,197,94,0.2)", color: "#22c55e" }}>
+                          {partner.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                            {partner.fullName}
+                          </div>
+                          <div className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                            {partner.code} · {partner.remainingLessons} ders kaldı
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {partner.remainingLessons > 0
+                          ? <CheckCircle size={16} className="text-green-400" />
+                          : <XCircle size={16} className="text-red-400" />}
+                        <button onClick={() => { setPartner(null); setPartnerCode(""); }}
+                          className="text-xs text-white/25 hover:text-red-400 transition-colors"
+                          style={{ fontFamily: "var(--font-barlow-condensed)" }}>✕</button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Hata */}
+                  {partnerError && (
+                    <p className="text-xs text-red-400 mt-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      ⚠️ {partnerError}
+                    </p>
+                  )}
+
+                  {/* Kalan ders uyarısı */}
+                  {partner && partner.remainingLessons === 0 && (
+                    <div className="mt-2 p-2 rounded-lg text-xs text-red-400"
+                      style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+                      {partner.fullName} adlı öğrencinin kalan dersi yok. Bu öğrenci ile düet randevu oluşturamazsınız.
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 3. Tarih seçimi */}
+          <div className="rounded-2xl p-5" style={CARD}>
+            <p className="text-xs tracking-widest uppercase mb-3 flex items-center gap-2"
+              style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+              <Calendar size={13} />Tarih Seçin
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {dates.map(d => {
                 const active = d === selectedDate;
                 const hasApt = appointments.some(a => a.date === d && a.status === "onaylandi");
                 return (
-                  <motion.button
-                    key={d} whileTap={{ scale: 0.95 }}
+                  <motion.button key={d} whileTap={{ scale: 0.93 }}
                     onClick={() => { setSelectedDate(d); setSelectedSlot(null); }}
-                    className={`flex-shrink-0 flex flex-col items-center px-3 py-2 border transition-all duration-200 min-w-[52px] ${active ? "bg-crimson border-crimson text-white" : "border-white/10 text-white/40 hover:border-white/20 hover:text-white/70"}`}
-                  >
-                    <span className="text-xs" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    className="flex-shrink-0 flex flex-col items-center px-3 py-2 rounded-xl min-w-[52px] transition-all"
+                    style={{
+                      background: active ? `${VIOLET}20` : "rgba(255,255,255,0.03)",
+                      border: active ? `1px solid ${VIOLET}55` : "1px solid rgba(255,255,255,0.07)",
+                      boxShadow: active ? `0 0 14px ${VIOLET}25` : "none",
+                    }}>
+                    <span className="text-[10px]" style={{ color: active ? "#C084FC" : "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
                       {format(parseISO(d), "EEE", { locale: tr }).toUpperCase()}
                     </span>
-                    <span className="text-lg font-display" style={{ fontFamily: "var(--font-bebas)" }}>
+                    <span className="text-lg font-display"
+                      style={{ fontFamily: "var(--font-bebas)", color: active ? "#fff" : "rgba(255,255,255,0.45)" }}>
                       {format(parseISO(d), "dd")}
                     </span>
-                    {hasApt && <div className="w-1.5 h-1.5 bg-gold rounded-full mt-0.5" />}
+                    {hasApt && <div className="w-1.5 h-1.5 rounded-full mt-0.5" style={{ background: "#22c55e" }} />}
                   </motion.button>
                 );
               })}
             </div>
-          </Card>
+          </div>
 
-          {/* Time slots */}
-          <Card className="p-4">
-            <h3 className="text-sm text-white/50 tracking-widest uppercase mb-3" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-              <Clock size={14} className="inline mr-2" />
-              {format(parseISO(selectedDate), "dd MMMM yyyy (EEEE)", { locale: tr })} — Uygun Saatler
-            </h3>
+          {/* 4. Müsait saatler */}
+          <div className="rounded-2xl p-5" style={CARD}>
+            <p className="text-xs tracking-widest uppercase mb-3 flex items-center gap-2"
+              style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+              <Clock size={13} />
+              {format(parseISO(selectedDate), "dd MMMM yyyy (EEEE)", { locale: tr })} — Müsait Saatler
+            </p>
 
             {myAptOnDate && (
-              <div className="mb-4 p-3 bg-gold/5 border border-gold/20 flex items-center gap-2">
-                <CheckCircle size={16} className="text-gold" />
-                <span className="text-sm text-gold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <div className="mb-4 p-3 rounded-xl flex items-center gap-2"
+                style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                <CheckCircle size={15} className="text-green-400 flex-shrink-0" />
+                <span className="text-sm text-green-400" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
                   Bu güne ait randevunuz var: {myAptOnDate.startTime} – {myAptOnDate.endTime}
                 </span>
               </div>
             )}
 
-            {slots.length === 0 ? (
+            {loadingSlots ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${VIOLET}40`, borderTopColor: "transparent" }} />
+              </div>
+            ) : slots.length === 0 ? (
               <div className="text-center py-10">
-                <Clock size={28} className="text-white/10 mx-auto mb-3" />
-                <p className="text-white/30 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                  Bu gün için henüz müsait saat tanımlanmamış
+                <Clock size={28} className="mx-auto mb-3" style={{ color: "rgba(255,255,255,0.1)" }} />
+                <p className="text-sm" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  Bu gün için müsait saat tanımlanmamış
                 </p>
-                <p className="text-white/15 text-xs mt-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.15)", fontFamily: "var(--font-barlow-condensed)" }}>
                   Antrenörünüzle iletişime geçin
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {slots.map(slot => {
-                  const taken = !slot.isAvailable || myAptOnDate !== undefined;
-                  const selected = selectedSlot?.id === slot.id;
+                  const taken = !slot.isAvailable || !!myAptOnDate;
                   return (
-                    <motion.button
-                      key={slot.id} whileTap={{ scale: 0.97 }}
-                      disabled={taken}
-                      onClick={() => { setSelectedSlot(slot); setConfirmModal(true); }}
-                      className={`p-3 border text-center transition-all duration-200 ${
-                        taken ? "border-white/5 text-white/15 cursor-not-allowed"
-                        : selected ? "border-crimson bg-crimson/10 text-crimson"
-                        : "border-white/10 text-white/60 hover:border-crimson/40 hover:text-crimson/80"
-                      }`}
-                    >
-                      <div className="text-sm font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{slot.startTime}</div>
-                      <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{slot.endTime}</div>
-                      {taken && <div className="text-xs text-white/20 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Dolu</div>}
+                    <motion.button key={slot.id} whileTap={{ scale: 0.96 }} disabled={taken}
+                      onClick={() => handleSlotClick(slot)}
+                      className="p-3 rounded-xl text-center transition-all"
+                      style={{
+                        background: taken ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.06)",
+                        border: taken ? "1px solid rgba(255,255,255,0.04)" : `1px solid ${VIOLET}25`,
+                        cursor: taken ? "not-allowed" : "pointer",
+                        opacity: taken ? 0.4 : 1,
+                      }}
+                      onMouseEnter={e => { if (!taken) (e.currentTarget as HTMLElement).style.borderColor = `${VIOLET}60`; }}
+                      onMouseLeave={e => { if (!taken) (e.currentTarget as HTMLElement).style.borderColor = `${VIOLET}25`; }}>
+                      <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        {slot.startTime}
+                      </div>
+                      <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                        {slot.endTime}
+                      </div>
+                      {taken && (
+                        <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>Dolu</div>
+                      )}
                     </motion.button>
                   );
                 })}
               </div>
             )}
-          </Card>
+          </div>
         </div>
 
-        {/* Sidebar: upcoming + past */}
+        {/* ── Sağ sidebar ───────────────────────────────────────────── */}
         <div className="space-y-4">
-          <Card className="p-4">
-            <h3 className="text-sm text-white/50 tracking-widest uppercase mb-3" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yaklaşan</h3>
+          {/* Yaklaşan randevular */}
+          <div className="rounded-2xl p-5" style={CARD}>
+            <p className="text-xs tracking-widest uppercase mb-3"
+              style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>Yaklaşan</p>
             {upcoming.length === 0 ? (
-              <p className="text-xs text-white/25 text-center py-4" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Randevu yok</p>
+              <p className="text-xs text-center py-4" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>Randevu yok</p>
             ) : upcoming.map(apt => (
-              <div key={apt.id} className="mb-3 last:mb-0 p-3 bg-steel/30 border border-white/5 space-y-2">
-                <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <div key={apt.id} className="mb-3 last:mb-0 p-3 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div className="text-xs font-semibold text-white mb-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
                   {format(parseISO(apt.date), "dd MMM, EEEE", { locale: tr })}
                 </div>
-                <div className="flex items-center gap-1 text-xs text-white/40">
-                  <Clock size={12} />
-                  <span style={{ fontFamily: "var(--font-barlow-condensed)" }}>{apt.startTime} – {apt.endTime}</span>
+                <div className="flex items-center gap-1 text-xs mb-1.5" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  <Clock size={11} />
+                  {apt.startTime} – {apt.endTime}
+                  {apt.lessonType && apt.lessonType !== "bireysel" && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[9px] rounded" style={{ background: `${VIOLET}20`, color: VIOLET, fontFamily: "var(--font-barlow-condensed)" }}>
+                      {apt.lessonType === "duet" ? "Düet" : "Grup"}
+                    </span>
+                  )}
                 </div>
-                <button
-                  onClick={() => handleCancel(apt.id)}
-                  className="text-xs text-crimson/50 hover:text-crimson transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}
-                >
+                <button onClick={() => handleCancelClick(apt)}
+                  className="text-xs transition-colors" style={{ color: "rgba(239,68,68,0.5)", fontFamily: "var(--font-barlow-condensed)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#ef4444"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "rgba(239,68,68,0.5)"; }}>
                   İptal et
                 </button>
               </div>
             ))}
-          </Card>
+          </div>
 
-          <Card className="p-4">
-            <h3 className="text-sm text-white/50 tracking-widest uppercase mb-3" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Geçmiş</h3>
+          {/* Geçmiş */}
+          <div className="rounded-2xl p-5" style={CARD}>
+            <p className="text-xs tracking-widest uppercase mb-3"
+              style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>Geçmiş</p>
             {past.length === 0 ? (
-              <p className="text-xs text-white/25 text-center py-4" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kayıt yok</p>
+              <p className="text-xs text-center py-4" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>Kayıt yok</p>
             ) : past.map(apt => (
-              <div key={apt.id} className="mb-2 last:mb-0 flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+              <div key={apt.id} className="flex items-center justify-between py-2 border-b last:border-0"
+                style={{ borderColor: "rgba(255,255,255,0.05)" }}>
                 <div>
-                  <div className="text-xs text-white/50" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{format(parseISO(apt.date), "dd MMM", { locale: tr })} · {apt.startTime}</div>
+                  <div className="text-xs text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    {format(parseISO(apt.date), "dd MMM", { locale: tr })} · {apt.startTime}
+                  </div>
                 </div>
-                <Badge color={STATUS_COLOR[apt.status]}>{STATUS_TR[apt.status]}</Badge>
+                <span className="text-[10px] px-2 py-0.5 rounded-full"
+                  style={{ background: `${STATUS_COLOR[apt.status]}18`, color: STATUS_COLOR[apt.status], fontFamily: "var(--font-barlow-condensed)" }}>
+                  {STATUS_TR[apt.status]}
+                </span>
               </div>
             ))}
-          </Card>
+          </div>
         </div>
       </div>
 
-      {/* Confirm booking modal */}
-      <Modal open={confirmModal} onClose={() => setConfirmModal(false)} title="Randevu Onayla">
-        {selectedSlot && (
-          <div className="space-y-4">
-            <div className="p-4 bg-steel/30 border border-white/5 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-xs text-white/40" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Tarih</span>
-                <span className="text-sm text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{format(parseISO(selectedDate), "dd MMMM yyyy (EEEE)", { locale: tr })}</span>
+      {/* ── Onay Modali ───────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {confirmOpen && selectedSlot && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={e => e.target === e.currentTarget && setConfirmOpen(false)}>
+            <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setConfirmOpen(false)} />
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
+              className="relative z-10 w-full max-w-md rounded-2xl p-6 overflow-hidden"
+              style={{ background: "rgba(15,15,22,0.98)", border: "1px solid rgba(139,92,246,0.3)", backdropFilter: "blur(20px)" }}
+              onClick={e => e.stopPropagation()}>
+              <div className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
+
+              <h3 className="text-xl font-display text-white tracking-wider mb-5"
+                style={{ fontFamily: "var(--font-bebas)" }}>
+                RANDEVU ONAYLA
+              </h3>
+
+              <div className="space-y-1 mb-5">
+                <InfoRow label="Tarih" val={format(parseISO(selectedDate), "dd MMMM yyyy (EEEE)", { locale: tr })} />
+                <InfoRow label="Saat" val={`${selectedSlot.startTime} – ${selectedSlot.endTime}`} />
+                <InfoRow label="Ders Tipi" val={lessonType === "bireysel" ? "Bireysel" : lessonType === "duet" ? "Düet" : "Grup"} />
+                {student && <InfoRow label="Öğrenci A" val={`${student.fullName} (${student.remainingLessons} ders)`} />}
+                {lessonType === "duet" && partner && (
+                  <InfoRow label="Öğrenci B" val={`${partner.fullName} (${partner.remainingLessons} ders)`} />
+                )}
+                <InfoRow label="Antrenör" val={TRAINER_NAME} />
               </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-white/40" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Saat</span>
-                <span className="text-sm text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{selectedSlot.startTime} – {selectedSlot.endTime}</span>
+
+              <div className="p-3 rounded-xl mb-4 text-xs"
+                style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.15)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-inter)" }}>
+                ℹ️ Ders, antrenör tarafından tamamlandı işaretlendiğinde paketinizden düşülür.
+                Randevuyu {CANCEL_LIMIT_HOURS} saatten az kala iptal edemezsiniz.
               </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-white/40" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Antrenör</span>
-                <span className="text-sm text-crimson" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{TRAINER_NAME}</span>
+
+              {bookError && (
+                <div className="p-3 rounded-xl mb-4 text-xs text-red-400"
+                  style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  ⚠️ {bookError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmOpen(false)}
+                  className="flex-1 py-3 rounded-xl text-xs font-semibold tracking-wider uppercase transition-all"
+                  style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  Vazgeç
+                </button>
+                <button onClick={confirmBook} disabled={saving}
+                  className="flex-1 py-3 rounded-xl text-white text-xs font-semibold tracking-wider uppercase transition-all disabled:opacity-50"
+                  style={{
+                    background: "linear-gradient(135deg,#8B5CF6,#A855F7)",
+                    fontFamily: "var(--font-barlow-condensed)",
+                    boxShadow: "0 0 20px rgba(139,92,246,0.35)",
+                  }}>
+                  {saving ? "Oluşturuluyor..." : "Onayla"}
+                </button>
               </div>
-            </div>
-            <p className="text-xs text-white/30" style={{ fontFamily: "var(--font-inter)" }}>
-              Randevuyu {CANCEL_LIMIT_HOURS} saatten az kala iptal edemezsiniz.
-            </p>
-            <div className="flex gap-3">
-              <Button onClick={() => setConfirmModal(false)} variant="secondary" className="flex-1">Vazgeç</Button>
-              <Button onClick={confirmBook} loading={loading} className="flex-1">Onayla</Button>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
-      </Modal>
+      </AnimatePresence>
 
-      {/* Success modal with WhatsApp */}
-      <Modal open={successModal} onClose={() => setSuccessModal(false)} title="Randevu Oluşturuldu!">
-        <div className="space-y-4 text-center">
-          <CheckCircle size={48} className="text-green-400 mx-auto" />
-          <p className="text-white/60 text-sm" style={{ fontFamily: "var(--font-inter)" }}>Randevunuz başarıyla oluşturuldu. Antrenörünüzü WhatsApp ile bilgilendirebilirsiniz.</p>
-          {newApt && (
-            <a
-              href={`https://wa.me/${TRAINER_WHATSAPP}?text=${encodeURIComponent(waMsg)}`}
-              target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-3 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" /></svg>
-              WhatsApp ile Bildir
-            </a>
-          )}
-          <Button onClick={() => setSuccessModal(false)} variant="secondary" className="w-full">Kapat</Button>
-        </div>
-      </Modal>
+      {/* ── Başarı Modali ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {successOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.7)" }} />
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              className="relative z-10 w-full max-w-sm rounded-2xl p-6 text-center overflow-hidden"
+              style={{ background: "rgba(15,15,22,0.98)", border: "1px solid rgba(34,197,94,0.3)", backdropFilter: "blur(20px)" }}>
+              <div className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: "linear-gradient(90deg,transparent,#22c55e,transparent)" }} />
+              <CheckCircle size={44} className="text-green-400 mx-auto mb-4" />
+              <h3 className="text-xl font-display text-white mb-2" style={{ fontFamily: "var(--font-bebas)" }}>
+                RANDEVU OLUŞTURULDU!
+              </h3>
+              <p className="text-sm mb-1" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)" }}>
+                {format(parseISO(selectedDate), "dd MMMM yyyy", { locale: tr })} · {selectedSlot?.startTime}
+              </p>
+              {lessonType === "duet" && partner && (
+                <p className="text-xs mb-4" style={{ color: "#22c55e", fontFamily: "var(--font-barlow-condensed)" }}>
+                  Düet: {student?.fullName} + {partner.fullName}
+                </p>
+              )}
+              <a href={`https://wa.me/${TRAINER_WHATSAPP}?text=${encodeURIComponent(waMsg)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-xs font-semibold tracking-wider uppercase mb-3 transition-all"
+                style={{ background: "rgba(34,197,94,0.8)", fontFamily: "var(--font-barlow-condensed)" }}>
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                WhatsApp ile Bildir
+              </a>
+              <button onClick={() => setSuccessOpen(false)}
+                className="w-full py-2.5 rounded-xl text-xs font-semibold tracking-wider uppercase transition-all"
+                style={{ border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+                Kapat
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Cancel confirm */}
-      <Modal open={!!cancelId} onClose={() => setCancelId(null)} title="Randevu İptal">
-        <div className="space-y-4">
-          <p className="text-white/60 text-sm" style={{ fontFamily: "var(--font-inter)" }}>Bu randevuyu iptal etmek istediğinize emin misiniz?</p>
-          <div className="flex gap-3">
-            <Button onClick={() => setCancelId(null)} variant="secondary" className="flex-1">Vazgeç</Button>
-            <Button onClick={confirmCancel} variant="danger" className="flex-1">İptal Et</Button>
-          </div>
-        </div>
-      </Modal>
+      {/* ── İptal Onayı ───────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {cancelId && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setCancelId(null)} />
+            <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }}
+              className="relative z-10 w-full max-w-sm rounded-2xl p-6 overflow-hidden"
+              style={{ background: "rgba(15,15,22,0.98)", border: "1px solid rgba(239,68,68,0.3)", backdropFilter: "blur(20px)" }}
+              onClick={e => e.stopPropagation()}>
+              <div className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: "linear-gradient(90deg,transparent,#ef4444,transparent)" }} />
+              <h3 className="text-xl font-display text-white mb-2" style={{ fontFamily: "var(--font-bebas)" }}>RANDEVU İPTAL</h3>
+              <p className="text-sm mb-5" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)" }}>
+                Bu randevuyu iptal etmek istediğinize emin misiniz?
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setCancelId(null)}
+                  className="flex-1 py-3 rounded-xl text-xs font-semibold tracking-wider uppercase"
+                  style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  Vazgeç
+                </button>
+                <button onClick={confirmCancel}
+                  className="flex-1 py-3 rounded-xl text-white text-xs font-semibold tracking-wider uppercase"
+                  style={{ background: "rgba(239,68,68,0.7)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  İptal Et
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
