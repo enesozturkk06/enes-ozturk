@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { AuthState, Student } from "@/lib/types";
 import { getSession, logout as doLogout } from "@/lib/auth";
+import { ToastProvider } from "@/app/components/shared/Toast";
 
 interface AuthCtx extends AuthState {
   setStudent: (s: Student) => void;
@@ -26,20 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoaded(true);
   }, []);
 
-  const setStudent = (s: Student) =>
-    setState({ role: "student", student: s, isAdmin: false });
-
-  const setAdmin = () =>
-    setState({ role: "admin", student: null, isAdmin: true });
-
-  const logout = () => {
-    doLogout();
-    setState({ role: null, student: null, isAdmin: false });
-  };
+  const setStudent = (s: Student) => setState({ role: "student", student: s, isAdmin: false });
+  const setAdmin   = ()           => setState({ role: "admin",   student: null, isAdmin: true });
+  const logout     = ()           => { doLogout(); setState({ role: null, student: null, isAdmin: false }); };
 
   return (
     <Ctx.Provider value={{ ...state, setStudent, setAdmin, logout, loaded }}>
-      {children}
+      <ToastProvider>{children}</ToastProvider>
     </Ctx.Provider>
   );
 }

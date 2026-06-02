@@ -1,11 +1,8 @@
-"use client";
-
 /**
- * lib/packages.ts — Ders paketleri.
- * Supabase aktifse packages tablosunu kullanır,
- * yoksa localStorage'a düşer.
+ * lib/packages.ts — Ders paketleri
+ * Tüm veriler Supabase packages tablosunda.
+ * localStorage kullanılmaz.
  */
-
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 export interface LessonPackage {
@@ -20,126 +17,60 @@ export interface LessonPackage {
   sortOrder?: number;
 }
 
-const LS_KEY = "eo_packages_v2";
+function db() {
+  if (!isSupabaseConfigured || !supabase) throw new Error("Supabase bağlı değil");
+  return supabase!;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapPackage(row: any): LessonPackage {
+function map(r: any): LessonPackage {
   return {
-    id:          row.id,
-    name:        row.name,
-    lessonCount: row.lesson_count,
-    price:       Number(row.price),
-    durationDays: row.duration_days,
-    description: row.description ?? "",
-    isActive:    row.is_active ?? true,
-    highlight:   row.highlight ?? false,
-    sortOrder:   row.sort_order ?? 0,
+    id: r.id, name: r.name, lessonCount: r.lesson_count, price: Number(r.price),
+    durationDays: r.duration_days, description: r.description ?? "",
+    isActive: r.is_active ?? true, highlight: r.highlight ?? false, sortOrder: r.sort_order ?? 0,
   };
 }
 
-const DEFAULTS: LessonPackage[] = [
-  { id: "pkg-a", name: "Başlangıç", lessonCount: 8,  price: 1490, durationDays: 45, description: "Temel teknikler, duruş ve kondisyon", isActive: true, highlight: false },
-  { id: "pkg-b", name: "Gelişim",   lessonCount: 10, price: 1790, durationDays: 60, description: "Kombine çalışmalar, serbest çalışma girişi", isActive: true, highlight: true },
-  { id: "pkg-c", name: "Şampiyon",  lessonCount: 12, price: 2190, durationDays: 75, description: "İleri seviye teknik, müsabaka hazırlığı", isActive: true, highlight: false },
-];
-
-// ─── GET ─────────────────────────────────────────────────────────────────────
+// ── GET ───────────────────────────────────────────────────────────────────────
 export async function getPackages(): Promise<LessonPackage[]> {
-  if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase
-      .from("packages")
-      .select("*")
-      .order("sort_order");
-    if (error) {
-      console.log("[getPackages] Supabase hatası:", error.message);
-      return DEFAULTS;
-    }
-    return (data || []).map(mapPackage);
-  }
-  // localStorage fallback
-  if (typeof window === "undefined") return DEFAULTS;
-  const raw = localStorage.getItem(LS_KEY);
-  if (!raw) return DEFAULTS;
-  try { return JSON.parse(raw) as LessonPackage[]; }
-  catch { return DEFAULTS; }
+  const { data, error } = await db().from("packages").select("*").order("sort_order");
+  if (error) { console.error("[getPackages]", error.message); throw error; }
+  return (data ?? []).map(map);
 }
 
-// ─── CREATE ───────────────────────────────────────────────────────────────────
-export async function createPackage(
-  pkg: Omit<LessonPackage, "id">
-): Promise<LessonPackage | null> {
-  if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase
-      .from("packages")
-      .insert({
-        name:         pkg.name,
-        lesson_count: pkg.lessonCount,
-        price:        pkg.price,
-        duration_days: pkg.durationDays,
-        description:  pkg.description,
-        is_active:    pkg.isActive,
-        highlight:    pkg.highlight ?? false,
-        sort_order:   pkg.sortOrder ?? 0,
-      })
-      .select()
-      .single();
-    if (error) {
-      console.log("[createPackage] Supabase hatası:", error.message);
-      return null;
-    }
-    return data ? mapPackage(data) : null;
-  }
-  // localStorage fallback
-  const all = await getPackages();
-  const newPkg: LessonPackage = { ...pkg, id: `pkg-${Date.now()}` };
-  lsSave([...all, newPkg]);
-  return newPkg;
+// ── CREATE ────────────────────────────────────────────────────────────────────
+export async function createPackage(pkg: Omit<LessonPackage, "id">): Promise<LessonPackage> {
+  const { data, error } = await db().from("packages").insert({
+    name: pkg.name, lesson_count: pkg.lessonCount, price: pkg.price,
+    duration_days: pkg.durationDays, description: pkg.description,
+    is_active: pkg.isActive, highlight: pkg.highlight ?? false, sort_order: pkg.sortOrder ?? 0,
+  }).select().single();
+  if (error) { console.error("[createPackage]", error.message); throw error; }
+  return map(data);
 }
 
-// ─── UPDATE ───────────────────────────────────────────────────────────────────
-export async function updatePackage(
-  id: string,
-  updates: Partial<LessonPackage>
-): Promise<boolean> {
-  if (isSupabaseConfigured && supabase) {
-    const db: Record<string, unknown> = {};
-    if (updates.name !== undefined)        db.name         = updates.name;
-    if (updates.lessonCount !== undefined) db.lesson_count = updates.lessonCount;
-    if (updates.price !== undefined)       db.price        = updates.price;
-    if (updates.durationDays !== undefined) db.duration_days = updates.durationDays;
-    if (updates.description !== undefined) db.description  = updates.description;
-    if (updates.isActive !== undefined)    db.is_active    = updates.isActive;
-    if (updates.highlight !== undefined)   db.highlight    = updates.highlight;
-    if (updates.sortOrder !== undefined)   db.sort_order   = updates.sortOrder;
-    const { error } = await supabase.from("packages").update(db).eq("id", id);
-    if (error) { console.log("[updatePackage] Supabase hatası:", error.message); return false; }
-    return true;
-  }
-  // localStorage
-  const all = await getPackages();
-  lsSave(all.map(p => p.id === id ? { ...p, ...updates } : p));
-  return true;
+// ── UPDATE ────────────────────────────────────────────────────────────────────
+export async function updatePackage(id: string, updates: Partial<LessonPackage>): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (updates.name        !== undefined) row.name         = updates.name;
+  if (updates.lessonCount !== undefined) row.lesson_count = updates.lessonCount;
+  if (updates.price       !== undefined) row.price        = updates.price;
+  if (updates.durationDays!== undefined) row.duration_days= updates.durationDays;
+  if (updates.description !== undefined) row.description  = updates.description;
+  if (updates.isActive    !== undefined) row.is_active    = updates.isActive;
+  if (updates.highlight   !== undefined) row.highlight    = updates.highlight;
+  if (updates.sortOrder   !== undefined) row.sort_order   = updates.sortOrder;
+  const { error } = await db().from("packages").update(row).eq("id", id);
+  if (error) { console.error("[updatePackage]", error.message); throw error; }
 }
 
-// ─── DELETE ───────────────────────────────────────────────────────────────────
-export async function deletePackage(id: string): Promise<boolean> {
-  if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase.from("packages").delete().eq("id", id);
-    if (error) { console.log("[deletePackage] Supabase hatası:", error.message); return false; }
-    return true;
-  }
-  const all = await getPackages();
-  lsSave(all.filter(p => p.id !== id));
-  return true;
+// ── DELETE ────────────────────────────────────────────────────────────────────
+export async function deletePackage(id: string): Promise<void> {
+  const { error } = await db().from("packages").delete().eq("id", id);
+  if (error) { console.error("[deletePackage]", error.message); throw error; }
 }
 
-// ─── Tüm paketleri yeniden kaydet (localStorage mod) ─────────────────────────
-export function savePackages(packages: LessonPackage[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LS_KEY, JSON.stringify(packages));
-}
-
-function lsSave(packages: LessonPackage[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LS_KEY, JSON.stringify(packages));
+// savePackages compat shim — artık kullanılmıyor ama import hatası vermemek için
+export function savePackages(_: LessonPackage[]): void {
+  console.warn("savePackages: artık kullanılmıyor, Supabase kullanın");
 }
