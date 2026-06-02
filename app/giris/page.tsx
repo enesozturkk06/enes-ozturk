@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/app/providers";
 import { loginStudent, saveStudentSession } from "@/lib/auth";
 import { Button, Input } from "@/app/components/ui";
+import PWAInstallButton from "@/app/components/shared/PWAInstallButton";
 
 export default function GirisPage() {
   const [code, setCode] = useState("");
@@ -99,7 +100,12 @@ export default function GirisPage() {
             </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-white/5 text-center">
+          {/* PWA Yükleme */}
+          <div className="mt-5">
+            <PWAInstallButton variant="login" />
+          </div>
+
+          <div className="mt-5 pt-5 border-t border-white/5 text-center">
             <p className="text-white/20 text-xs mb-3" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
               Kodunuz yok mu? Antrenörünüzle iletişime geçin.
             </p>

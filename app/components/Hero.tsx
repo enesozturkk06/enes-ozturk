@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import PWAInstallButton from "@/app/components/shared/PWAInstallButton";
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 36 },
@@ -112,6 +113,9 @@ export default function Hero() {
           >
             Hakkımda
           </motion.a>
+
+          {/* PWA Yükleme butonu */}
+          <PWAInstallButton variant="hero" />
         </motion.div>
 
         {/* Stat'lar */}
