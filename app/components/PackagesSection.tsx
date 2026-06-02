@@ -8,7 +8,7 @@ export default function PackagesSection() {
   const [packages, setPackages] = useState<LessonPackage[]>([]);
 
   useEffect(() => {
-    setPackages(getPackages().filter(p => p.isActive));
+    getPackages().then(all => setPackages(all.filter(p => p.isActive)));
   }, []);
 
   if (packages.length === 0) return null;

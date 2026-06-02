@@ -9,7 +9,7 @@ create table if not exists students (
   phone text not null,
   email text,
   level text default 'baslangic',
-  package_type text not null,
+  package_type text not null default 'sampiyon',
   total_lessons int default 0,
   remaining_lessons int default 0,
   completed_lessons int default 0,
@@ -25,16 +25,15 @@ create table if not exists students (
   created_at timestamptz default now()
 );
 
--- Müsaitlik slotları
+-- Takvim slotları
 create table if not exists time_slots (
   id uuid primary key default gen_random_uuid(),
   date date not null,
-  start_time time not null,
-  end_time time not null,
-  is_available boolean default true,
-  is_blocked boolean default false,
-  block_reason text,
-  created_at timestamptz default now()
+  start_time text not null,
+  end_time text not null,
+  is_open boolean default true,
+  created_at timestamptz default now(),
+  unique(date, start_time)
 );
 
 -- Randevular
@@ -45,11 +44,11 @@ create table if not exists appointments (
   student_code text not null,
   student_phone text,
   date date not null,
-  start_time time not null,
-  end_time time not null,
+  start_time text not null,
+  end_time text not null,
   status text default 'onaylandi',
-  cancelled_at timestamptz,
-  completed_at timestamptz,
+  cancelled_at date,
+  completed_at date,
   notes text,
   created_at timestamptz default now()
 );
@@ -72,17 +71,6 @@ create table if not exists lesson_records (
   created_at timestamptz default now()
 );
 
--- Bildirimler
-create table if not exists notifications (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid references students(id) on delete cascade,
-  title text not null,
-  message text not null,
-  type text default 'info',
-  is_read boolean default false,
-  created_at timestamptz default now()
-);
-
 -- Ödemeler
 create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
@@ -95,43 +83,78 @@ create table if not exists payments (
   created_at timestamptz default now()
 );
 
--- Kapalı günler
-create table if not exists blocked_dates (
+-- Bildirimler
+create table if not exists notifications (
   id uuid primary key default gen_random_uuid(),
-  date date not null unique,
-  reason text,
+  student_id uuid references students(id) on delete cascade,
+  title text not null,
+  message text not null,
+  type text default 'info',
+  is_read boolean default false,
   created_at timestamptz default now()
 );
 
--- RLS (Row Level Security)
+-- Paketler (ders paketleri)
+create table if not exists packages (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  lesson_count int not null,
+  price decimal not null,
+  duration_days int default 45,
+  description text,
+  is_active boolean default true,
+  highlight boolean default false,
+  sort_order int default 0,
+  created_at timestamptz default now()
+);
+
+-- ─── RLS ─────────────────────────────────────────────────────────
 alter table students enable row level security;
 alter table appointments enable row level security;
 alter table lesson_records enable row level security;
 alter table notifications enable row level security;
 alter table payments enable row level security;
+alter table time_slots enable row level security;
+alter table packages enable row level security;
 
--- Tüm authenticated kullanıcılar okuyabilir (anon key ile)
-create policy "Public read students" on students for select using (true);
-create policy "Public read appointments" on appointments for select using (true);
-create policy "Public read lesson_records" on lesson_records for select using (true);
-create policy "Public read notifications" on notifications for select using (true);
-create policy "Public read time_slots" on time_slots for select using (true);
-create policy "Public read payments" on payments for select using (true);
+-- SELECT (herkes okuyabilir — anon key yeterli)
+create policy "select_students"      on students      for select using (true);
+create policy "select_appointments"  on appointments  for select using (true);
+create policy "select_lesson_records" on lesson_records for select using (true);
+create policy "select_notifications" on notifications  for select using (true);
+create policy "select_payments"      on payments      for select using (true);
+create policy "select_time_slots"    on time_slots    for select using (true);
+create policy "select_packages"      on packages      for select using (true);
 
--- Insert/update/delete - service role key ile yapılır
--- (veya authenticated kullanıcılar için ayrı politikalar eklenebilir)
-create policy "Insert appointments" on appointments for insert with check (true);
-create policy "Update appointments" on appointments for update using (true);
-create policy "Insert lesson_records" on lesson_records for insert with check (true);
-create policy "Insert payments" on payments for insert with check (true);
-create policy "Update students" on students for update using (true);
-create policy "Insert students" on students for insert with check (true);
-create policy "Update notifications" on notifications for update using (true);
+-- INSERT
+create policy "insert_students"      on students      for insert with check (true);
+create policy "insert_appointments"  on appointments  for insert with check (true);
+create policy "insert_lesson_records" on lesson_records for insert with check (true);
+create policy "insert_payments"      on payments      for insert with check (true);
+create policy "insert_time_slots"    on time_slots    for insert with check (true);
+create policy "insert_packages"      on packages      for insert with check (true);
+create policy "insert_notifications" on notifications  for insert with check (true);
 
--- Örnek veri
-insert into students (code, full_name, phone, level, package_type, total_lessons, remaining_lessons, completed_lessons, payment_status, amount_paid, amount_due, package_start_date, package_end_date, is_active)
+-- UPDATE
+create policy "update_students"      on students      for update using (true);
+create policy "update_appointments"  on appointments  for update using (true);
+create policy "update_notifications" on notifications  for update using (true);
+create policy "update_time_slots"    on time_slots    for update using (true);
+create policy "update_packages"      on packages      for update using (true);
+create policy "update_lesson_records" on lesson_records for update using (true);
+
+-- DELETE
+create policy "delete_students"      on students      for delete using (true);
+create policy "delete_appointments"  on appointments  for delete using (true);
+create policy "delete_payments"      on payments      for delete using (true);
+create policy "delete_time_slots"    on time_slots    for delete using (true);
+create policy "delete_packages"      on packages      for delete using (true);
+create policy "delete_lesson_records" on lesson_records for delete using (true);
+
+-- ─── Örnek paket verisi ───────────────────────────────────────────
+insert into packages (name, lesson_count, price, duration_days, description, is_active, highlight, sort_order)
 values
-  ('ENES001', 'Ahmet Kaya', '05321234567', 'orta', 'sampiyon', 16, 8, 8, 'odendi', 2490, 0, '2026-05-01', '2026-06-30', true),
-  ('ENES002', 'Defne Yıldız', '05421234567', 'baslangic', 'savasci', 8, 3, 5, 'odendi', 1490, 0, '2026-05-15', '2026-06-29', true),
-  ('ENES003', 'Murat Demir', '05521234567', 'ileri', 'efsane', 32, 20, 12, 'kismi', 2000, 1990, '2026-04-01', '2026-06-30', true)
-on conflict (code) do nothing;
+  ('Başlangıç', 8,  1490, 45, 'Temel teknikler, duruş ve kondisyon', true, false, 1),
+  ('Gelişim',   10, 1790, 60, 'Kombine çalışmalar, serbest çalışma girişi', true, true, 2),
+  ('Şampiyon',  12, 2190, 75, 'İleri seviye teknik, müsabaka hazırlığı', true, false, 3)
+on conflict do nothing;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getPackages, savePackages, type LessonPackage } from "@/lib/packages";
+import { getPackages, createPackage, updatePackage, deletePackage, type LessonPackage } from "@/lib/packages";
 import { Star, Eye, EyeOff, Edit2, Trash2, Plus, X, Check, Package } from "lucide-react";
 
 /* ── Boş form ─────────────────────────────────────────────────────── */
@@ -62,16 +62,12 @@ export default function PaketlerPage() {
   const [highlight, setHighlight] = useState(false);
 
   useEffect(() => {
-    setPackages(getPackages());
+    getPackages().then(setPackages);
   }, []);
 
-  /* ── Kaydet ───────────────────────────────────────────────────── */
-  const persist = (pkgs: LessonPackage[]) => {
-    setPackages(pkgs);
-    savePackages(pkgs);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
-  };
+  const flash = () => { setSaved(true); setTimeout(() => setSaved(false), 1800); };
+
+  const reload = () => getPackages().then(setPackages);
 
   /* ── Form temizle ─────────────────────────────────────────────── */
   const resetForm = () => {
@@ -79,27 +75,19 @@ export default function PaketlerPage() {
     setDescription(""); setIsActive(true); setHighlight(false);
   };
 
-  /* ── Yeni paket ekle formu aç ─────────────────────────────────── */
   const openAdd = () => { resetForm(); setPanel("add"); };
 
-  /* ── Düzenleme formu aç ───────────────────────────────────────── */
   const openEdit = (pkg: LessonPackage) => {
-    setName(pkg.name);
-    setLessonCount(String(pkg.lessonCount));
-    setPrice(String(pkg.price));
-    setDurationDays(String(pkg.durationDays));
-    setDescription(pkg.description);
-    setIsActive(pkg.isActive);
-    setHighlight(!!pkg.highlight);
-    setEditId(pkg.id);
-    setPanel("edit");
+    setName(pkg.name); setLessonCount(String(pkg.lessonCount));
+    setPrice(String(pkg.price)); setDurationDays(String(pkg.durationDays));
+    setDescription(pkg.description); setIsActive(pkg.isActive); setHighlight(!!pkg.highlight);
+    setEditId(pkg.id); setPanel("edit");
   };
 
   /* ── Ekle ────────────────────────────────────────────────────── */
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!name.trim() || !price) return;
-    const newPkg: LessonPackage = {
-      id: `pkg-${Date.now()}`,
+    await createPackage({
       name: name.trim(),
       lessonCount: Number(lessonCount) || 8,
       price: Number(price),
@@ -107,46 +95,60 @@ export default function PaketlerPage() {
       description: description.trim(),
       isActive,
       highlight,
-    };
-    persist([...packages, newPkg]);
+    });
+    await reload();
     setPanel("none");
+    flash();
   };
 
   /* ── Güncelle ────────────────────────────────────────────────── */
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (!editId) return;
-    persist(packages.map(p =>
-      p.id === editId
-        ? {
-            ...p,
-            name: name.trim(),
-            lessonCount: Number(lessonCount) || 8,
-            price: Number(price),
-            durationDays: Number(durationDays) || 45,
-            description: description.trim(),
-            isActive,
-            highlight,
-          }
-        : p
-    ));
+    await updatePackage(editId, {
+      name: name.trim(),
+      lessonCount: Number(lessonCount) || 8,
+      price: Number(price),
+      durationDays: Number(durationDays) || 45,
+      description: description.trim(),
+      isActive,
+      highlight,
+    });
+    await reload();
     setPanel("none");
     setEditId(null);
+    flash();
   };
 
   /* ── Sil ─────────────────────────────────────────────────────── */
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
-    persist(packages.filter(p => p.id !== deleteId));
+    await deletePackage(deleteId);
+    await reload();
     setDeleteId(null);
+    flash();
   };
 
   /* ── Aktif aç/kapat ──────────────────────────────────────────── */
-  const toggleActive = (id: string) =>
-    persist(packages.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
+  const toggleActive = async (id: string) => {
+    const pkg = packages.find(p => p.id === id);
+    if (!pkg) return;
+    await updatePackage(id, { isActive: !pkg.isActive });
+    await reload();
+    flash();
+  };
 
   /* ── Öne çıkar ───────────────────────────────────────────────── */
-  const toggleHighlight = (id: string) =>
-    persist(packages.map(p => ({ ...p, highlight: p.id === id ? !p.highlight : false })));
+  const toggleHighlight = async (id: string) => {
+    const pkg = packages.find(p => p.id === id);
+    if (!pkg) return;
+    // Diğerlerinin highlight'ını kapat, bunu toggle et
+    for (const p of packages) {
+      if (p.id === id) await updatePackage(id, { highlight: !pkg.highlight });
+      else if (p.highlight) await updatePackage(p.id, { highlight: false });
+    }
+    await reload();
+    flash();
+  };
 
   const panelOpen = panel !== "none";
   const canSubmit = name.trim() !== "" && Number(price) > 0;
