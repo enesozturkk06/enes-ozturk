@@ -57,7 +57,7 @@ export default function Footer() {
             <div className="flex gap-3">
               {[
                 { href: "https://instagram.com/enesozturkkq", label: "@enesozturkkq" },
-                { href: "https://instagram.com/p.t.enesozturkk", label: "@p.t.enesozturkk" },
+                { href: "https://www.instagram.com/p.t.enesozturk", label: "@p.t.enesozturk" },
               ].map(s => (
                 <a key={s.href} href={s.href} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-carbon border border-white/6 hover:border-crimson/30 text-white/30 hover:text-crimson text-xs transition-all duration-300"

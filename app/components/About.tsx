@@ -126,7 +126,7 @@ export default function About() {
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { href: "https://instagram.com/enesozturkkq", label: "Kişisel", handle: "@enesozturkkq" },
-                  { href: "https://instagram.com/p.t.enesozturkk", label: "Eğitim", handle: "@p.t.enesozturkk" },
+                  { href: "https://www.instagram.com/p.t.enesozturk", label: "Eğitim", handle: "@p.t.enesozturk" },
                 ].map(s => (
                   <motion.a
                     key={s.href}
