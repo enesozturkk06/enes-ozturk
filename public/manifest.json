@@ -1,0 +1,42 @@
+{
+  "name": "Antrenör Enes Öztürk",
+  "short_name": "Enes Öztürk",
+  "description": "Kickboks özel ders takip ve randevu sistemi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0b1a",
+  "theme_color": "#dc2626",
+  "orientation": "portrait",
+  "lang": "tr",
+  "categories": ["sports", "health", "fitness"],
+  "icons": [
+    { "src": "/icons/icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icons/icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable any" }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Öğrenci Girişi",
+      "url": "/giris",
+      "description": "Öğrenci paneline giriş"
+    },
+    {
+      "name": "Antrenör Girişi",
+      "url": "/admin/login",
+      "description": "Admin paneline giriş"
+    }
+  ]
+}

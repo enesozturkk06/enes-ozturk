@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Arka plan -->
+  <rect width="512" height="512" fill="#0c0b1a"/>
+  <!-- Kırmızı gradient çember -->
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#1a0a0a"/>
+      <stop offset="100%" stop-color="#0c0b1a"/>
+    </radialGradient>
+    <linearGradient id="hex-stroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- Altıgen -->
+  <polygon
+    points="256,40 456,152 456,360 256,472 56,360 56,152"
+    fill="none"
+    stroke="url(#hex-stroke)"
+    stroke-width="12"
+  />
+  <!-- İç altıgen -->
+  <polygon
+    points="256,80 420,170 420,342 256,432 92,342 92,170"
+    fill="rgba(220,38,38,0.08)"
+    stroke="rgba(220,38,38,0.25)"
+    stroke-width="4"
+  />
+  <!-- EÖ yazısı -->
+  <text
+    x="256"
+    y="310"
+    text-anchor="middle"
+    font-family="Arial Black, sans-serif"
+    font-weight="900"
+    font-size="200"
+    fill="#dc2626"
+    letter-spacing="-8"
+  >EÖ</text>
+  <!-- Alt yazı -->
+  <text
+    x="256"
+    y="390"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-weight="700"
+    font-size="36"
+    fill="rgba(217,119,6,0.8)"
+    letter-spacing="8"
+  >ANTRENÖR</text>
+</svg>
