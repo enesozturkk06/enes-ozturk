@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"c:\\\\Users\\\\incek\\\\Desktop\\\\enes\\\\.env.local\"\\); \"Boyut: $\\($bytes.Length\\) byte\"; if \\($bytes.Length -gt 0\\) { [System.Text.Encoding]::UTF8.GetString\\($bytes\\) })"
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"c:\\\\Users\\\\incek\\\\Desktop\\\\enes\\\\.env.local\"\\); \"Boyut: $\\($bytes.Length\\) byte\"; if \\($bytes.Length -gt 0\\) { [System.Text.Encoding]::UTF8.GetString\\($bytes\\) })",
+      "Bash(vercel env *)",
+      "Bash(vercel --prod --yes)",
+      "Bash(vercel ls *)",
+      "Bash(vercel alias *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://enes-ozturk.vercel.app\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://enes-ozturk.vercel.app/giris\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://enes-ozturk.vercel.app/admin/login\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" \"https://enes-ozturk.vercel.app\")"
     ]
   }
 }

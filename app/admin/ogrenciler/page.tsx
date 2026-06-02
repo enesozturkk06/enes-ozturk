@@ -6,13 +6,36 @@ import { getStudents, createStudent, updateStudent, deleteStudent } from "@/lib/
 import { isSupabaseConfigured } from "@/lib/supabase";
 import type { Student } from "@/lib/types";
 import { PAYMENT_LABELS, LEVEL_LABELS } from "@/lib/constants";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2 } from "lucide-react";
 
-/* ── Kod üreteci ─────────────────────────────────────────────────────── */
-function genCode(students: Student[]): string {
+/* ── Sıralı kod üret: ENES001, ENES002... ────────────────────────────── */
+function genCodeSequential(students: Student[]): string {
   const nums = students.map(s => parseInt(s.code.replace(/\D/g, ""))).filter(n => !isNaN(n));
   const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
   return `ENES${String(next).padStart(3, "0")}`;
+}
+
+/* ── İsimden kod üret: "Ahmet Yılmaz" → "ENES-AY" ───────────────────── */
+const TR: Record<string, string> = { ş:"S",Ş:"S",ı:"I",İ:"I",ç:"C",Ç:"C",ğ:"G",Ğ:"G",ö:"O",Ö:"O",ü:"U",Ü:"U" };
+function normTR(s: string): string { return s.split("").map(c => TR[c] ?? c).join(""); }
+
+function genCodeFromName(name: string, students: Student[]): string {
+  const words = normTR(name.trim()).toUpperCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return genCodeSequential(students);
+  // Her kelimenin ilk harfi
+  const initials = words.map(w => w[0]).join("");
+  const base = `ENES-${initials}`;
+  // Çakışma varsa sayı ekle
+  const existing = students.map(s => s.code);
+  if (!existing.includes(base)) return base;
+  let n = 2;
+  while (existing.includes(`${base}${n}`)) n++;
+  return `${base}${n}`;
+}
+
+/* ── Kod benzersizlik kontrolü ───────────────────────────────────────── */
+function isCodeTaken(code: string, students: Student[], excludeId?: string): boolean {
+  return students.some(s => s.code.toUpperCase() === code.toUpperCase() && s.id !== excludeId);
 }
 
 /* ── Küçük input bileşeni ─────────────────────────────────────────────── */
@@ -59,6 +82,7 @@ export default function OgrencilerPage() {
 
   /* Ekle paneli */
   const [addOpen, setAddOpen]     = useState(false);
+  const [aCode, setACode]         = useState("");   // ← düzenlenebilir kod
   const [aName, setAName]         = useState("");
   const [aPhone, setAPhone]       = useState("");
   const [aEmail, setAEmail]       = useState("");
@@ -121,7 +145,8 @@ export default function OgrencilerPage() {
 
   /* ── Ekle ───────────────────────────────────────────────────────── */
   const openAdd = () => {
-    setAName(""); setAPhone(""); setAEmail(""); setALevel("baslangic");
+    const seq = genCodeSequential(students);
+    setACode(seq); setAName(""); setAPhone(""); setAEmail(""); setALevel("baslangic");
     setATL("8"); setAAP(""); setAAD(""); setAPayStatus("beklemede"); setANotes("");
     setAddOpen(true);
   };
@@ -131,11 +156,16 @@ export default function OgrencilerPage() {
       alert("Ad Soyad ve Telefon zorunludur.");
       return;
     }
+    const finalCode = aCode.trim().toUpperCase() || genCodeSequential(students);
+    if (isCodeTaken(finalCode, students)) {
+      alert(`"${finalCode}" kodu zaten kullanımda. Farklı bir kod girin.`);
+      return;
+    }
     setASaving(true);
     try {
       const today = new Date().toISOString().split("T")[0];
       await createStudent({
-        code:             genCode(students),
+        code:             finalCode,
         fullName:         aName.trim(),
         phone:            aPhone.trim(),
         email:            aEmail.trim() || undefined,
@@ -275,8 +305,67 @@ export default function OgrencilerPage() {
                 <h2 className="text-xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>YENİ ÖĞRENCİ EKLE</h2>
                 <button onClick={() => setAddOpen(false)} className="text-white/25 hover:text-white transition-colors"><X size={18} /></button>
               </div>
+              {/* ── GİRİŞ KODU ──────────────────────────────────── */}
+              <div className="mb-4 p-3 bg-steel/30 border border-gold/20">
+                <label className="block text-xs text-gold/70 tracking-widest uppercase mb-2"
+                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  Giriş Kodu <span className="text-white/30">(öğrencinin sisteme giriş şifresi)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={aCode}
+                    onChange={e => setACode(e.target.value.toUpperCase())}
+                    placeholder="ENES001"
+                    className={`flex-1 bg-carbon border-2 px-4 py-2.5 text-xl outline-none transition-all tracking-widest font-display uppercase ${
+                      aCode && isCodeTaken(aCode, students)
+                        ? "border-crimson/60 text-crimson"
+                        : "border-gold/40 focus:border-gold text-gold-bright"
+                    }`}
+                    style={{ fontFamily: "var(--font-bebas)" }}
+                  />
+                  {/* İsimden üret */}
+                  <button
+                    type="button"
+                    onClick={() => setACode(genCodeFromName(aName, students))}
+                    disabled={!aName.trim()}
+                    title="İsmin baş harflerinden kod üret"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gold/10 hover:bg-gold/20 border border-gold/30 text-gold disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs font-semibold tracking-wider uppercase"
+                    style={{ fontFamily: "var(--font-barlow-condensed)" }}
+                  >
+                    <Wand2 size={14} />
+                    <span className="hidden sm:inline">İsimden</span>
+                  </button>
+                  {/* Sıralı üret */}
+                  <button
+                    type="button"
+                    onClick={() => setACode(genCodeSequential(students))}
+                    title="Sıralı kod üret (ENES001, ENES002...)"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/15 text-white/50 hover:text-white transition-all text-xs font-semibold tracking-wider uppercase"
+                    style={{ fontFamily: "var(--font-barlow-condensed)" }}
+                  >
+                    <RefreshCw size={14} />
+                    <span className="hidden sm:inline">Sıralı</span>
+                  </button>
+                </div>
+                {/* Çakışma uyarısı */}
+                {aCode && isCodeTaken(aCode, students) && (
+                  <p className="text-xs text-crimson mt-1.5 flex items-center gap-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    <AlertTriangle size={12} />
+                    Bu kod zaten kullanımda — farklı bir kod girin
+                  </p>
+                )}
+                {aCode && !isCodeTaken(aCode, students) && (
+                  <p className="text-xs text-green-400/60 mt-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    ✓ Bu kod kullanılabilir
+                  </p>
+                )}
+                <p className="text-xs text-white/20 mt-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  Manuel yazabilir, isimden üretebilir veya sıralı kod kullanabilirsiniz.
+                </p>
+              </div>
+
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-                <F label="Ad Soyad *" value={aName} onChange={setAName} placeholder="Ahmet Yılmaz" col2 />
+                <F label="Ad Soyad *" value={aName} onChange={v => { setAName(v); }} placeholder="Ahmet Yılmaz" col2 />
                 <F label="Telefon *" value={aPhone} onChange={setAPhone} placeholder="05XX XXX XX XX" />
                 <F label="E-posta" value={aEmail} onChange={setAEmail} placeholder="ornek@email.com" />
               </div>
