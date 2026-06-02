@@ -237,14 +237,16 @@ export async function getAppointmentStudents(appointmentId: string): Promise<App
   return (data ?? []).map(mApSt);
 }
 
-/** Bireysel randevu oluştur */
+/** Randevu oluştur — lesson_type schema cache uyumsuzluğuna karşı dayanıklı */
 export async function createAppointment(apt: {
   studentId: string; studentName: string; studentCode: string; studentPhone?: string;
   date: string; startTime: string; endTime: string;
   lessonType?: LessonType; notes?: string; status?: string;
   secondStudentIds?: string[];
 }): Promise<Appointment> {
-  // Temel insert — lesson_type önce yoksa sütun hatası almamak için try ile ekle
+  const lessonType = apt.lessonType ?? "bireysel";
+
+  // Temel satır — her zaman çalışan kolonlar
   const baseRow: Record<string, unknown> = {
     student_id:    apt.studentId,
     student_name:  apt.studentName,
@@ -254,27 +256,57 @@ export async function createAppointment(apt: {
     start_time:    apt.startTime,
     end_time:      apt.endTime,
     status:        apt.status ?? "onaylandi",
-    notes:         apt.notes,
+    notes:         apt.notes ?? null,
   };
 
-  // lesson_type kolonunu ekle (migration çalıştırıldıysa çalışır)
-  if (apt.lessonType) baseRow.lesson_type = apt.lessonType;
+  // lesson_type ile dene
+  let result = await db()
+    .from("appointments")
+    .insert({ ...baseRow, lesson_type: lessonType })
+    .select()
+    .single();
 
-  const { data, error } = await db().from("appointments").insert(baseRow).select().single();
-  if (error) fail("createAppointment", error);
+  // lesson_type schema cache sorunu → kolon olmadan ekle, sonra güncelle
+  if (result.error) {
+    const msg = result.error.message ?? "";
+    const isSchemaErr = msg.includes("lesson_type") || msg.includes("schema cache");
 
+    if (isSchemaErr) {
+      console.warn("[createAppointment] lesson_type schema cache sorunu — kolon olmadan ekleniyor:", msg);
+
+      // lesson_type olmadan insert
+      const r2 = await db().from("appointments").insert(baseRow).select().single();
+      if (r2.error) fail("createAppointment:fallback", r2.error);
+      result = r2;
+
+      // lesson_type kolonu varsa (migration çalıştıysa ama cache gecikmeli) ayrıca güncelle
+      db().from("appointments")
+        .update({ lesson_type: lessonType })
+        .eq("id", r2.data.id)
+        .then(({ error }) => {
+          if (error) console.warn("[createAppointment] lesson_type geç güncelleme başarısız:", error.message);
+          else console.log("[createAppointment] lesson_type sonradan güncellendi:", lessonType);
+        });
+    } else {
+      // Başka bir hata — direkt fırlat
+      fail("createAppointment", result.error);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = (result as any).data;
   const appointmentId = data.id;
 
-  // appointment_students'a katılımcıları ekle
-  const allStudents = [apt.studentId, ...(apt.secondStudentIds ?? [])];
-  const apRows = allStudents.map(sid => ({
-    appointment_id: appointmentId,
-    student_id:     sid,
-    lesson_deducted: false,
-  }));
-  if (apRows.length > 0) {
+  // appointment_students — düet/grup için katılımcıları kaydet
+  const allStudents = [apt.studentId, ...(apt.secondStudentIds ?? [])].filter(Boolean);
+  if (allStudents.length > 0) {
+    const apRows = allStudents.map(sid => ({
+      appointment_id:  appointmentId,
+      student_id:      sid,
+      lesson_deducted: false,
+    }));
     const { error: e2 } = await db().from("appointment_students").insert(apRows);
-    if (e2) console.warn("createAppointment:appointment_students", e2.message);
+    if (e2) console.warn("[createAppointment] appointment_students:", e2.message);
   }
 
   return ma(data);
