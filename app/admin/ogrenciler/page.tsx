@@ -2,10 +2,11 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getStudents, createStudent, updateStudent, deleteStudent } from "@/lib/db";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import type { Student } from "@/lib/types";
 import { Badge, PageHeader, Modal } from "@/app/components/ui";
 import { PAYMENT_LABELS, LEVEL_LABELS } from "@/lib/constants";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, Check } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, Check, AlertTriangle } from "lucide-react";
 
 /* ─── Sabitler ───────────────────────────────────────────────────────── */
 function genCode(students: Student[]) {
@@ -122,7 +123,10 @@ export default function OgrencilerPage() {
     const paid = Number(aAmountPaid) || 0;
     const due = Number(aAmountDue) || 0;
     const code = genCode(students);
-    await createStudent({
+
+    console.log("📤 Öğrenci ekleniyor:", { code, fullName: aName.trim(), isSupabaseConfigured });
+
+    const result = await createStudent({
       code,
       fullName: aName.trim(),
       phone: aPhone.trim(),
@@ -130,7 +134,7 @@ export default function OgrencilerPage() {
       level: aLevel as Student["level"],
       packageType: "sampiyon",
       totalLessons: total,
-      remainingLessons: total,   // başlangıçta toplam = kalan
+      remainingLessons: total,
       completedLessons: 0,
       paymentStatus: aPayStatus as Student["paymentStatus"],
       amountPaid: paid,
@@ -140,9 +144,18 @@ export default function OgrencilerPage() {
       notes: aNotes.trim(),
       isActive: true,
     });
-    setStudents(await getStudents());
+
+    if (result) {
+      console.log("✅ Öğrenci eklendi:", result.id);
+    } else {
+      console.error("❌ Öğrenci eklenemedi — createStudent null döndü");
+    }
+
+    const fresh = await getStudents();
+    console.log("📋 Güncel öğrenci listesi:", fresh.length, "kişi");
+    setStudents(fresh);
     setASaving(false);
-    setAddOpen(false);
+    if (result) setAddOpen(false);
   };
 
   /* ─── Düzenle aç ─────────────────────────────────────────────── */
@@ -213,6 +226,30 @@ export default function OgrencilerPage() {
           <Plus size={14} />Yeni Öğrenci
         </button>
       </div>
+
+      {/* ── SUPABASE BAĞLANTI UYARISI ───────────────────────────── */}
+      {!isSupabaseConfigured && (
+        <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30">
+          <AlertTriangle size={18} className="text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <div className="text-sm text-yellow-400 font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              ⚠️ Supabase Bağlı Değil — Veriler Kaydedilmez!
+            </div>
+            <div className="text-xs text-yellow-400/60 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              .env.local dosyasında NEXT_PUBLIC_SUPABASE_URL ve NEXT_PUBLIC_SUPABASE_ANON_KEY eksik.
+              Dosyayı doldurup <strong>npm run dev yeniden başlatın</strong>.
+            </div>
+          </div>
+        </div>
+      )}
+      {isSupabaseConfigured && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-500/8 border border-green-500/20">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-xs text-green-400 tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            Supabase bağlı — veriler kalıcı olarak kaydedilir
+          </span>
+        </div>
+      )}
 
       {/* ── YENİ ÖĞRENCİ FORMU (inline panel) ──────────────────── */}
       <AnimatePresence>

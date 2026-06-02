@@ -1,9 +1,7 @@
 /**
- * lib/db.ts — Supabase öncelikli veri katmanı.
- * Supabase yapılandırılmışsa gerçek veritabanı kullanılır,
- * yoksa geliştirme için mock verilerle çalışır.
- *
- * Supabase: snake_case kolonlar → camelCase TypeScript tipleri
+ * lib/db.ts — Supabase veri katmanı
+ * Supabase aktifse gerçek DB kullanılır, yoksa mock veriye düşer.
+ * Tüm hatalar console.error ile görünür.
  */
 
 import type {
@@ -16,139 +14,129 @@ import {
 } from "./mock-data";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
-// ─── Mapper: DB satırı → TypeScript nesnesi ───────────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapStudent(row: any): Student {
-  return {
-    id: row.id,
-    code: row.code,
-    fullName: row.full_name,
-    phone: row.phone,
-    email: row.email ?? undefined,
-    level: row.level,
-    packageType: row.package_type,
-    totalLessons: row.total_lessons ?? 0,
-    remainingLessons: row.remaining_lessons ?? 0,
-    completedLessons: row.completed_lessons ?? 0,
-    paymentStatus: row.payment_status,
-    amountPaid: Number(row.amount_paid ?? 0),
-    amountDue: Number(row.amount_due ?? 0),
-    packageStartDate: row.package_start_date ?? "",
-    packageEndDate: row.package_end_date ?? "",
-    notes: row.notes ?? undefined,
-    isActive: row.is_active ?? true,
-    weight: row.weight ?? undefined,
-    age: row.age ?? undefined,
-    createdAt: row.created_at ?? "",
-  };
+// ── Hata gösterici ────────────────────────────────────────────────────────────
+function dbError(fn: string, error: { message: string; details?: string; hint?: string; code?: string }) {
+  const msg = `[${fn}] ${error.message} | ${error.details ?? ""} | hint: ${error.hint ?? ""} | code: ${error.code ?? ""}`;
+  console.error("⛔ Supabase DB Hatası:", msg);
 }
 
+// ── Row mappers: snake_case → camelCase ───────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapAppointment(row: any): Appointment {
+function mapStudent(r: any): Student {
   return {
-    id: row.id,
-    studentId: row.student_id,
-    studentName: row.student_name,
-    studentCode: row.student_code,
-    studentPhone: row.student_phone ?? "",
-    date: row.date,
-    startTime: row.start_time,
-    endTime: row.end_time,
-    status: row.status,
-    cancelledAt: row.cancelled_at ?? undefined,
-    completedAt: row.completed_at ?? undefined,
-    notes: row.notes ?? undefined,
-    createdAt: row.created_at ?? "",
+    id: r.id,
+    code: r.code,
+    fullName: r.full_name,
+    phone: r.phone,
+    email: r.email ?? undefined,
+    level: r.level,
+    packageType: r.package_type,
+    totalLessons: Number(r.total_lessons ?? 0),
+    remainingLessons: Number(r.remaining_lessons ?? 0),
+    completedLessons: Number(r.completed_lessons ?? 0),
+    paymentStatus: r.payment_status,
+    amountPaid: Number(r.amount_paid ?? 0),
+    amountDue: Number(r.amount_due ?? 0),
+    packageStartDate: r.package_start_date ?? "",
+    packageEndDate: r.package_end_date ?? "",
+    notes: r.notes ?? undefined,
+    isActive: r.is_active ?? true,
+    weight: r.weight ?? undefined,
+    age: r.age ?? undefined,
+    createdAt: r.created_at ?? "",
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapLessonRecord(row: any): LessonRecord {
+function mapAppointment(r: any): Appointment {
   return {
-    id: row.id,
-    appointmentId: row.appointment_id ?? "",
-    studentId: row.student_id,
-    date: row.date,
-    conditioning: row.conditioning ?? 5,
-    punch: row.punch ?? 5,
-    kick: row.kick ?? 5,
-    defense: row.defense ?? 5,
-    combination: row.combination ?? 5,
-    sparring: row.sparring ?? 5,
-    overall: row.overall ?? 5,
-    trainerNotes: row.trainer_notes ?? "",
-    durationMinutes: row.duration_minutes ?? 60,
-    createdAt: row.created_at ?? "",
+    id: r.id,
+    studentId: r.student_id,
+    studentName: r.student_name,
+    studentCode: r.student_code,
+    studentPhone: r.student_phone ?? "",
+    date: r.date,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    status: r.status,
+    cancelledAt: r.cancelled_at ?? undefined,
+    completedAt: r.completed_at ?? undefined,
+    notes: r.notes ?? undefined,
+    createdAt: r.created_at ?? "",
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapPayment(row: any): Payment {
+function mapLessonRecord(r: any): LessonRecord {
   return {
-    id: row.id,
-    studentId: row.student_id,
-    studentName: row.student_name,
-    amount: Number(row.amount),
-    paidAt: row.paid_at,
-    method: row.method ?? "nakit",
-    notes: row.notes ?? undefined,
+    id: r.id,
+    appointmentId: r.appointment_id ?? "",
+    studentId: r.student_id,
+    date: r.date,
+    conditioning: r.conditioning ?? 5,
+    punch: r.punch ?? 5,
+    kick: r.kick ?? 5,
+    defense: r.defense ?? 5,
+    combination: r.combination ?? 5,
+    sparring: r.sparring ?? 5,
+    overall: r.overall ?? 5,
+    trainerNotes: r.trainer_notes ?? "",
+    durationMinutes: r.duration_minutes ?? 60,
+    createdAt: r.created_at ?? "",
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapNotification(row: any): Notification {
+function mapPayment(r: any): Payment {
   return {
-    id: row.id,
-    studentId: row.student_id ?? undefined,
-    title: row.title,
-    message: row.message,
-    type: row.type,
-    isRead: row.is_read ?? false,
-    createdAt: row.created_at ?? "",
+    id: r.id,
+    studentId: r.student_id,
+    studentName: r.student_name,
+    amount: Number(r.amount),
+    paidAt: r.paid_at,
+    method: r.method ?? "nakit",
+    notes: r.notes ?? undefined,
   };
 }
 
-// TypeScript Partial<Student> → Supabase satır formatı
-function studentToDb(s: Partial<Student>): Record<string, unknown> {
-  const db: Record<string, unknown> = {};
-  if (s.code !== undefined)             db.code              = s.code;
-  if (s.fullName !== undefined)         db.full_name         = s.fullName;
-  if (s.phone !== undefined)            db.phone             = s.phone;
-  if (s.email !== undefined)            db.email             = s.email;
-  if (s.level !== undefined)            db.level             = s.level;
-  if (s.packageType !== undefined)      db.package_type      = s.packageType;
-  if (s.totalLessons !== undefined)     db.total_lessons     = s.totalLessons;
-  if (s.remainingLessons !== undefined) db.remaining_lessons = s.remainingLessons;
-  if (s.completedLessons !== undefined) db.completed_lessons = s.completedLessons;
-  if (s.paymentStatus !== undefined)    db.payment_status    = s.paymentStatus;
-  if (s.amountPaid !== undefined)       db.amount_paid       = s.amountPaid;
-  if (s.amountDue !== undefined)        db.amount_due        = s.amountDue;
-  if (s.packageStartDate !== undefined) db.package_start_date = s.packageStartDate;
-  if (s.packageEndDate !== undefined)   db.package_end_date  = s.packageEndDate;
-  if (s.notes !== undefined)            db.notes             = s.notes;
-  if (s.isActive !== undefined)         db.is_active         = s.isActive;
-  if (s.weight !== undefined)           db.weight            = s.weight;
-  if (s.age !== undefined)              db.age               = s.age;
-  return db;
-}
-
-function appointmentToDb(a: Omit<Appointment, "id" | "createdAt">): Record<string, unknown> {
-  const db: Record<string, unknown> = {
-    student_id:    a.studentId,
-    student_name:  a.studentName,
-    student_code:  a.studentCode,
-    student_phone: a.studentPhone,
-    date:          a.date,
-    start_time:    a.startTime,
-    end_time:      a.endTime,
-    status:        a.status,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapNotification(r: any): Notification {
+  return {
+    id: r.id,
+    studentId: r.student_id ?? undefined,
+    title: r.title,
+    message: r.message,
+    type: r.type,
+    isRead: r.is_read ?? false,
+    createdAt: r.created_at ?? "",
   };
-  if (a.notes) db.notes = a.notes;
-  return db;
 }
 
-// ─── Students ────────────────────────────────────────────────────────────────
+// Student → DB satırı (camelCase → snake_case)
+function studentToRow(s: Partial<Student>): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (s.code              !== undefined) row.code               = s.code;
+  if (s.fullName          !== undefined) row.full_name          = s.fullName;
+  if (s.phone             !== undefined) row.phone              = s.phone;
+  if (s.email             !== undefined) row.email              = s.email;
+  if (s.level             !== undefined) row.level              = s.level;
+  if (s.packageType       !== undefined) row.package_type       = s.packageType;
+  if (s.totalLessons      !== undefined) row.total_lessons      = s.totalLessons;
+  if (s.remainingLessons  !== undefined) row.remaining_lessons  = s.remainingLessons;
+  if (s.completedLessons  !== undefined) row.completed_lessons  = s.completedLessons;
+  if (s.paymentStatus     !== undefined) row.payment_status     = s.paymentStatus;
+  if (s.amountPaid        !== undefined) row.amount_paid        = s.amountPaid;
+  if (s.amountDue         !== undefined) row.amount_due         = s.amountDue;
+  if (s.packageStartDate  !== undefined) row.package_start_date = s.packageStartDate || null;
+  if (s.packageEndDate    !== undefined) row.package_end_date   = s.packageEndDate || null;
+  if (s.notes             !== undefined) row.notes              = s.notes;
+  if (s.isActive          !== undefined) row.is_active          = s.isActive;
+  if (s.weight            !== undefined) row.weight             = s.weight;
+  if (s.age               !== undefined) row.age                = s.age;
+  return row;
+}
+
+// ── STUDENTS ─────────────────────────────────────────────────────────────────
 
 export async function getStudents(): Promise<Student[]> {
   if (isSupabaseConfigured && supabase) {
@@ -156,26 +144,18 @@ export async function getStudents(): Promise<Student[]> {
       .from("students")
       .select("*")
       .order("full_name");
-    if (error) {
-      console.log("[getStudents] Supabase hatası:", error.message);
-      return [];
-    }
-    return (data || []).map(mapStudent);
+    if (error) { dbError("getStudents", error); return []; }
+    return (data ?? []).map(mapStudent);
   }
+  console.warn("⚠️ getStudents: Supabase bağlı değil, mock data kullanılıyor");
   return MOCK_STUDENTS;
 }
 
 export async function getStudent(id: string): Promise<Student | null> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
-      .from("students")
-      .select("*")
-      .eq("id", id)
-      .single();
-    if (error) {
-      console.log("[getStudent] Supabase hatası:", error.message);
-      return null;
-    }
+      .from("students").select("*").eq("id", id).single();
+    if (error) { dbError("getStudent", error); return null; }
     return data ? mapStudent(data) : null;
   }
   return MOCK_STUDENTS.find(s => s.id === id) ?? null;
@@ -184,15 +164,11 @@ export async function getStudent(id: string): Promise<Student | null> {
 export async function getStudentByCode(code: string): Promise<Student | null> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
-      .from("students")
-      .select("*")
+      .from("students").select("*")
       .eq("code", code.toUpperCase())
       .eq("is_active", true)
-      .single();
-    if (error) {
-      console.log("[getStudentByCode] Supabase hatası:", error.message);
-      return null;
-    }
+      .maybeSingle();
+    if (error) { dbError("getStudentByCode", error); return null; }
     return data ? mapStudent(data) : null;
   }
   return MOCK_STUDENTS.find(s => s.code === code.toUpperCase() && s.isActive) ?? null;
@@ -202,39 +178,34 @@ export async function createStudent(
   student: Omit<Student, "id" | "createdAt">
 ): Promise<Student | null> {
   if (isSupabaseConfigured && supabase) {
+    const row = studentToRow(student);
+    console.log("📤 createStudent insert row:", row);
     const { data, error } = await supabase
       .from("students")
-      .insert(studentToDb(student))
+      .insert(row)
       .select()
       .single();
     if (error) {
-      console.log("[createStudent] Supabase hatası:", error.message, error.details);
+      dbError("createStudent", error);
+      if (typeof window !== "undefined") {
+        alert(`Öğrenci eklenemedi!\n${error.message}\n${error.details ?? ""}`);
+      }
       return null;
     }
-    return data ? mapStudent(data) : null;
+    console.log("✅ createStudent başarılı:", data.id);
+    return mapStudent(data);
   }
-  const newStudent: Student = {
-    ...student,
-    id: `std-${Date.now()}`,
-    createdAt: new Date().toISOString().split("T")[0],
-  };
-  MOCK_STUDENTS.push(newStudent);
-  return newStudent;
+  console.warn("⚠️ createStudent: Supabase bağlı değil!");
+  const newS: Student = { ...student, id: `std-${Date.now()}`, createdAt: new Date().toISOString().split("T")[0] };
+  MOCK_STUDENTS.push(newS);
+  return newS;
 }
 
-export async function updateStudent(
-  id: string,
-  updates: Partial<Student>
-): Promise<boolean> {
+export async function updateStudent(id: string, updates: Partial<Student>): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
     const { error } = await supabase
-      .from("students")
-      .update(studentToDb(updates))
-      .eq("id", id);
-    if (error) {
-      console.log("[updateStudent] Supabase hatası:", error.message);
-      return false;
-    }
+      .from("students").update(studentToRow(updates)).eq("id", id);
+    if (error) { dbError("updateStudent", error); return false; }
     return true;
   }
   const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
@@ -244,14 +215,8 @@ export async function updateStudent(
 
 export async function deleteStudent(id: string): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase
-      .from("students")
-      .delete()
-      .eq("id", id);
-    if (error) {
-      console.log("[deleteStudent] Supabase hatası:", error.message);
-      return false;
-    }
+    const { error } = await supabase.from("students").delete().eq("id", id);
+    if (error) { dbError("deleteStudent", error); return false; }
     return true;
   }
   const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
@@ -259,28 +224,19 @@ export async function deleteStudent(id: string): Promise<boolean> {
   return false;
 }
 
-// ─── Appointments ─────────────────────────────────────────────────────────────
+// ── APPOINTMENTS ─────────────────────────────────────────────────────────────
 
 export async function getAppointments(filters?: {
-  studentId?: string;
-  date?: string;
-  status?: string;
+  studentId?: string; date?: string; status?: string;
 }): Promise<Appointment[]> {
   if (isSupabaseConfigured && supabase) {
-    let query = supabase
-      .from("appointments")
-      .select("*")
-      .order("date")
-      .order("start_time");
-    if (filters?.studentId) query = query.eq("student_id", filters.studentId);
-    if (filters?.date)      query = query.eq("date", filters.date);
-    if (filters?.status)    query = query.eq("status", filters.status);
-    const { data, error } = await query;
-    if (error) {
-      console.log("[getAppointments] Supabase hatası:", error.message);
-      return [];
-    }
-    return (data || []).map(mapAppointment);
+    let q = supabase.from("appointments").select("*").order("date").order("start_time");
+    if (filters?.studentId) q = q.eq("student_id", filters.studentId);
+    if (filters?.date)      q = q.eq("date", filters.date);
+    if (filters?.status)    q = q.eq("status", filters.status);
+    const { data, error } = await q;
+    if (error) { dbError("getAppointments", error); return []; }
+    return (data ?? []).map(mapAppointment);
   }
   let result = [...MOCK_APPOINTMENTS];
   if (filters?.studentId) result = result.filter(a => a.studentId === filters.studentId);
@@ -289,48 +245,39 @@ export async function getAppointments(filters?: {
   return result.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 }
 
-export async function createAppointment(
-  apt: Omit<Appointment, "id" | "createdAt">
-): Promise<Appointment | null> {
+export async function createAppointment(apt: Omit<Appointment, "id" | "createdAt">): Promise<Appointment | null> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
       .from("appointments")
-      .insert(appointmentToDb(apt))
-      .select()
-      .single();
-    if (error) {
-      console.log("[createAppointment] Supabase hatası:", error.message);
-      return null;
-    }
+      .insert({
+        student_id:    apt.studentId,
+        student_name:  apt.studentName,
+        student_code:  apt.studentCode,
+        student_phone: apt.studentPhone,
+        date:          apt.date,
+        start_time:    apt.startTime,
+        end_time:      apt.endTime,
+        status:        apt.status,
+        notes:         apt.notes,
+      })
+      .select().single();
+    if (error) { dbError("createAppointment", error); return null; }
     return data ? mapAppointment(data) : null;
   }
-  const newApt: Appointment = {
-    ...apt,
-    id: `apt-${Date.now()}`,
-    createdAt: new Date().toISOString().split("T")[0],
-  };
-  MOCK_APPOINTMENTS.push(newApt);
-  return newApt;
+  const newA: Appointment = { ...apt, id: `apt-${Date.now()}`, createdAt: new Date().toISOString().split("T")[0] };
+  MOCK_APPOINTMENTS.push(newA);
+  return newA;
 }
 
-export async function updateAppointment(
-  id: string,
-  updates: Partial<Appointment>
-): Promise<boolean> {
+export async function updateAppointment(id: string, updates: Partial<Appointment>): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
-    const db: Record<string, unknown> = {};
-    if (updates.status)      db.status       = updates.status;
-    if (updates.cancelledAt) db.cancelled_at = updates.cancelledAt;
-    if (updates.completedAt) db.completed_at = updates.completedAt;
-    if (updates.notes)       db.notes        = updates.notes;
-    const { error } = await supabase
-      .from("appointments")
-      .update(db)
-      .eq("id", id);
-    if (error) {
-      console.log("[updateAppointment] Supabase hatası:", error.message);
-      return false;
-    }
+    const row: Record<string, unknown> = {};
+    if (updates.status)      row.status       = updates.status;
+    if (updates.cancelledAt) row.cancelled_at = updates.cancelledAt;
+    if (updates.completedAt) row.completed_at = updates.completedAt;
+    if (updates.notes)       row.notes        = updates.notes;
+    const { error } = await supabase.from("appointments").update(row).eq("id", id);
+    if (error) { dbError("updateAppointment", error); return false; }
     return true;
   }
   const idx = MOCK_APPOINTMENTS.findIndex(a => a.id === id);
@@ -339,97 +286,67 @@ export async function updateAppointment(
 }
 
 export async function cancelAppointment(id: string): Promise<boolean> {
-  return updateAppointment(id, {
-    status: "iptal",
-    cancelledAt: new Date().toISOString().split("T")[0],
-  });
+  return updateAppointment(id, { status: "iptal", cancelledAt: new Date().toISOString().split("T")[0] });
 }
 
 export async function completeAppointment(id: string): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
-    // Randevuyu tamamlandı yap
     const today = new Date().toISOString().split("T")[0];
-    const { data: apt, error: aptErr } = await supabase
+    const { data: apt, error: e1 } = await supabase
       .from("appointments")
       .update({ status: "tamamlandi", completed_at: today })
       .eq("id", id)
-      .select("student_id")
-      .single();
-    if (aptErr) {
-      console.log("[completeAppointment] randevu güncelleme hatası:", aptErr.message);
-      return false;
-    }
-    // Öğrencinin kalan dersini azalt
+      .select("student_id").single();
+    if (e1) { dbError("completeAppointment:update", e1); return false; }
     if (apt?.student_id) {
       const { data: std } = await supabase
-        .from("students")
-        .select("remaining_lessons, completed_lessons")
-        .eq("id", apt.student_id)
-        .single();
-      if (std && std.remaining_lessons > 0) {
-        await supabase
-          .from("students")
-          .update({
-            remaining_lessons: std.remaining_lessons - 1,
-            completed_lessons: (std.completed_lessons || 0) + 1,
-          })
-          .eq("id", apt.student_id);
+        .from("students").select("remaining_lessons, completed_lessons")
+        .eq("id", apt.student_id).single();
+      if (std && (std.remaining_lessons ?? 0) > 0) {
+        await supabase.from("students").update({
+          remaining_lessons: (std.remaining_lessons ?? 1) - 1,
+          completed_lessons: (std.completed_lessons ?? 0) + 1,
+        }).eq("id", apt.student_id);
       }
     }
     return true;
   }
-  // Mock fallback
   const apt = MOCK_APPOINTMENTS.find(a => a.id === id);
   if (!apt) return false;
   apt.status = "tamamlandi";
   apt.completedAt = new Date().toISOString().split("T")[0];
-  const student = MOCK_STUDENTS.find(s => s.id === apt.studentId);
-  if (student && student.remainingLessons > 0) {
-    student.remainingLessons -= 1;
-    student.completedLessons += 1;
-  }
+  const std = MOCK_STUDENTS.find(s => s.id === apt.studentId);
+  if (std && std.remainingLessons > 0) { std.remainingLessons--; std.completedLessons++; }
   return true;
 }
 
-// ─── Time Slots ───────────────────────────────────────────────────────────────
+// ── TIME SLOTS ───────────────────────────────────────────────────────────────
 
 export async function getTimeSlots(date: string): Promise<TimeSlot[]> {
   const { getSlotsForDate } = await import("./slots");
   const adminSlots = await getSlotsForDate(date);
-
-  if (adminSlots.length > 0) {
-    const allApts = await getAppointments({ date });
-    const booked = allApts
-      .filter(a => a.status !== "iptal")
-      .map(a => a.startTime);
-
-    return adminSlots.map(s => ({
-      id: s.id || `slot-${date}-${s.start}`,
-      date,
-      startTime: s.start,
-      endTime: s.end,
-      isAvailable: s.open && !booked.includes(s.start),
-      isBlocked: !s.open,
-    }));
-  }
-  return [];
+  if (adminSlots.length === 0) return [];
+  const allApts = await getAppointments({ date });
+  const booked = allApts.filter(a => a.status !== "iptal").map(a => a.startTime);
+  return adminSlots.map(s => ({
+    id: s.id || `slot-${date}-${s.start}`,
+    date,
+    startTime: s.start,
+    endTime:   s.end,
+    isAvailable: s.open && !booked.includes(s.start),
+    isBlocked:   !s.open,
+  }));
 }
 
-// ─── Lesson Records ───────────────────────────────────────────────────────────
+// ── LESSON RECORDS ───────────────────────────────────────────────────────────
 
 export async function getLessonRecords(studentId?: string): Promise<LessonRecord[]> {
   if (isSupabaseConfigured && supabase) {
-    let query = supabase
-      .from("lesson_records")
-      .select("*")
-      .order("date", { ascending: false });
-    if (studentId) query = query.eq("student_id", studentId);
-    const { data, error } = await query;
-    if (error) {
-      console.log("[getLessonRecords] Supabase hatası:", error.message);
-      return [];
-    }
-    return (data || []).map(mapLessonRecord);
+    let q = supabase.from("lesson_records").select("*").order("date", { ascending: false });
+    if (studentId) q = q.eq("student_id", studentId);
+    const { data, error } = await q;
+    if (error) { dbError("getLessonRecords", error); return []; }
+    return (data ?? []).map(mapLessonRecord);
   }
   let result = [...MOCK_LESSON_RECORDS];
   if (studentId) result = result.filter(r => r.studentId === studentId);
@@ -456,40 +373,27 @@ export async function createLessonRecord(
         trainer_notes:    record.trainerNotes,
         duration_minutes: record.durationMinutes,
       })
-      .select()
-      .single();
-    if (error) {
-      console.log("[createLessonRecord] Supabase hatası:", error.message);
-      return null;
-    }
+      .select().single();
+    if (error) { dbError("createLessonRecord", error); return null; }
     return data ? mapLessonRecord(data) : null;
   }
-  const newRecord: LessonRecord = {
-    ...record,
-    id: `lr-${Date.now()}`,
-    createdAt: new Date().toISOString().split("T")[0],
-  };
-  MOCK_LESSON_RECORDS.push(newRecord);
-  return newRecord;
+  const n: LessonRecord = { ...record, id: `lr-${Date.now()}`, createdAt: new Date().toISOString().split("T")[0] };
+  MOCK_LESSON_RECORDS.push(n);
+  return n;
 }
 
-// ─── Notifications ────────────────────────────────────────────────────────────
+// ── NOTIFICATIONS ────────────────────────────────────────────────────────────
 
 export async function getStudentNotifications(studentId: string): Promise<Notification[]> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
+      .from("notifications").select("*")
       .eq("student_id", studentId)
       .order("created_at", { ascending: false });
-    if (error) {
-      console.log("[getStudentNotifications] Supabase hatası:", error.message);
-      return [];
-    }
-    return (data || []).map(mapNotification);
+    if (error) { dbError("getStudentNotifications", error); return []; }
+    return (data ?? []).map(mapNotification);
   }
-  return MOCK_NOTIFICATIONS
-    .filter(n => n.studentId === studentId)
+  return MOCK_NOTIFICATIONS.filter(n => n.studentId === studentId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -506,19 +410,14 @@ export async function markNotificationRead(id: string): Promise<void> {
   if (n) n.isRead = true;
 }
 
-// ─── Payments ─────────────────────────────────────────────────────────────────
+// ── PAYMENTS ─────────────────────────────────────────────────────────────────
 
 export async function getPayments(): Promise<Payment[]> {
   if (isSupabaseConfigured && supabase) {
     const { data, error } = await supabase
-      .from("payments")
-      .select("*")
-      .order("paid_at", { ascending: false });
-    if (error) {
-      console.log("[getPayments] Supabase hatası:", error.message);
-      return [];
-    }
-    return (data || []).map(mapPayment);
+      .from("payments").select("*").order("paid_at", { ascending: false });
+    if (error) { dbError("getPayments", error); return []; }
+    return (data ?? []).map(mapPayment);
   }
   return [...MOCK_PAYMENTS].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
 }
@@ -535,94 +434,64 @@ export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment>
         method:       payment.method,
         notes:        payment.notes,
       })
-      .select()
-      .single();
-    if (error) {
-      console.log("[addPayment] Supabase hatası:", error.message);
-    } else if (data) {
+      .select().single();
+    if (error) { dbError("addPayment", error); }
+    else if (data) {
       // Öğrenci tutarını güncelle
       const { data: std } = await supabase
-        .from("students")
-        .select("amount_paid, amount_due")
-        .eq("id", payment.studentId)
-        .single();
+        .from("students").select("amount_paid, amount_due").eq("id", payment.studentId).single();
       if (std) {
         const newPaid = Number(std.amount_paid) + payment.amount;
         const newDue  = Math.max(0, Number(std.amount_due) - payment.amount);
-        await supabase
-          .from("students")
-          .update({
-            amount_paid:    newPaid,
-            amount_due:     newDue,
-            payment_status: newDue === 0 ? "odendi" : newPaid > 0 ? "kismi" : "beklemede",
-          })
-          .eq("id", payment.studentId);
+        await supabase.from("students").update({
+          amount_paid:    newPaid,
+          amount_due:     newDue,
+          payment_status: newDue === 0 ? "odendi" : newPaid > 0 ? "kismi" : "beklemede",
+        }).eq("id", payment.studentId);
       }
       return mapPayment(data);
     }
   }
-  // Mock fallback
-  const newPayment: Payment = { ...payment, id: `pay-${Date.now()}` };
-  MOCK_PAYMENTS.push(newPayment);
-  const student = MOCK_STUDENTS.find(s => s.id === payment.studentId);
-  if (student) {
-    student.amountPaid += payment.amount;
-    student.amountDue   = Math.max(0, student.amountDue - payment.amount);
-    student.paymentStatus =
-      student.amountDue === 0 ? "odendi" :
-      student.amountPaid > 0  ? "kismi"  : "beklemede";
+  const n: Payment = { ...payment, id: `pay-${Date.now()}` };
+  MOCK_PAYMENTS.push(n);
+  const std = MOCK_STUDENTS.find(s => s.id === payment.studentId);
+  if (std) {
+    std.amountPaid += payment.amount;
+    std.amountDue   = Math.max(0, std.amountDue - payment.amount);
+    std.paymentStatus = std.amountDue === 0 ? "odendi" : std.amountPaid > 0 ? "kismi" : "beklemede";
   }
-  return newPayment;
+  return n;
 }
 
 export async function deletePayment(id: string): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
-    // Tutarı bul
     const { data: pay } = await supabase
-      .from("payments")
-      .select("student_id, amount")
-      .eq("id", id)
-      .single();
-
-    const { error } = await supabase
-      .from("payments")
-      .delete()
-      .eq("id", id);
-    if (error) {
-      console.log("[deletePayment] Supabase hatası:", error.message);
-      return false;
-    }
-    // Öğrenci tutarını geri al
+      .from("payments").select("student_id, amount").eq("id", id).single();
+    const { error } = await supabase.from("payments").delete().eq("id", id);
+    if (error) { dbError("deletePayment", error); return false; }
     if (pay) {
       const { data: std } = await supabase
-        .from("students")
-        .select("amount_paid, amount_due")
-        .eq("id", pay.student_id)
-        .single();
+        .from("students").select("amount_paid, amount_due").eq("id", pay.student_id).single();
       if (std) {
         const newPaid = Math.max(0, Number(std.amount_paid) - pay.amount);
         const newDue  = Number(std.amount_due) + pay.amount;
-        await supabase
-          .from("students")
-          .update({
-            amount_paid:    newPaid,
-            amount_due:     newDue,
-            payment_status: newPaid === 0 ? "beklemede" : "kismi",
-          })
-          .eq("id", pay.student_id);
+        await supabase.from("students").update({
+          amount_paid:    newPaid,
+          amount_due:     newDue,
+          payment_status: newPaid === 0 ? "beklemede" : "kismi",
+        }).eq("id", pay.student_id);
       }
     }
     return true;
   }
-  // Mock fallback
   const idx = MOCK_PAYMENTS.findIndex(p => p.id === id);
   if (idx < 0) return false;
   const pay = MOCK_PAYMENTS[idx];
-  const student = MOCK_STUDENTS.find(s => s.id === pay.studentId);
-  if (student) {
-    student.amountPaid = Math.max(0, student.amountPaid - pay.amount);
-    student.amountDue += pay.amount;
-    student.paymentStatus = student.amountPaid === 0 ? "beklemede" : "kismi";
+  const std = MOCK_STUDENTS.find(s => s.id === pay.studentId);
+  if (std) {
+    std.amountPaid = Math.max(0, std.amountPaid - pay.amount);
+    std.amountDue += pay.amount;
+    std.paymentStatus = std.amountPaid === 0 ? "beklemede" : "kismi";
   }
   MOCK_PAYMENTS.splice(idx, 1);
   return true;
