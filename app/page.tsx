@@ -1,6 +1,7 @@
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
 import About from "./components/About";
+import Services from "./components/Services";
 import Branches from "./components/Branches";
 import PackagesSection from "./components/PackagesSection";
 import Contact from "./components/Contact";
@@ -11,13 +12,12 @@ import LandingBackground from "./components/LandingBackground";
 export default function Home() {
   return (
     <>
-      {/* Tam ekran animasyonlu arka plan */}
       <LandingBackground />
-
       <Navbar />
       <main className="relative z-10">
         <Hero />
         <About />
+        <Services />
         <Branches />
         <PackagesSection />
         <Contact />
