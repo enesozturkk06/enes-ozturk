@@ -28,7 +28,7 @@ export const PACKAGES = [
   },
 ];
 
-export const TRAINER_WHATSAPP = "905001234567";
+export const TRAINER_WHATSAPP = "905389714459";
 export const TRAINER_NAME = "Antrenör Enes Öztürk";
 export const CANCEL_LIMIT_HOURS = 18;
 

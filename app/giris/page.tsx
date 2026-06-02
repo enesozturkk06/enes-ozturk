@@ -104,7 +104,7 @@ export default function GirisPage() {
               Kodunuz yok mu? Antrenörünüzle iletişime geçin.
             </p>
             <a
-              href={`https://wa.me/905001234567?text=${encodeURIComponent("Merhaba, giriş kodum için yardım istiyorum.")}`}
+              href={`https://wa.me/905389714459?text=${encodeURIComponent("Merhaba, giriş kodum için yardım istiyorum.")}`}
               target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-green-400 hover:text-green-300 text-xs tracking-wider transition-colors duration-200"
               style={{ fontFamily: "var(--font-barlow-condensed)" }}
