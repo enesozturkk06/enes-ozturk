@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/providers";
+import Logo from "@/app/components/shared/Logo";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
   BookOpen, LogOut, Menu, X, ChevronRight, Package,
@@ -33,12 +34,7 @@ export default function AdminSidebar() {
       <aside className="hidden lg:flex flex-col w-64 min-h-screen bg-pitch border-r border-white/5 fixed left-0 top-0 z-40">
         <div className="p-5 border-b border-white/5">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8">
-              <svg viewBox="0 0 44 44" fill="none" className="w-full h-full">
-                <polygon points="22,2 42,12 42,32 22,42 2,32 2,12" stroke="#dc2626" strokeWidth="2" fill="rgba(220,38,38,0.08)" />
-                <text x="22" y="28" textAnchor="middle" fill="#dc2626" fontSize="13" fontFamily="var(--font-bebas)">EÖ</text>
-              </svg>
-            </div>
+            <Logo size={34} priority />
             <div>
               <div className="text-white text-sm tracking-widest leading-none" style={{ fontFamily: "var(--font-bebas)" }}>ENES ÖZTÜRK</div>
               <div className="text-gold text-[10px] tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>ADMİN PANELİ</div>

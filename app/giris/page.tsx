@@ -7,6 +7,7 @@ import { useAuth } from "@/app/providers";
 import { loginStudent, saveStudentSession } from "@/lib/auth";
 import { Button, Input } from "@/app/components/ui";
 import PWAInstallButton from "@/app/components/shared/PWAInstallButton";
+import Logo from "@/app/components/shared/Logo";
 
 export default function GirisPage() {
   const [code, setCode] = useState("");
@@ -58,12 +59,7 @@ export default function GirisPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <Link href="/" className="inline-flex flex-col items-center gap-3">
-            <div className="w-16 h-16">
-              <svg viewBox="0 0 44 44" fill="none" className="w-full h-full">
-                <polygon points="22,2 42,12 42,32 22,42 2,32 2,12" stroke="#dc2626" strokeWidth="2" fill="rgba(220,38,38,0.1)" />
-                <text x="22" y="28" textAnchor="middle" fill="#dc2626" fontSize="13" fontFamily="var(--font-bebas)">EÖ</text>
-              </svg>
-            </div>
+            <Logo size={80} priority />
             <div>
               <div className="text-2xl text-white tracking-[0.2em]" style={{ fontFamily: "var(--font-bebas)" }}>ENES ÖZTÜRK</div>
               <div className="text-crimson text-xs tracking-[0.4em]" style={{ fontFamily: "var(--font-bebas)" }}>ANTRENÖR · KİCKBOKS</div>

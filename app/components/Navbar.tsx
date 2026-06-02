@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/app/providers";
 import { Menu, X } from "lucide-react";
+import Logo from "@/app/components/shared/Logo";
 
 const navLinks = [
   { label: "Ana Sayfa", href: "#hero" },
@@ -35,12 +36,7 @@ export default function Navbar() {
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 lg:h-[72px]">
         {/* Logo */}
         <a href="#hero" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 group flex-shrink-0">
-          <div className="w-9 h-9 lg:w-10 lg:h-10">
-            <svg viewBox="0 0 44 44" fill="none" className="w-full h-full">
-              <polygon points="22,2 42,12 42,32 22,42 2,32 2,12" stroke="#dc2626" strokeWidth="2" fill="rgba(220,38,38,0.08)" />
-              <text x="22" y="28" textAnchor="middle" fill="#dc2626" fontSize="13" fontFamily="var(--font-bebas)">EÖ</text>
-            </svg>
-          </div>
+          <Logo size={38} priority className="group-hover:opacity-90 transition-opacity duration-300" />
           <div className="flex flex-col leading-none">
             <span className="text-white text-[15px] lg:text-base tracking-[0.15em] group-hover:text-gold-bright transition-colors duration-300" style={{ fontFamily: "var(--font-bebas)" }}>
               ENES ÖZTÜRK

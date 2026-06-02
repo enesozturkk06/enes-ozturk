@@ -1,3 +1,5 @@
+import Logo from "@/app/components/shared/Logo";
+
 const WHATSAPP = "905389714459";
 
 export default function Footer() {
@@ -38,12 +40,7 @@ export default function Footer() {
           {/* Marka */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10">
-                <svg viewBox="0 0 44 44" fill="none" className="w-full h-full">
-                  <polygon points="22,2 42,12 42,32 22,42 2,32 2,12" stroke="#dc2626" strokeWidth="2" fill="rgba(220,38,38,0.08)" />
-                  <text x="22" y="28" textAnchor="middle" fill="#dc2626" fontSize="13" fontFamily="var(--font-bebas)">EÖ</text>
-                </svg>
-              </div>
+              <Logo size={40} />
               <div>
                 <div className="text-white text-base tracking-[0.15em] leading-none" style={{ fontFamily: "var(--font-bebas)" }}>ENES ÖZTÜRK</div>
                 <div className="text-crimson text-xs tracking-[0.3em]" style={{ fontFamily: "var(--font-bebas)" }}>KİŞİSEL ANTRENÖR</div>

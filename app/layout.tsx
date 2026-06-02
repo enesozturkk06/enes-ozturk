@@ -19,14 +19,15 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/images/bf9ec1d0-7dc2-4a5d-bcb8-3f7c4a807a5f.png", sizes: "any", type: "image/png" },
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
     apple: [
+      { url: "/images/bf9ec1d0-7dc2-4a5d-bcb8-3f7c4a807a5f.png" },
       { url: "/icons/icon-152.png", sizes: "152x152" },
-      { url: "/icons/icon-192.png", sizes: "192x192" },
     ],
-    shortcut: "/icons/icon-192.png",
+    shortcut: "/images/bf9ec1d0-7dc2-4a5d-bcb8-3f7c4a807a5f.png",
   },
   other: {
     "mobile-web-app-capable": "yes",

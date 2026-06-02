@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useAuth } from "@/app/providers";
 import { loginAdmin, saveAdminSession } from "@/lib/auth";
 import { Shield, Eye, EyeOff, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
+import Logo from "@/app/components/shared/Logo";
 
 export default function AdminLoginPage() {
   const [code, setCode] = useState("");
@@ -78,11 +79,7 @@ export default function AdminLoginPage() {
           className="flex flex-col items-center mb-10"
         >
           <div className="relative w-20 h-20 mb-5">
-            <svg viewBox="0 0 80 80" fill="none" className="w-full h-full">
-              <polygon points="40,4 74,22 74,58 40,76 6,58 6,22" stroke="rgba(217,119,6,0.55)" strokeWidth="1.5" fill="rgba(217,119,6,0.05)" />
-              <polygon points="40,12 68,27 68,53 40,68 12,53 12,27" stroke="rgba(217,119,6,0.18)" strokeWidth="0.8" fill="none" />
-              <text x="40" y="46" textAnchor="middle" fill="rgba(217,119,6,0.9)" fontSize="18" fontFamily="var(--font-bebas)">EÖ</text>
-            </svg>
+            <Logo size={80} priority />
             <motion.div
               animate={{ scale: [1, 1.14, 1], opacity: [0.35, 0, 0.35] }}
               transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
