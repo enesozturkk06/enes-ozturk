@@ -1,69 +1,96 @@
 /**
- * lib/db.ts
- * Ana veri kaynağı: Supabase
- * Supabase bağlı değilse yalnızca konsol uyarısı — sahte data YOK.
+ * lib/db.ts — Supabase veri katmanı
+ * Paket seçimi, düet ders, ders düşme koruması dahil.
  */
 
-import type { Student, Appointment, LessonRecord, Notification, TimeSlot, Payment } from "./types";
+import type {
+  Student, Appointment, AppointmentStudent, LessonRecord,
+  Notification, TimeSlot, Payment, CompleteResult, LessonType,
+} from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 /* ── Hata yönetimi ────────────────────────────────────────────────────── */
-function fail(fn: string, e: { message: string; details?: string; hint?: string; code?: string }): never {
-  const msg = `[${fn}] ${e.message}${e.details ? " | " + e.details : ""}${e.hint ? " | hint: " + e.hint : ""}`;
+function fail(fn: string, e: { message: string; details?: string; hint?: string }): never {
+  const msg = `[${fn}] ${e.message}${e.details ? " | " + e.details : ""}`;
   console.error("⛔ Supabase:", msg);
   throw new Error(msg);
 }
 
-function noSupabase(fn: string): never {
-  const msg = `${fn}: Supabase bağlı değil. .env.local dosyasını doldurun ve dev server'ı yeniden başlatın.`;
-  console.error("⛔", msg);
-  throw new Error(msg);
+function db() {
+  if (!isSupabaseConfigured || !supabase) throw new Error("Supabase bağlı değil");
+  return supabase!;
 }
 
 /* ── Row mappers ──────────────────────────────────────────────────────── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ms = (r: any): Student => ({
-  id: r.id, code: r.code, fullName: r.full_name, phone: r.phone, email: r.email ?? undefined,
+  id: r.id, code: r.code, fullName: r.full_name, phone: r.phone,
+  email: r.email ?? undefined,
   level: r.level, packageType: r.package_type,
-  totalLessons: Number(r.total_lessons ?? 0), remainingLessons: Number(r.remaining_lessons ?? 0),
-  completedLessons: Number(r.completed_lessons ?? 0), paymentStatus: r.payment_status,
-  amountPaid: Number(r.amount_paid ?? 0), amountDue: Number(r.amount_due ?? 0),
-  packageStartDate: r.package_start_date ?? "", packageEndDate: r.package_end_date ?? "",
-  notes: r.notes ?? undefined, isActive: r.is_active ?? true,
-  weight: r.weight ?? undefined, age: r.age ?? undefined, createdAt: r.created_at ?? "",
+  packageId: r.package_id ?? undefined,
+  customPrice: r.custom_price != null ? Number(r.custom_price) : undefined,
+  totalLessons: Number(r.total_lessons ?? 0),
+  remainingLessons: Number(r.remaining_lessons ?? 0),
+  completedLessons: Number(r.completed_lessons ?? 0),
+  paymentStatus: r.payment_status,
+  amountPaid: Number(r.amount_paid ?? 0),
+  amountDue: Number(r.amount_due ?? 0),
+  packageStartDate: r.package_start_date ?? "",
+  packageEndDate: r.package_end_date ?? "",
+  notes: r.notes ?? undefined,
+  isActive: r.is_active ?? true,
+  weight: r.weight ?? undefined,
+  age: r.age ?? undefined,
+  createdAt: r.created_at ?? "",
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ma = (r: any): Appointment => ({
-  id: r.id, studentId: r.student_id, studentName: r.student_name,
-  studentCode: r.student_code, studentPhone: r.student_phone ?? "",
-  date: r.date, startTime: r.start_time, endTime: r.end_time, status: r.status,
-  cancelledAt: r.cancelled_at ?? undefined, completedAt: r.completed_at ?? undefined,
-  notes: r.notes ?? undefined, createdAt: r.created_at ?? "",
+  id: r.id, studentId: r.student_id ?? "",
+  studentName: r.student_name ?? "", studentCode: r.student_code ?? "",
+  studentPhone: r.student_phone ?? "",
+  date: r.date, startTime: r.start_time, endTime: r.end_time,
+  status: r.status,
+  lessonType: (r.lesson_type ?? "bireysel") as LessonType,
+  cancelledAt: r.cancelled_at ?? undefined,
+  completedAt: r.completed_at ?? undefined,
+  notes: r.notes ?? undefined,
+  createdAt: r.created_at ?? "",
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mApSt = (r: any): AppointmentStudent => ({
+  id: r.id, appointmentId: r.appointment_id,
+  studentId: r.student_id, studentName: r.students?.full_name,
+  lessonDeducted: r.lesson_deducted ?? false,
+  createdAt: r.created_at ?? "",
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ml = (r: any): LessonRecord => ({
-  id: r.id, appointmentId: r.appointment_id ?? "", studentId: r.student_id, date: r.date,
-  conditioning: r.conditioning ?? 5, punch: r.punch ?? 5, kick: r.kick ?? 5,
-  defense: r.defense ?? 5, combination: r.combination ?? 5, sparring: r.sparring ?? 5,
-  overall: r.overall ?? 5, trainerNotes: r.trainer_notes ?? "",
-  durationMinutes: r.duration_minutes ?? 60, createdAt: r.created_at ?? "",
+  id: r.id, appointmentId: r.appointment_id ?? "", studentId: r.student_id,
+  date: r.date, conditioning: r.conditioning ?? 5, punch: r.punch ?? 5,
+  kick: r.kick ?? 5, defense: r.defense ?? 5, combination: r.combination ?? 5,
+  sparring: r.sparring ?? 5, overall: r.overall ?? 5,
+  trainerNotes: r.trainer_notes ?? "", durationMinutes: r.duration_minutes ?? 60,
+  createdAt: r.created_at ?? "",
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mp = (r: any): Payment => ({
   id: r.id, studentId: r.student_id, studentName: r.student_name,
-  amount: Number(r.amount), paidAt: r.paid_at, method: r.method ?? "nakit", notes: r.notes ?? undefined,
+  amount: Number(r.amount), paidAt: r.paid_at, method: r.method ?? "nakit",
+  notes: r.notes ?? undefined,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mn = (r: any): Notification => ({
-  id: r.id, studentId: r.student_id ?? undefined, title: r.title, message: r.message,
-  type: r.type, isRead: r.is_read ?? false, createdAt: r.created_at ?? "",
+  id: r.id, studentId: r.student_id ?? undefined, title: r.title,
+  message: r.message, type: r.type, isRead: r.is_read ?? false,
+  createdAt: r.created_at ?? "",
 });
 
-/* Student camelCase → snake_case */
+/* Student → DB row */
 function sRow(s: Partial<Student>): Record<string, unknown> {
   const r: Record<string, unknown> = {};
   if (s.code              !== undefined) r.code               = s.code;
@@ -72,6 +99,8 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.email             !== undefined) r.email              = s.email;
   if (s.level             !== undefined) r.level              = s.level;
   if (s.packageType       !== undefined) r.package_type       = s.packageType;
+  if (s.packageId         !== undefined) r.package_id         = s.packageId || null;
+  if (s.customPrice       !== undefined) r.custom_price       = s.customPrice ?? null;
   if (s.totalLessons      !== undefined) r.total_lessons      = s.totalLessons;
   if (s.remainingLessons  !== undefined) r.remaining_lessons  = s.remainingLessons;
   if (s.completedLessons  !== undefined) r.completed_lessons  = s.completedLessons;
@@ -85,11 +114,6 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.weight            !== undefined) r.weight             = s.weight;
   if (s.age               !== undefined) r.age                = s.age;
   return r;
-}
-
-function db() {
-  if (!isSupabaseConfigured || !supabase) noSupabase("db()");
-  return supabase!;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -111,23 +135,19 @@ export async function getStudent(id: string): Promise<Student | null> {
 export async function getStudentByCode(code: string): Promise<Student | null> {
   const { data, error } = await db()
     .from("students").select("*")
-    .eq("code", code.trim().toUpperCase())
-    .eq("is_active", true)
-    .maybeSingle();
+    .eq("code", code.trim().toUpperCase()).eq("is_active", true).maybeSingle();
   if (error) fail("getStudentByCode", error);
   return data ? ms(data) : null;
 }
 
 export async function createStudent(student: Omit<Student, "id" | "createdAt">): Promise<Student> {
-  const { data, error } = await db()
-    .from("students").insert(sRow(student)).select().single();
+  const { data, error } = await db().from("students").insert(sRow(student)).select().single();
   if (error) fail("createStudent", error);
   return ms(data);
 }
 
 export async function updateStudent(id: string, updates: Partial<Student>): Promise<Student> {
-  const { data, error } = await db()
-    .from("students").update(sRow(updates)).eq("id", id).select().single();
+  const { data, error } = await db().from("students").update(sRow(updates)).eq("id", id).select().single();
   if (error) fail("updateStudent", error);
   return ms(data);
 }
@@ -153,14 +173,79 @@ export async function getAppointments(filters?: {
   return (data ?? []).map(ma);
 }
 
-export async function createAppointment(apt: Omit<Appointment, "id" | "createdAt">): Promise<Appointment> {
+/** Öğrenciye ait randevular — düet eşleşmesi dahil */
+export async function getStudentAppointments(studentId: string): Promise<Appointment[]> {
+  // 1. Bireysel + kendi olduğu randevular
+  const { data: direct, error: e1 } = await db()
+    .from("appointments").select("*")
+    .eq("student_id", studentId).order("date").order("start_time");
+  if (e1) fail("getStudentAppointments:direct", e1);
+
+  // 2. appointment_students üzerinden dahil olduğu randevular (düet)
+  const { data: joined, error: e2 } = await db()
+    .from("appointment_students").select("appointment_id")
+    .eq("student_id", studentId);
+  if (e2) fail("getStudentAppointments:joined", e2);
+
+  const joinedIds = (joined ?? []).map(r => r.appointment_id);
+  const directIds = (direct ?? []).map(r => r.id);
+  const extraIds  = joinedIds.filter(id => !directIds.includes(id));
+
+  if (extraIds.length === 0) return (direct ?? []).map(ma);
+
+  const { data: extra, error: e3 } = await db()
+    .from("appointments").select("*").in("id", extraIds);
+  if (e3) fail("getStudentAppointments:extra", e3);
+
+  return [...(direct ?? []), ...(extra ?? [])].map(ma)
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+}
+
+/** Randevuya bağlı tüm öğrenciler */
+export async function getAppointmentStudents(appointmentId: string): Promise<AppointmentStudent[]> {
+  const { data, error } = await db()
+    .from("appointment_students")
+    .select("*, students(full_name)")
+    .eq("appointment_id", appointmentId);
+  if (error) { console.error("getAppointmentStudents:", error.message); return []; }
+  return (data ?? []).map(mApSt);
+}
+
+/** Bireysel randevu oluştur */
+export async function createAppointment(apt: {
+  studentId: string; studentName: string; studentCode: string; studentPhone?: string;
+  date: string; startTime: string; endTime: string;
+  lessonType?: LessonType; notes?: string; status?: string;
+  secondStudentIds?: string[];
+}): Promise<Appointment> {
   const { data, error } = await db().from("appointments").insert({
-    student_id: apt.studentId, student_name: apt.studentName,
-    student_code: apt.studentCode, student_phone: apt.studentPhone,
-    date: apt.date, start_time: apt.startTime, end_time: apt.endTime,
-    status: apt.status, notes: apt.notes,
+    student_id:    apt.studentId,
+    student_name:  apt.studentName,
+    student_code:  apt.studentCode,
+    student_phone: apt.studentPhone ?? "",
+    date:          apt.date,
+    start_time:    apt.startTime,
+    end_time:      apt.endTime,
+    lesson_type:   apt.lessonType ?? "bireysel",
+    status:        apt.status ?? "onaylandi",
+    notes:         apt.notes,
   }).select().single();
   if (error) fail("createAppointment", error);
+
+  const appointmentId = data.id;
+
+  // appointment_students'a tüm katılımcıları ekle
+  const students = [apt.studentId, ...(apt.secondStudentIds ?? [])];
+  const rows = students.map(sid => ({
+    appointment_id: appointmentId,
+    student_id: sid,
+    lesson_deducted: false,
+  }));
+  if (rows.length > 0) {
+    const { error: e2 } = await db().from("appointment_students").insert(rows);
+    if (e2) console.error("createAppointment:appointment_students", e2.message);
+  }
+
   return ma(data);
 }
 
@@ -181,29 +266,77 @@ export async function cancelAppointment(id: string): Promise<void> {
   });
 }
 
-export async function completeAppointment(id: string): Promise<void> {
+/**
+ * Randevuyu tamamla — düet desteği + çift tamamlama koruması
+ * Her öğrencinin lesson_deducted flag'i kontrol edilir.
+ */
+export async function completeAppointment(id: string): Promise<CompleteResult> {
   const today = new Date().toISOString().split("T")[0];
+  const warnings: string[] = [];
 
-  // 1. Randevuyu tamamlandı yap
+  // 1. Randevu durumunu güncelle
   const { data: apt, error: e1 } = await db()
-    .from("appointments").update({ status: "tamamlandi", completed_at: today })
-    .eq("id", id).select("student_id").single();
-  if (e1) fail("completeAppointment:update_apt", e1);
+    .from("appointments")
+    .update({ status: "tamamlandi", completed_at: today })
+    .eq("id", id)
+    .select("lesson_type, student_id")
+    .single();
+  if (e1) fail("completeAppointment:update", e1);
 
-  // 2. Öğrencinin kalan dersini azalt
-  if (apt?.student_id) {
-    const { data: std, error: e2 } = await db()
-      .from("students").select("remaining_lessons, completed_lessons")
-      .eq("id", apt.student_id).single();
-    if (e2) fail("completeAppointment:get_student", e2);
-    if (std && Number(std.remaining_lessons) > 0) {
-      const { error: e3 } = await db().from("students").update({
-        remaining_lessons: Number(std.remaining_lessons) - 1,
-        completed_lessons: Number(std.completed_lessons) + 1,
-      }).eq("id", apt.student_id);
-      if (e3) fail("completeAppointment:update_student", e3);
+  // 2. Bu randevuya bağlı öğrencileri al
+  const { data: apStudents, error: e2 } = await db()
+    .from("appointment_students")
+    .select("id, student_id, lesson_deducted")
+    .eq("appointment_id", id);
+  if (e2) { console.error("completeAppointment:get_students", e2.message); }
+
+  const rows = apStudents ?? [];
+
+  // Eğer appointment_students boşsa (eski kayıt), ana student_id'yi kullan
+  if (rows.length === 0 && apt?.student_id) {
+    rows.push({ id: "", student_id: apt.student_id, lesson_deducted: false });
+  }
+
+  // 3. Her öğrenci için ders düş (lesson_deducted=false olanlar)
+  for (const row of rows) {
+    if (row.lesson_deducted) continue; // zaten tamamlanmış, tekrar düşme
+
+    // Öğrenci dersini al
+    const { data: std, error: e3 } = await db()
+      .from("students")
+      .select("full_name, remaining_lessons, completed_lessons")
+      .eq("id", row.student_id)
+      .single();
+
+    if (e3 || !std) { warnings.push(`Öğrenci bulunamadı (id:${row.student_id})`); continue; }
+
+    const remaining = Number(std.remaining_lessons ?? 0);
+    if (remaining <= 0) {
+      warnings.push(`${std.full_name} adlı öğrencinin kalan dersi yok!`);
+      // Ders düşme — 0'ın altına gitme
+    } else {
+      const { error: e4 } = await db()
+        .from("students")
+        .update({
+          remaining_lessons: remaining - 1,
+          completed_lessons: Number(std.completed_lessons ?? 0) + 1,
+        })
+        .eq("id", row.student_id);
+      if (e4) { warnings.push(`${std.full_name} ders güncellenemedi: ${e4.message}`); }
+    }
+
+    // lesson_deducted = true yap (row.id varsa güncelle, yoksa insert)
+    if (row.id) {
+      await db().from("appointment_students")
+        .update({ lesson_deducted: true }).eq("id", row.id);
+    } else {
+      await db().from("appointment_students").upsert({
+        appointment_id: id, student_id: row.student_id, lesson_deducted: true,
+      }, { onConflict: "appointment_id,student_id" });
     }
   }
+
+  return { success: true, warnings };
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -220,9 +353,7 @@ export async function getTimeSlots(date: string): Promise<TimeSlot[]> {
 
   return adminSlots.map(s => ({
     id: s.id || `slot-${date}-${s.start}`,
-    date,
-    startTime: s.start,
-    endTime: s.end,
+    date, startTime: s.start, endTime: s.end,
     isAvailable: s.open && !booked.includes(s.start),
     isBlocked: !s.open,
   }));
@@ -260,8 +391,7 @@ export async function createLessonRecord(record: Omit<LessonRecord, "id" | "crea
 export async function getStudentNotifications(studentId: string): Promise<Notification[]> {
   const { data, error } = await db()
     .from("notifications").select("*")
-    .eq("student_id", studentId)
-    .order("created_at", { ascending: false });
+    .eq("student_id", studentId).order("created_at", { ascending: false });
   if (error) fail("getStudentNotifications", error);
   return (data ?? []).map(mn);
 }
@@ -298,10 +428,10 @@ export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment>
   }).select().single();
   if (error) fail("addPayment", error);
 
-  // Öğrenci tutarını güncelle
-  const { data: std, error: e2 } = await db()
+  // Öğrenci ödeme bilgisini güncelle
+  const { data: std } = await db()
     .from("students").select("amount_paid, amount_due").eq("id", payment.studentId).single();
-  if (!e2 && std) {
+  if (std) {
     const newPaid = Number(std.amount_paid) + payment.amount;
     const newDue  = Math.max(0, Number(std.amount_due) - payment.amount);
     await db().from("students").update({
@@ -314,16 +444,13 @@ export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment>
 }
 
 export async function deletePayment(id: string): Promise<void> {
-  // Tutarı kaydet
   const { data: pay, error: e1 } = await db()
     .from("payments").select("student_id, amount").eq("id", id).single();
   if (e1) fail("deletePayment:get", e1);
 
-  // Sil
   const { error: e2 } = await db().from("payments").delete().eq("id", id);
   if (e2) fail("deletePayment:delete", e2);
 
-  // Öğrenci tutarını geri al
   if (pay) {
     const { data: std } = await db()
       .from("students").select("amount_paid, amount_due").eq("id", pay.student_id).single();

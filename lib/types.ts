@@ -1,26 +1,19 @@
 export type PackageType = "savasci" | "sampiyon" | "efsane";
 export type PaymentStatus = "odendi" | "kismi" | "beklemede";
 export type AppointmentStatus = "onaylandi" | "iptal" | "tamamlandi" | "gelmedi";
+export type LessonType = "bireysel" | "duet" | "grup";
 export type NotifType = "info" | "warning" | "success" | "reminder";
 export type UserRole = "student" | "admin";
 
-export interface Package {
-  id: string;
-  name: string;
-  type: PackageType;
-  lessonCount: number;
-  price: number;
-  durationDays: number;
-  description: string;
-}
-
 export interface Student {
   id: string;
-  code: string; // ENES001
+  code: string;
   fullName: string;
   phone: string;
   email?: string;
   packageType: PackageType;
+  packageId?: string;       // packages tablosundaki ID
+  customPrice?: number;     // indirimli fiyat (null = paket fiyatı)
   totalLessons: number;
   remainingLessons: number;
   completedLessons: number;
@@ -39,9 +32,9 @@ export interface Student {
 
 export interface TimeSlot {
   id: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
+  date: string;
+  startTime: string;
+  endTime: string;
   isAvailable: boolean;
   isBlocked: boolean;
   blockReason?: string;
@@ -57,10 +50,29 @@ export interface Appointment {
   startTime: string;
   endTime: string;
   status: AppointmentStatus;
+  lessonType: LessonType;       // bireysel / duet / grup
   cancelledAt?: string;
   completedAt?: string;
   notes?: string;
   createdAt: string;
+  // Düet/Grup için ek bilgi (join ile gelebilir)
+  partnerNames?: string[];
+}
+
+/** Randevuya bağlı öğrenciler (düet/grup için) */
+export interface AppointmentStudent {
+  id: string;
+  appointmentId: string;
+  studentId: string;
+  studentName?: string;
+  lessonDeducted: boolean;
+  createdAt: string;
+}
+
+/** Ders tamamlama sonuç özeti */
+export interface CompleteResult {
+  success: boolean;
+  warnings: string[];  // örn: "Ahmet'in kalan dersi yok!"
 }
 
 export interface LessonRecord {
@@ -68,7 +80,7 @@ export interface LessonRecord {
   appointmentId: string;
   studentId: string;
   date: string;
-  conditioning: number; // 1-10
+  conditioning: number;
   punch: number;
   kick: number;
   defense: number;
@@ -82,7 +94,7 @@ export interface LessonRecord {
 
 export interface Notification {
   id: string;
-  studentId?: string; // null = trainer notification
+  studentId?: string;
   title: string;
   message: string;
   type: NotifType;

@@ -7,10 +7,10 @@ import {
   removeSlot, clearDate, setAllOpen, weekSummary,
   type Slot,
 } from "@/lib/slots";
-import { getAppointments } from "@/lib/db";
-import type { Appointment } from "@/lib/types";
+import { getAppointments, getStudents, createAppointment } from "@/lib/db";
+import type { Appointment, Student, LessonType } from "@/lib/types";
 import {
-  ChevronLeft, ChevronRight, Plus, Trash2, Lock, Unlock, Check, Zap, Clock,
+  ChevronLeft, ChevronRight, Plus, Trash2, Lock, Unlock, Check, Zap, Clock, UserPlus,
 } from "lucide-react";
 import { format, addDays, startOfWeek, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -30,6 +30,7 @@ export default function TakvimPage() {
   const [weekBase, setWeekBase] = useState(new Date());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [summary, setSummary] = useState<Record<string, { total: number; open: number }>>({});
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -38,8 +39,45 @@ export default function TakvimPage() {
   const [rangeTo, setRangeTo] = useState("22:00");
   const [intervalMin, setIntervalMin] = useState("60");
 
+  /* Randevu oluşturma formu */
+  const [aptPanel, setAptPanel]         = useState(false);
+  const [aptStudent, setAptStudent]     = useState("");
+  const [aptStudent2, setAptStudent2]   = useState("");
+  const [aptTime, setAptTime]           = useState("");
+  const [aptType, setAptType]           = useState<LessonType>("bireysel");
+  const [aptSaving, setAptSaving]       = useState(false);
+
   const weekStart = startOfWeek(weekBase, { weekStartsOn: 1 });
   const weekDays  = Array.from({ length: 7 }, (_, i) => fmt(addDays(weekStart, i)));
+
+  /* Öğrencileri yükle */
+  useEffect(() => { getStudents().then(setStudents); }, []);
+
+  /* Randevu oluştur */
+  const handleCreateApt = async () => {
+    if (!aptStudent || !aptTime) { alert("Öğrenci ve saat seçin."); return; }
+    const std = students.find(s => s.id === aptStudent);
+    if (!std) return;
+    setAptSaving(true);
+    try {
+      const slotEnd = slots.find(s => s.start === aptTime)?.end ?? "";
+      const secondIds = aptType !== "bireysel" && aptStudent2 ? [aptStudent2] : [];
+      await createAppointment({
+        studentId: std.id, studentName: std.fullName,
+        studentCode: std.code, studentPhone: std.phone,
+        date: selectedDate, startTime: aptTime, endTime: slotEnd,
+        lessonType: aptType, secondStudentIds: secondIds,
+      });
+      setAptPanel(false);
+      setAptStudent(""); setAptStudent2(""); setAptTime(""); setAptType("bireysel");
+      await reload();
+      flash();
+    } catch (err: unknown) {
+      alert("Randevu oluşturulamadı: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setAptSaving(false);
+    }
+  };
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -266,8 +304,125 @@ export default function TakvimPage() {
           )}
         </div>
 
-        {/* Sağ: Saat listesi */}
-        <div className="lg:col-span-2">
+        {/* Sağ: Randevu Oluştur + Saat listesi */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {/* Randevu oluşturma */}
+          <div className="bg-carbon border border-violet/20 relative">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-violet to-transparent" />
+            <button className="w-full flex items-center justify-between p-4"
+              onClick={() => setAptPanel(o => !o)}>
+              <div className="flex items-center gap-2">
+                <UserPlus size={15} className="text-violet" />
+                <span className="text-sm font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                  RANDEVU OLUŞTUR
+                </span>
+              </div>
+              <span className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {aptPanel ? "Kapat ▲" : "Aç ▼"}
+              </span>
+            </button>
+            <AnimatePresence>
+              {aptPanel && (
+                <motion.div initial={{ height:0, opacity:0 }} animate={{ height:"auto", opacity:1 }}
+                  exit={{ height:0, opacity:0 }} transition={{ duration:0.2 }}
+                  className="overflow-hidden border-t border-white/5">
+                  <div className="p-4 space-y-3">
+                    {/* Ders tipi */}
+                    <div>
+                      <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
+                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>Ders Tipi</label>
+                      <div className="flex gap-2">
+                        {(["bireysel","duet","grup"] as LessonType[]).map(t => (
+                          <button key={t} onClick={() => { setAptType(t); if(t==="bireysel") setAptStudent2(""); }}
+                            className="flex-1 py-2 text-xs font-semibold tracking-wider uppercase transition-all"
+                            style={{
+                              fontFamily:"var(--font-barlow-condensed)",
+                              ...(aptType===t
+                                ? { background:"linear-gradient(135deg,#8B5CF6,#A855F7)", color:"#fff" }
+                                : { border:"1px solid rgba(139,92,246,0.2)", color:"rgba(139,92,246,0.6)" }),
+                            }}>
+                            {t==="bireysel"?"Bireysel":t==="duet"?"Düet":"Grup"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Öğrenci 1 */}
+                    <div>
+                      <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
+                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        {aptType==="bireysel"?"Öğrenci":"Öğrenci A"}
+                      </label>
+                      <select value={aptStudent} onChange={e => setAptStudent(e.target.value)}
+                        className="w-full bg-carbon border border-violet/20 text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors"
+                        style={{ fontFamily:"var(--font-inter)" }}>
+                        <option value="" className="bg-carbon">Öğrenci seçin...</option>
+                        {students.filter(s=>s.isActive).map(s => (
+                          <option key={s.id} value={s.id} className="bg-carbon">
+                            {s.fullName} ({s.code}) — {s.remainingLessons} ders kaldı
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Öğrenci 2 (Düet/Grup) */}
+                    {aptType !== "bireysel" && (
+                      <div>
+                        <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
+                          style={{ fontFamily:"var(--font-barlow-condensed)" }}>Öğrenci B</label>
+                        <select value={aptStudent2} onChange={e => setAptStudent2(e.target.value)}
+                          className="w-full bg-carbon border border-violet/20 text-white px-3 py-2.5 text-sm outline-none appearance-none"
+                          style={{ fontFamily:"var(--font-inter)" }}>
+                          <option value="" className="bg-carbon">İkinci öğrenci seçin...</option>
+                          {students.filter(s => s.isActive && s.id !== aptStudent).map(s => (
+                            <option key={s.id} value={s.id} className="bg-carbon">
+                              {s.fullName} ({s.code}) — {s.remainingLessons} ders kaldı
+                            </option>
+                          ))}
+                        </select>
+                        {/* Uyarı: 0 ders */}
+                        {aptStudent2 && (() => {
+                          const std = students.find(s => s.id === aptStudent2);
+                          return std && std.remainingLessons === 0 ? (
+                            <p className="text-xs text-gold mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                              ⚠️ {std.fullName} adlı öğrencinin kalan dersi yok!
+                            </p>
+                          ) : null;
+                        })()}
+                      </div>
+                    )}
+                    {/* Saat seç */}
+                    <div>
+                      <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
+                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>Saat (Boş slotlardan)</label>
+                      <select value={aptTime} onChange={e => setAptTime(e.target.value)}
+                        className="w-full bg-carbon border border-violet/20 text-white px-3 py-2.5 text-sm outline-none appearance-none"
+                        style={{ fontFamily:"var(--font-bebas)", fontSize:"1rem" }}>
+                        <option value="" className="bg-carbon">Saat seçin...</option>
+                        {slots.filter(s => s.open && !appointments.find(a=>a.startTime===s.start&&a.status!=="iptal"))
+                          .map(s => (
+                          <option key={s.start} value={s.start} className="bg-carbon">
+                            {s.start} – {s.end}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={handleCreateApt} disabled={!aptStudent || !aptTime || aptSaving}
+                      className="w-full py-3 text-white text-xs font-semibold tracking-widest uppercase transition-all disabled:opacity-40"
+                      style={{
+                        fontFamily:"var(--font-barlow-condensed)",
+                        background:"linear-gradient(135deg,#8B5CF6,#A855F7)",
+                        boxShadow: aptStudent && aptTime ? "0 0 15px rgba(139,92,246,0.4)" : "none",
+                      }}>
+                      {aptSaving ? "Oluşturuluyor..." : `${aptType==="duet"?"Düet ":""}Randevu Oluştur`}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Saat listesi */}
+          <div>
           {slots.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 bg-carbon border border-dashed border-white/10">
               <Clock size={36} className="text-white/10 mb-4" />
@@ -352,7 +507,8 @@ export default function TakvimPage() {
               </div>
             </div>
           )}
-        </div>
+          </div>{/* saat listesi div kapanış */}
+        </div>{/* lg:col-span-2 kapanış */}
       </div>
     </div>
   );

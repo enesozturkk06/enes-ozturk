@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getStudents, createStudent, updateStudent, deleteStudent } from "@/lib/db";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { getPackages, type LessonPackage } from "@/lib/packages";
 import type { Student } from "@/lib/types";
 import { PAYMENT_LABELS, LEVEL_LABELS } from "@/lib/constants";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2 } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Package } from "lucide-react";
 
 /* ── Sıralı kod üret: ENES001, ENES002... ────────────────────────────── */
 function genCodeSequential(students: Student[]): string {
@@ -75,6 +76,7 @@ function Sel({ label, value, onChange, options }: {
 /* ── Ana bileşen ─────────────────────────────────────────────────────── */
 export default function OgrencilerPage() {
   const [students, setStudents]   = useState<Student[]>([]);
+  const [packages, setPackages]   = useState<LessonPackage[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState("");
   const [filter, setFilter]       = useState("all");
@@ -82,14 +84,16 @@ export default function OgrencilerPage() {
 
   /* Ekle paneli */
   const [addOpen, setAddOpen]     = useState(false);
-  const [aCode, setACode]         = useState("");   // ← düzenlenebilir kod
+  const [aCode, setACode]         = useState("");
   const [aName, setAName]         = useState("");
   const [aPhone, setAPhone]       = useState("");
   const [aEmail, setAEmail]       = useState("");
   const [aLevel, setALevel]       = useState("baslangic");
+  const [aPackageId, setAPackageId] = useState(""); // ← Paket ID
   const [aTotalLessons, setATL]   = useState("8");
   const [aAmountPaid, setAAP]     = useState("");
-  const [aAmountDue, setAAD]      = useState("");
+  const [aAmountDue, setAAD]      = useState(""); // paket fiyatı (otomatik)
+  const [aCustomPrice, setACustom] = useState(""); // indirimli fiyat
   const [aPayStatus, setAPayStatus] = useState("beklemede");
   const [aNotes, setANotes]       = useState("");
   const [aSaving, setASaving]     = useState(false);
@@ -115,6 +119,8 @@ export default function OgrencilerPage() {
   const [qrSt, setQrSt]          = useState<Student | null>(null);
 
   /* ── Yükle ─────────────────────────────────────────────────────── */
+  useEffect(() => { getPackages().then(setPackages); }, []);
+
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -144,10 +150,21 @@ export default function OgrencilerPage() {
   });
 
   /* ── Ekle ───────────────────────────────────────────────────────── */
+  /* Paket seçilince otomatik doldur */
+  const handlePackageSelect = (pkgId: string) => {
+    setAPackageId(pkgId);
+    const pkg = packages.find(p => p.id === pkgId);
+    if (!pkg) return;
+    setATL(String(pkg.lessonCount));
+    setAAD(String(pkg.price));  // standart fiyat → borç
+    setACustom("");              // indirim sıfırla
+  };
+
   const openAdd = () => {
     const seq = genCodeSequential(students);
     setACode(seq); setAName(""); setAPhone(""); setAEmail(""); setALevel("baslangic");
-    setATL("8"); setAAP(""); setAAD(""); setAPayStatus("beklemede"); setANotes("");
+    setAPackageId(""); setATL("8"); setAAP(""); setAAD(""); setACustom("");
+    setAPayStatus("beklemede"); setANotes("");
     setAddOpen(true);
   };
 
@@ -164,6 +181,16 @@ export default function OgrencilerPage() {
     setASaving(true);
     try {
       const today = new Date().toISOString().split("T")[0];
+      const pkg = packages.find(p => p.id === aPackageId);
+      const totalLessons = Number(aTotalLessons) || 8;
+      const customPrice  = aCustomPrice ? Number(aCustomPrice) : undefined;
+      // Borç: indirimli fiyat varsa onu, yoksa standart borç alanını kullan
+      const amountDue = customPrice !== undefined ? customPrice : (Number(aAmountDue) || 0);
+      // Bitiş tarihi: paket varsa durationDays, yoksa standart
+      const endDate = pkg
+        ? new Date(Date.now() + pkg.durationDays * 86400000).toISOString().split("T")[0]
+        : today;
+
       await createStudent({
         code:             finalCode,
         fullName:         aName.trim(),
@@ -171,18 +198,20 @@ export default function OgrencilerPage() {
         email:            aEmail.trim() || undefined,
         level:            aLevel as Student["level"],
         packageType:      "sampiyon",
-        totalLessons:     Number(aTotalLessons) || 8,
-        remainingLessons: Number(aTotalLessons) || 8,
+        packageId:        aPackageId || undefined,
+        customPrice,
+        totalLessons,
+        remainingLessons: totalLessons,
         completedLessons: 0,
         paymentStatus:    aPayStatus as Student["paymentStatus"],
         amountPaid:       Number(aAmountPaid) || 0,
-        amountDue:        Number(aAmountDue) || 0,
+        amountDue,
         packageStartDate: today,
-        packageEndDate:   today,
+        packageEndDate:   endDate,
         notes:            aNotes.trim() || undefined,
         isActive:         true,
       });
-      await reload();      // ← Supabase'den taze veri çek
+      await reload();
       setAddOpen(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -364,37 +393,88 @@ export default function OgrencilerPage() {
                 </p>
               </div>
 
+              {/* Kişisel bilgiler */}
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
                 <F label="Ad Soyad *" value={aName} onChange={v => { setAName(v); }} placeholder="Ahmet Yılmaz" col2 />
                 <F label="Telefon *" value={aPhone} onChange={setAPhone} placeholder="05XX XXX XX XX" />
                 <F label="E-posta" value={aEmail} onChange={setAEmail} placeholder="ornek@email.com" />
               </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+
+              {/* Paket Seçimi */}
+              <div className="mb-3 p-3 bg-steel/30 border border-gold/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Package size={14} className="text-gold" />
+                  <span className="text-xs text-gold tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    Ders Paketi Seç (otomatik doldurur)
+                  </span>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Paket</label>
+                    <select value={aPackageId} onChange={e => handlePackageSelect(e.target.value)}
+                      className="w-full bg-carbon border border-gold/25 focus:border-gold text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors"
+                      style={{ fontFamily:"var(--font-inter)" }}>
+                      <option value="" className="bg-carbon">— Paket seçin veya manuel girin —</option>
+                      {packages.filter(p => p.isActive).map(p => (
+                        <option key={p.id} value={p.id} className="bg-carbon">
+                          {p.name} — {p.lessonCount} ders — ₺{p.price.toLocaleString("tr-TR")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Toplam ders */}
+                  <div>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      Toplam Ders *
+                    </label>
+                    <input type="number" min="1" value={aTotalLessons} onChange={e => setATL(e.target.value)}
+                      className="w-full bg-steel/60 border-2 border-gold/30 focus:border-gold text-gold-bright px-3 py-2.5 text-lg outline-none"
+                      style={{ fontFamily:"var(--font-bebas)" }} />
+                  </div>
+                  {/* Standart fiyat (paket fiyatı) */}
+                  <div>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      Standart Fiyat (₺)
+                    </label>
+                    <input type="number" min="0" value={aAmountDue} onChange={e => setAAD(e.target.value)} placeholder="Paket fiyatı"
+                      className="w-full bg-steel/60 border-2 border-white/15 focus:border-white/30 text-white/70 px-3 py-2.5 text-lg outline-none"
+                      style={{ fontFamily:"var(--font-bebas)" }} />
+                  </div>
+                </div>
+                {/* İndirimli fiyat */}
+                <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)", color:"#f59e0b" }}>
+                      İndirimli / Özel Fiyat (₺) — isteğe bağlı
+                    </label>
+                    <input type="number" min="0" value={aCustomPrice} onChange={e => setACustom(e.target.value)}
+                      placeholder={aAmountDue ? `Standart: ₺${Number(aAmountDue).toLocaleString("tr-TR")}` : "Boş = standart fiyat"}
+                      className="w-full bg-steel/60 border-2 border-gold/40 focus:border-gold text-gold-bright px-3 py-2.5 text-lg outline-none"
+                      style={{ fontFamily:"var(--font-bebas)" }} />
+                    {aCustomPrice && aAmountDue && Number(aCustomPrice) < Number(aAmountDue) && (
+                      <p className="text-xs text-gold mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        İndirim: ₺{(Number(aAmountDue) - Number(aCustomPrice)).toLocaleString("tr-TR")} (%{Math.round((1-Number(aCustomPrice)/Number(aAmountDue))*100)})
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Ödenen (₺)</label>
+                    <input type="number" min="0" value={aAmountPaid} onChange={e => setAAP(e.target.value)} placeholder="0"
+                      className="w-full bg-steel/60 border-2 border-green-500/25 focus:border-green-500/60 text-green-400 px-3 py-2.5 text-lg outline-none"
+                      style={{ fontFamily:"var(--font-bebas)" }} />
+                  </div>
+                </div>
+                <p className="text-xs text-white/20 mt-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  İndirimli fiyat girilirse borç = indirimli fiyat − ödenen. Girilmezse standart fiyat kullanılır.
+                </p>
+              </div>
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                 <Sel label="Seviye" value={aLevel} onChange={setALevel} options={[
                   { value: "baslangic", label: "Başlangıç" },
                   { value: "orta", label: "Orta Seviye" },
                   { value: "ileri", label: "İleri Seviye" },
                 ]} />
-                <div>
-                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Toplam Ders *</label>
-                  <input type="number" min="1" value={aTotalLessons} onChange={e => setATL(e.target.value)}
-                    className="w-full bg-steel/60 border-2 border-gold/30 focus:border-gold text-gold-bright px-3 py-2.5 text-lg outline-none"
-                    style={{ fontFamily: "var(--font-bebas)" }} />
-                </div>
-                <div>
-                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödenen (₺)</label>
-                  <input type="number" min="0" value={aAmountPaid} onChange={e => setAAP(e.target.value)} placeholder="0"
-                    className="w-full bg-steel/60 border-2 border-green-500/25 focus:border-green-500/60 text-green-400 px-3 py-2.5 text-lg outline-none"
-                    style={{ fontFamily: "var(--font-bebas)" }} />
-                </div>
-                <div>
-                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Borç (₺)</label>
-                  <input type="number" min="0" value={aAmountDue} onChange={e => setAAD(e.target.value)} placeholder="0"
-                    className="w-full bg-steel/60 border-2 border-crimson/25 focus:border-crimson/60 text-crimson px-3 py-2.5 text-lg outline-none"
-                    style={{ fontFamily: "var(--font-bebas)" }} />
-                </div>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3 mb-4">
                 <Sel label="Ödeme Durumu" value={aPayStatus} onChange={setAPayStatus} options={[
                   { value: "beklemede", label: "Beklemede" },
                   { value: "kismi", label: "Kısmi Ödeme" },

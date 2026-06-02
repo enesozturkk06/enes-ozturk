@@ -47,9 +47,17 @@ export default function AdminDashboard() {
   }, [today]);
 
   const handleComplete = async (apt: Appointment) => {
-    await completeAppointment(apt.id);
-    setTodayApts(prev => prev.map(a => a.id === apt.id ? { ...a, status: "tamamlandi" as const } : a));
-    setNoteModal(apt);
+    try {
+      const result = await completeAppointment(apt.id);
+      // Uyarıları göster (0 ders kalan öğrenci vs.)
+      if (result.warnings.length > 0) {
+        alert("⚠️ Ders tamamlandı — Uyarılar:\n\n" + result.warnings.join("\n"));
+      }
+      setTodayApts(prev => prev.map(a => a.id === apt.id ? { ...a, status: "tamamlandi" as const } : a));
+      setNoteModal(apt);
+    } catch (err: unknown) {
+      alert("Hata: " + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
   const handleSaveNote = async () => {
