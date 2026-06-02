@@ -205,10 +205,13 @@ export async function getStudentAppointments(studentId: string): Promise<Appoint
   if (e1) fail("getStudentAppointments:direct", e1);
 
   // 2. appointment_students üzerinden dahil olduğu randevular (düet)
+  // Tablo yoksa sessizce boş döndür
   const { data: joined, error: e2 } = await db()
     .from("appointment_students").select("appointment_id")
     .eq("student_id", studentId);
-  if (e2) fail("getStudentAppointments:joined", e2);
+  if (e2) {
+    console.warn("getStudentAppointments:joined (tablo henüz yok olabilir):", e2.message);
+  }
 
   const joinedIds = (joined ?? []).map(r => r.appointment_id);
   const directIds = (direct ?? []).map(r => r.id);
@@ -241,7 +244,8 @@ export async function createAppointment(apt: {
   lessonType?: LessonType; notes?: string; status?: string;
   secondStudentIds?: string[];
 }): Promise<Appointment> {
-  const { data, error } = await db().from("appointments").insert({
+  // Temel insert — lesson_type önce yoksa sütun hatası almamak için try ile ekle
+  const baseRow: Record<string, unknown> = {
     student_id:    apt.studentId,
     student_name:  apt.studentName,
     student_code:  apt.studentCode,
@@ -249,24 +253,28 @@ export async function createAppointment(apt: {
     date:          apt.date,
     start_time:    apt.startTime,
     end_time:      apt.endTime,
-    lesson_type:   apt.lessonType ?? "bireysel",
     status:        apt.status ?? "onaylandi",
     notes:         apt.notes,
-  }).select().single();
+  };
+
+  // lesson_type kolonunu ekle (migration çalıştırıldıysa çalışır)
+  if (apt.lessonType) baseRow.lesson_type = apt.lessonType;
+
+  const { data, error } = await db().from("appointments").insert(baseRow).select().single();
   if (error) fail("createAppointment", error);
 
   const appointmentId = data.id;
 
-  // appointment_students'a tüm katılımcıları ekle
-  const students = [apt.studentId, ...(apt.secondStudentIds ?? [])];
-  const rows = students.map(sid => ({
+  // appointment_students'a katılımcıları ekle
+  const allStudents = [apt.studentId, ...(apt.secondStudentIds ?? [])];
+  const apRows = allStudents.map(sid => ({
     appointment_id: appointmentId,
-    student_id: sid,
+    student_id:     sid,
     lesson_deducted: false,
   }));
-  if (rows.length > 0) {
-    const { error: e2 } = await db().from("appointment_students").insert(rows);
-    if (e2) console.error("createAppointment:appointment_students", e2.message);
+  if (apRows.length > 0) {
+    const { error: e2 } = await db().from("appointment_students").insert(apRows);
+    if (e2) console.warn("createAppointment:appointment_students", e2.message);
   }
 
   return ma(data);
@@ -297,46 +305,55 @@ export async function completeAppointment(id: string): Promise<CompleteResult> {
   const today = new Date().toISOString().split("T")[0];
   const warnings: string[] = [];
 
-  // 1. Randevu durumunu güncelle
+  // 1. Randevuyu tamamlandı yap
+  // NOT: lesson_type SELECT edilmiyor — kolon migration'dan önce de çalışsın
   const { data: apt, error: e1 } = await db()
     .from("appointments")
     .update({ status: "tamamlandi", completed_at: today })
     .eq("id", id)
-    .select("lesson_type, student_id")
+    .select("student_id")   // ← lesson_type kaldırıldı
     .single();
   if (e1) fail("completeAppointment:update", e1);
 
-  // 2. Bu randevuya bağlı öğrencileri al
+  // 2. appointment_students tablosunu dene (yoksa sessizce devam et)
+  let rows: Array<{ id: string; student_id: string; lesson_deducted: boolean }> = [];
+
   const { data: apStudents, error: e2 } = await db()
     .from("appointment_students")
     .select("id, student_id, lesson_deducted")
     .eq("appointment_id", id);
-  if (e2) { console.error("completeAppointment:get_students", e2.message); }
 
-  const rows = apStudents ?? [];
-
-  // Eğer appointment_students boşsa (eski kayıt), ana student_id'yi kullan
-  if (rows.length === 0 && apt?.student_id) {
-    rows.push({ id: "", student_id: apt.student_id, lesson_deducted: false });
+  if (e2) {
+    // Tablo henüz oluşturulmadıysa uyar ama çalışmaya devam et
+    console.warn("completeAppointment: appointment_students tablosu okunamadı →", e2.message);
+  } else {
+    rows = apStudents ?? [];
   }
 
-  // 3. Her öğrenci için ders düş (lesson_deducted=false olanlar)
-  for (const row of rows) {
-    if (row.lesson_deducted) continue; // zaten tamamlanmış, tekrar düşme
+  // appointment_students boşsa veya tablo yoksa ana student_id'yi kullan
+  if (rows.length === 0 && apt?.student_id) {
+    rows = [{ id: "", student_id: apt.student_id, lesson_deducted: false }];
+  }
 
-    // Öğrenci dersini al
+  // 3. Her öğrenci için ders düş
+  for (const row of rows) {
+    if (row.lesson_deducted) continue; // çift tamamlama koruması
+
     const { data: std, error: e3 } = await db()
       .from("students")
       .select("full_name, remaining_lessons, completed_lessons")
       .eq("id", row.student_id)
       .single();
 
-    if (e3 || !std) { warnings.push(`Öğrenci bulunamadı (id:${row.student_id})`); continue; }
+    if (e3 || !std) {
+      warnings.push(`Öğrenci bulunamadı (id:${row.student_id})`);
+      continue;
+    }
 
     const remaining = Number(std.remaining_lessons ?? 0);
+
     if (remaining <= 0) {
-      warnings.push(`${std.full_name} adlı öğrencinin kalan dersi yok!`);
-      // Ders düşme — 0'ın altına gitme
+      warnings.push(`⚠️ ${std.full_name} adlı öğrencinin kalan dersi yok — ders düşülmedi.`);
     } else {
       const { error: e4 } = await db()
         .from("students")
@@ -345,17 +362,24 @@ export async function completeAppointment(id: string): Promise<CompleteResult> {
           completed_lessons: Number(std.completed_lessons ?? 0) + 1,
         })
         .eq("id", row.student_id);
-      if (e4) { warnings.push(`${std.full_name} ders güncellenemedi: ${e4.message}`); }
+      if (e4) {
+        warnings.push(`${std.full_name} güncellenemedi: ${e4.message}`);
+      }
     }
 
-    // lesson_deducted = true yap (row.id varsa güncelle, yoksa insert)
-    if (row.id) {
-      await db().from("appointment_students")
-        .update({ lesson_deducted: true }).eq("id", row.id);
-    } else {
-      await db().from("appointment_students").upsert({
-        appointment_id: id, student_id: row.student_id, lesson_deducted: true,
-      }, { onConflict: "appointment_id,student_id" });
+    // lesson_deducted = true işaretle (appointment_students varsa)
+    try {
+      if (row.id) {
+        await db().from("appointment_students")
+          .update({ lesson_deducted: true }).eq("id", row.id);
+      } else {
+        await db().from("appointment_students").upsert(
+          { appointment_id: id, student_id: row.student_id, lesson_deducted: true },
+          { onConflict: "appointment_id,student_id" }
+        );
+      }
+    } catch {
+      // Tablo yoksa sessizce geç — migration sonrasında çalışır
     }
   }
 
