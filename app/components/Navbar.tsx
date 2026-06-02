@@ -7,17 +7,17 @@ import { Menu, X } from "lucide-react";
 import Logo from "@/app/components/shared/Logo";
 
 const navLinks = [
-  { label: "Ana Sayfa", href: "#hero" },
-  { label: "Hakkımda", href: "#about" },
-  { label: "Branşlar", href: "#branslar" },
-  { label: "Özel Ders", href: "#paketler" },
-  { label: "İletişim", href: "#contact" },
+  { label: "Ana Sayfa",  href: "#hero" },
+  { label: "Hakkımda",   href: "#about" },
+  { label: "Branşlar",   href: "#branslar" },
+  { label: "Özel Ders",  href: "#paketler" },
+  { label: "İletişim",   href: "#contact" },
 ];
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { student, isAdmin } = useAuth();
+  const [scrolled, setScrolled]   = useState(false);
+  const [menuOpen, setMenuOpen]   = useState(false);
+  const { student, isAdmin }      = useAuth();
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 40);
@@ -29,19 +29,33 @@ export default function Navbar() {
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         scrolled
-          ? "bg-pitch/96 backdrop-blur-md border-b border-gold/10 shadow-[0_4px_30px_rgba(0,0,0,0.6)]"
+          ? "backdrop-blur-xl border-b"
           : "bg-transparent"
       }`}
+      style={scrolled ? {
+        background: "rgba(9,9,11,0.85)",
+        borderColor: "rgba(139,92,246,0.15)",
+        boxShadow: "0 4px 30px rgba(139,92,246,0.08)",
+      } : {}}
     >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 lg:h-[72px]">
-        {/* Logo */}
-        <a href="#hero" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 group flex-shrink-0">
-          <Logo size={38} priority className="group-hover:opacity-90 transition-opacity duration-300" />
+
+        {/* Logo + isim */}
+        <a href="#hero" onClick={() => setMenuOpen(false)}
+          className="flex items-center gap-2.5 group flex-shrink-0">
+          <div className="relative">
+            <Logo size={38} priority className="group-hover:opacity-90 transition-opacity duration-300" />
+            {/* Neon glow ring */}
+            <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              style={{ boxShadow:"0 0 20px rgba(139,92,246,0.6)", borderRadius:"50%" }} />
+          </div>
           <div className="flex flex-col leading-none">
-            <span className="text-white text-[15px] lg:text-base tracking-[0.15em] group-hover:text-gold-bright transition-colors duration-300" style={{ fontFamily: "var(--font-bebas)" }}>
+            <span className="text-white text-[15px] lg:text-base tracking-[0.15em] group-hover:text-violet-bright transition-colors duration-300"
+              style={{ fontFamily:"var(--font-bebas)" }}>
               ENES ÖZTÜRK
             </span>
-            <span className="text-crimson text-[10px] lg:text-xs tracking-[0.3em]" style={{ fontFamily: "var(--font-bebas)" }}>
+            <span className="text-[10px] lg:text-xs tracking-[0.3em]"
+              style={{ fontFamily:"var(--font-bebas)", color:"#8B5CF6" }}>
               KİŞİSEL ANTRENÖR
             </span>
           </div>
@@ -51,79 +65,92 @@ export default function Navbar() {
         <ul className="hidden lg:flex items-center gap-7">
           {navLinks.map(l => (
             <li key={l.href}>
-              <a
-                href={l.href}
-                className="text-xs tracking-widest text-white/60 hover:text-gold-bright transition-colors duration-300 uppercase relative group"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}
-              >
+              <a href={l.href}
+                className="text-xs tracking-widest text-white/55 uppercase relative group transition-colors duration-300"
+                style={{ fontFamily:"var(--font-barlow-condensed)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#A855F7")}
+                onMouseLeave={e => (e.currentTarget.style.color = "")}>
                 {l.label}
-                <span className="absolute -bottom-1 left-0 w-0 h-px bg-crimson group-hover:w-full transition-all duration-300" />
+                <span className="absolute -bottom-1 left-0 w-0 h-px transition-all duration-300 group-hover:w-full"
+                  style={{ background:"linear-gradient(to right,#8B5CF6,#D946EF)" }} />
               </a>
             </li>
           ))}
         </ul>
 
-        {/* Auth buttons */}
+        {/* Auth butonlar */}
         <div className="hidden lg:flex items-center gap-3">
           {student ? (
-            <Link href="/ogrenci" className="text-xs text-gold/70 hover:text-gold tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <Link href="/ogrenci" className="text-xs tracking-widest uppercase transition-colors"
+              style={{ color:"rgba(168,85,247,0.7)", fontFamily:"var(--font-barlow-condensed)" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#A855F7")}
+              onMouseLeave={e => (e.currentTarget.style.color = "rgba(168,85,247,0.7)")}>
               Panelim →
             </Link>
           ) : isAdmin ? (
-            <Link href="/admin" className="text-xs text-gold/70 hover:text-gold tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <Link href="/admin" className="text-xs tracking-widest uppercase transition-colors"
+              style={{ color:"rgba(168,85,247,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
               Admin →
             </Link>
           ) : (
             <>
-              <Link href="/giris" className="text-xs text-white/40 hover:text-white/70 tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <Link href="/giris" className="text-xs text-white/40 hover:text-white/70 tracking-widest uppercase transition-colors"
+                style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                 Öğrenci Girişi
               </Link>
-              <Link href="/admin/login" className="text-xs text-white/25 hover:text-white/40 tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <Link href="/admin/login" className="text-xs tracking-widest uppercase transition-colors"
+                style={{ color:"rgba(139,92,246,0.5)", fontFamily:"var(--font-barlow-condensed)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(139,92,246,0.8)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(139,92,246,0.5)")}>
                 Antrenör
               </Link>
             </>
           )}
-          <a
-            href="#contact"
-            className="bg-crimson hover:bg-crimson-bright text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all duration-300 hover:shadow-[0_0_20px_rgba(220,38,38,0.5)]"
-            style={{ fontFamily: "var(--font-barlow-condensed)" }}
-          >
+          <a href="#contact"
+            className="text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all duration-300"
+            style={{
+              fontFamily:"var(--font-barlow-condensed)",
+              background:"linear-gradient(135deg,#8B5CF6,#A855F7)",
+              boxShadow:"0 0 0 0 rgba(139,92,246,0)",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 0 20px rgba(139,92,246,0.55)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 0 0 0 rgba(139,92,246,0)"; }}>
             Randevu Al
           </a>
         </div>
 
-        {/* Mobile toggle */}
-        <button
-          className="lg:hidden p-2 text-white/60 hover:text-white transition-colors"
-          onClick={() => setMenuOpen(o => !o)}
-          aria-label="Menü"
-        >
+        {/* Mobil toggle */}
+        <button className="lg:hidden p-2 text-white/60 hover:text-white transition-colors"
+          onClick={() => setMenuOpen(o => !o)} aria-label="Menü">
           {menuOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
       </nav>
 
-      {/* Mobile menu */}
+      {/* Mobil menü */}
       <div className={`lg:hidden transition-all duration-500 overflow-hidden ${menuOpen ? "max-h-screen opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="bg-pitch/98 backdrop-blur-md border-t border-gold/8 px-6 py-5 space-y-3">
+        <div className="px-6 py-5 space-y-3"
+          style={{ background:"rgba(9,9,11,0.98)", backdropFilter:"blur(20px)", borderTop:"1px solid rgba(139,92,246,0.12)" }}>
           {navLinks.map(l => (
-            <a
-              key={l.href}
-              href={l.href}
-              onClick={() => setMenuOpen(false)}
-              className="block text-sm tracking-widest text-white/70 hover:text-gold-bright uppercase py-2 border-b border-white/5 transition-colors"
-              style={{ fontFamily: "var(--font-barlow-condensed)" }}
-            >
+            <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
+              className="block text-sm tracking-widest text-white/70 uppercase py-2 border-b transition-colors hover:text-violet-bright"
+              style={{ fontFamily:"var(--font-barlow-condensed)", borderColor:"rgba(139,92,246,0.08)" }}>
               {l.label}
             </a>
           ))}
           <div className="pt-2 flex flex-col gap-2">
-            <Link href="/giris" onClick={() => setMenuOpen(false)} className="block text-center border border-white/15 text-white/50 text-xs font-semibold tracking-widest uppercase px-5 py-2.5 hover:border-crimson/40 hover:text-white transition-all" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <Link href="/giris" onClick={() => setMenuOpen(false)}
+              className="block text-center text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all"
+              style={{ fontFamily:"var(--font-barlow-condensed)", border:"1px solid rgba(139,92,246,0.3)", color:"rgba(139,92,246,0.8)" }}>
               Öğrenci Girişi
             </Link>
-            <Link href="/admin/login" onClick={() => setMenuOpen(false)} className="block text-center border border-gold/15 text-gold/50 text-xs font-semibold tracking-widest uppercase px-5 py-2.5 hover:border-gold/40 hover:text-gold transition-all" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <Link href="/admin/login" onClick={() => setMenuOpen(false)}
+              className="block text-center text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all"
+              style={{ fontFamily:"var(--font-barlow-condensed)", border:"1px solid rgba(139,92,246,0.15)", color:"rgba(139,92,246,0.5)" }}>
               Antrenör Girişi
             </Link>
-            <a href="#contact" onClick={() => setMenuOpen(false)} className="block text-center bg-crimson text-white text-xs font-semibold tracking-widest uppercase px-5 py-3 hover:bg-crimson-bright transition-all" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <a href="#contact" onClick={() => setMenuOpen(false)}
+              className="block text-center text-white text-xs font-semibold tracking-widest uppercase px-5 py-3 transition-all"
+              style={{ fontFamily:"var(--font-barlow-condensed)", background:"linear-gradient(135deg,#8B5CF6,#A855F7)" }}>
               Randevu Al
             </a>
           </div>

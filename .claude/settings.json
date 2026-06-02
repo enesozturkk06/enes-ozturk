@@ -10,7 +10,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://enes-ozturk.vercel.app/giris\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://enes-ozturk.vercel.app/admin/login\")",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" \"https://enes-ozturk.vercel.app\")",
-      "Read(//c/Program Files/Android/Android Studio/jbr/**)"
+      "Read(//c/Program Files/Android/Android Studio/jbr/**)",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\incek\\\\Desktop\\\\enes\\\\app\\\\mockup\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\incek\\Desktop"

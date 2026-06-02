@@ -1,280 +1,145 @@
 "use client";
-
 import { motion } from "framer-motion";
 
-/* Altıgen SVG yolu */
 const HEX = "M50 2 L93 26 L93 74 L50 98 L7 74 L7 26 Z";
 
 export default function LandingBackground() {
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
 
-      {/* ── 1. KATMAN: Derin arka plan gradyanları ─────────────────── */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `
-            radial-gradient(ellipse 70% 60% at 15% 30%, rgba(224,32,32,0.12) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 50% at 85% 70%, rgba(217,119,6,0.09) 0%, transparent 55%),
-            radial-gradient(ellipse 80% 40% at 50% 110%, rgba(224,32,32,0.06) 0%, transparent 60%),
-            radial-gradient(ellipse 50% 50% at 70% 10%, rgba(100,80,200,0.06) 0%, transparent 50%),
-            #0c0b1a
-          `,
-        }}
+      {/* Katman 1: Temel arka plan */}
+      <div className="absolute inset-0 bg-[#09090B]" />
+
+      {/* Katman 2: Nokta ızgarası */}
+      <div className="absolute inset-0 opacity-[0.12]" style={{
+        backgroundImage: "radial-gradient(rgba(139,92,246,0.5) 1px, transparent 1px)",
+        backgroundSize: "40px 40px",
+      }} />
+
+      {/* Katman 3: Büyük neon glow'lar */}
+      <motion.div className="absolute rounded-full"
+        style={{ width:700, height:700, left:"-20%", top:"-15%",
+          background:"radial-gradient(circle, rgba(139,92,246,0.18) 0%, rgba(139,92,246,0.04) 50%, transparent 70%)",
+          filter:"blur(60px)" }}
+        animate={{ x:[0,50,-30,0], y:[0,-40,25,0], scale:[1,1.1,0.95,1] }}
+        transition={{ duration:16, repeat:Infinity, ease:"easeInOut" }}
+      />
+      <motion.div className="absolute rounded-full"
+        style={{ width:600, height:600, right:"-18%", top:"20%",
+          background:"radial-gradient(circle, rgba(217,70,239,0.15) 0%, rgba(217,70,239,0.03) 50%, transparent 70%)",
+          filter:"blur(70px)" }}
+        animate={{ x:[0,-60,30,0], y:[0,50,-30,0], scale:[1,0.9,1.08,1] }}
+        transition={{ duration:20, repeat:Infinity, ease:"easeInOut", delay:2 }}
+      />
+      <motion.div className="absolute rounded-full"
+        style={{ width:800, height:400, left:"15%", bottom:"-18%",
+          background:"radial-gradient(ellipse, rgba(139,92,246,0.12) 0%, transparent 65%)",
+          filter:"blur(80px)" }}
+        animate={{ x:[0,40,-25,0], scale:[1,1.06,0.97,1] }}
+        transition={{ duration:14, repeat:Infinity, ease:"easeInOut", delay:4 }}
+      />
+      {/* Merkez küçük leke */}
+      <motion.div className="absolute rounded-full"
+        style={{ width:350, height:350, left:"40%", top:"35%",
+          background:"radial-gradient(circle, rgba(192,132,252,0.1) 0%, transparent 65%)",
+          filter:"blur(40px)" }}
+        animate={{ scale:[1,1.25,0.9,1], opacity:[0.5,0.9,0.5] }}
+        transition={{ duration:9, repeat:Infinity, ease:"easeInOut", delay:1 }}
       />
 
-      {/* ── 2. KATMAN: İnce nokta ızgarası ───────────────────────── */}
-      <div
-        className="absolute inset-0 opacity-[0.18]"
-        style={{
-          backgroundImage: "radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px)",
-          backgroundSize: "36px 36px",
-        }}
-      />
-
-      {/* ── 3. KATMAN: Çapraz çizgiler ───────────────────────────── */}
-      <div
-        className="absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.6) 0px, rgba(255,255,255,0.6) 1px, transparent 1px, transparent 56px)",
-          backgroundSize: "80px 80px",
-        }}
-      />
-
-      {/* ── 4. KATMAN: Büyük yüzen kırmızı ışık küreleri ─────────── */}
-      {/* Sol üst kırmızı küre */}
-      <motion.div
-        className="absolute rounded-full"
-        style={{
-          width: 600, height: 600,
-          left: "-15%", top: "-10%",
-          background: "radial-gradient(circle, rgba(224,32,32,0.18) 0%, rgba(224,32,32,0.04) 50%, transparent 70%)",
-          filter: "blur(40px)",
-        }}
-        animate={{ x: [0, 40, -20, 0], y: [0, -30, 20, 0], scale: [1, 1.08, 0.95, 1] }}
-        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      />
-
-      {/* Sağ orta altın küre */}
-      <motion.div
-        className="absolute rounded-full"
-        style={{
-          width: 500, height: 500,
-          right: "-12%", top: "30%",
-          background: "radial-gradient(circle, rgba(217,119,6,0.14) 0%, rgba(217,119,6,0.03) 50%, transparent 70%)",
-          filter: "blur(50px)",
-        }}
-        animate={{ x: [0, -50, 20, 0], y: [0, 40, -25, 0], scale: [1, 0.92, 1.06, 1] }}
-        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-      />
-
-      {/* Alt merkez kırmızı küre */}
-      <motion.div
-        className="absolute rounded-full"
-        style={{
-          width: 700, height: 400,
-          left: "20%", bottom: "-15%",
-          background: "radial-gradient(ellipse, rgba(224,32,32,0.1) 0%, transparent 65%)",
-          filter: "blur(60px)",
-        }}
-        animate={{ x: [0, 30, -20, 0], scale: [1, 1.05, 0.97, 1] }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 4 }}
-      />
-
-      {/* Merkez küçük altın nokta */}
-      <motion.div
-        className="absolute rounded-full"
-        style={{
-          width: 300, height: 300,
-          left: "45%", top: "40%",
-          background: "radial-gradient(circle, rgba(217,119,6,0.1) 0%, transparent 65%)",
-          filter: "blur(30px)",
-        }}
-        animate={{ scale: [1, 1.2, 0.9, 1], opacity: [0.6, 1, 0.6] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-      />
-
-      {/* ── 5. KATMAN: Dönen altıgenler ──────────────────────────── */}
-
-      {/* Büyük sol altıgen */}
-      <motion.div
-        className="absolute"
-        style={{ width: 340, height: 340, left: "-60px", top: "8%" }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
-      >
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-          <path d={HEX} fill="none" stroke="rgba(224,32,32,0.18)" strokeWidth="0.8" />
-          <path d={HEX} fill="none" stroke="rgba(224,32,32,0.06)" strokeWidth="0.3"
-            transform="scale(0.8) translate(12,12)" />
-        </svg>
-      </motion.div>
-
-      {/* Orta sağ büyük altıgen */}
-      <motion.div
-        className="absolute"
-        style={{ width: 280, height: 280, right: "-40px", top: "15%" }}
-        animate={{ rotate: -360 }}
-        transition={{ duration: 45, repeat: Infinity, ease: "linear" }}
-      >
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-          <path d={HEX} fill="none" stroke="rgba(217,119,6,0.2)" strokeWidth="0.8" />
-        </svg>
-      </motion.div>
-
-      {/* Alt sol orta altıgen */}
-      <motion.div
-        className="absolute"
-        style={{ width: 200, height: 200, left: "8%", bottom: "20%" }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 35, repeat: Infinity, ease: "linear" }}
-      >
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-          <path d={HEX} fill="none" stroke="rgba(224,32,32,0.15)" strokeWidth="1" />
-        </svg>
-      </motion.div>
-
-      {/* Küçük sağ alt altıgen */}
-      <motion.div
-        className="absolute"
-        style={{ width: 160, height: 160, right: "12%", bottom: "25%" }}
-        animate={{ rotate: -360 }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-      >
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-          <path d={HEX} fill="rgba(217,119,6,0.04)" stroke="rgba(217,119,6,0.25)" strokeWidth="1.2" />
-        </svg>
-      </motion.div>
-
-      {/* Merkez üst küçük altıgen */}
-      <motion.div
-        className="absolute"
-        style={{ width: 120, height: 120, left: "45%", top: "5%" }}
-        animate={{ rotate: 360, y: [0, -15, 0] }}
-        transition={{ rotate: { duration: 20, repeat: Infinity, ease: "linear" }, y: { duration: 4, repeat: Infinity, ease: "easeInOut" } }}
-      >
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-          <path d={HEX} fill="rgba(224,32,32,0.05)" stroke="rgba(224,32,32,0.3)" strokeWidth="1.5" />
-        </svg>
-      </motion.div>
-
-      {/* ── 6. KATMAN: Yüzen geometrik çemberler ─────────────────── */}
-
-      {/* Büyük kırmızı çember - sol */}
-      <motion.div
-        className="absolute rounded-full border border-crimson/10"
-        style={{ width: 400, height: 400, left: "5%", top: "25%" }}
-        animate={{ scale: [1, 1.04, 1], opacity: [0.5, 0.8, 0.5] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <motion.div
-          className="absolute inset-4 rounded-full border border-crimson/8"
-          animate={{ rotate: -360 }}
-          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-        />
-      </motion.div>
-
-      {/* Orta altın çember - sağ */}
-      <motion.div
-        className="absolute rounded-full border border-gold/10"
-        style={{ width: 300, height: 300, right: "8%", bottom: "30%" }}
-        animate={{ scale: [1, 1.06, 1], opacity: [0.4, 0.7, 0.4] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 3 }}
-      />
-
-      {/* ── 7. KATMAN: Çapraz parlak çizgiler ─────────────────────── */}
-
-      {/* Yatay üst çizgi */}
-      <motion.div
-        className="absolute h-px"
-        style={{
-          top: "22%", left: 0, right: 0,
-          background: "linear-gradient(90deg, transparent 0%, rgba(224,32,32,0.15) 30%, rgba(224,32,32,0.3) 50%, rgba(224,32,32,0.15) 70%, transparent 100%)",
-        }}
-        animate={{ opacity: [0.4, 0.9, 0.4], scaleX: [0.8, 1, 0.8] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-      />
-
-      {/* Yatay alt çizgi */}
-      <motion.div
-        className="absolute h-px"
-        style={{
-          bottom: "28%", left: 0, right: 0,
-          background: "linear-gradient(90deg, transparent 0%, rgba(217,119,6,0.12) 40%, rgba(217,119,6,0.25) 50%, rgba(217,119,6,0.12) 60%, transparent 100%)",
-        }}
-        animate={{ opacity: [0.3, 0.7, 0.3] }}
-        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-      />
-
-      {/* Dikey sol çizgi */}
-      <motion.div
-        className="absolute w-px"
-        style={{
-          left: "18%", top: 0, bottom: 0,
-          background: "linear-gradient(180deg, transparent 0%, rgba(224,32,32,0.12) 30%, rgba(224,32,32,0.2) 50%, rgba(224,32,32,0.12) 70%, transparent 100%)",
-        }}
-        animate={{ opacity: [0.3, 0.7, 0.3] }}
-        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-      />
-
-      {/* Dikey sağ çizgi */}
-      <motion.div
-        className="absolute w-px"
-        style={{
-          right: "18%", top: 0, bottom: 0,
-          background: "linear-gradient(180deg, transparent 0%, rgba(217,119,6,0.1) 30%, rgba(217,119,6,0.18) 50%, rgba(217,119,6,0.1) 70%, transparent 100%)",
-        }}
-        animate={{ opacity: [0.3, 0.6, 0.3] }}
-        transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 3 }}
-      />
-
-      {/* ── 8. KATMAN: Köşe dekoratif elemanlar ──────────────────── */}
-
-      {/* Sol üst köşe takozu */}
-      <div className="absolute top-0 left-0 w-32 h-32 opacity-20">
-        <svg viewBox="0 0 128 128" className="w-full h-full">
-          <path d="M0 0 L128 0 L0 128 Z" fill="none" stroke="rgba(224,32,32,0.6)" strokeWidth="0.5" />
-          <path d="M0 0 L64 0 L0 64 Z" fill="rgba(224,32,32,0.05)" stroke="none" />
-        </svg>
-      </div>
-
-      {/* Sağ alt köşe */}
-      <div className="absolute bottom-0 right-0 w-32 h-32 opacity-20">
-        <svg viewBox="0 0 128 128" className="w-full h-full">
-          <path d="M128 128 L0 128 L128 0 Z" fill="none" stroke="rgba(217,119,6,0.6)" strokeWidth="0.5" />
-          <path d="M128 128 L64 128 L128 64 Z" fill="rgba(217,119,6,0.05)" stroke="none" />
-        </svg>
-      </div>
-
-      {/* ── 9. KATMAN: Parıltı noktaları ────────────────────────── */}
+      {/* Katman 4: Dönen altıgenler */}
       {[
-        { x: "25%", y: "15%", color: "rgba(224,32,32,0.7)", delay: 0 },
-        { x: "75%", y: "25%", color: "rgba(217,119,6,0.6)", delay: 1.5 },
-        { x: "15%", y: "60%", color: "rgba(224,32,32,0.6)", delay: 3 },
-        { x: "80%", y: "55%", color: "rgba(217,119,6,0.7)", delay: 0.8 },
-        { x: "50%", y: "85%", color: "rgba(224,32,32,0.5)", delay: 2 },
-        { x: "35%", y: "45%", color: "rgba(217,119,6,0.5)", delay: 4 },
-        { x: "65%", y: "72%", color: "rgba(224,32,32,0.6)", delay: 2.5 },
-      ].map((p, i) => (
-        <motion.div
-          key={i}
-          className="absolute w-1 h-1 rounded-full"
-          style={{ left: p.x, top: p.y, background: p.color, boxShadow: `0 0 6px ${p.color}` }}
-          animate={{ opacity: [0, 1, 0], scale: [0, 1.5, 0] }}
-          transition={{ duration: 3 + i * 0.5, repeat: Infinity, ease: "easeInOut", delay: p.delay }}
+        { size:320, left:"-50px", top:"8%",  dur:65, dir:1  },
+        { size:260, right:"-35px",top:"18%", dur:48, dir:-1 },
+        { size:190, left:"7%",   bottom:"22%",dur:38, dir:1  },
+        { size:155, right:"10%", bottom:"28%",dur:28, dir:-1 },
+        { size:110, left:"44%",  top:"4%",   dur:22, dir:1  },
+      ].map((h, i) => (
+        <motion.div key={i} className="absolute" style={{ width:h.size, height:h.size, ...h }}>
+          <motion.svg viewBox="0 0 100 100" className="w-full h-full"
+            animate={{ rotate: h.dir === 1 ? 360 : -360 }}
+            transition={{ duration:h.dur, repeat:Infinity, ease:"linear" }}>
+            <path d={HEX} fill="none"
+              stroke={i % 2 === 0 ? "rgba(139,92,246,0.22)" : "rgba(217,70,239,0.2)"}
+              strokeWidth="0.8" />
+            <path d={HEX} fill="none"
+              stroke={i % 2 === 0 ? "rgba(139,92,246,0.06)" : "rgba(217,70,239,0.05)"}
+              strokeWidth="0.3" transform="scale(0.8) translate(12,12)" />
+          </motion.svg>
+        </motion.div>
+      ))}
+
+      {/* Katman 5: Parlayan çember konturları */}
+      <motion.div className="absolute rounded-full border border-violet/10"
+        style={{ width:460, height:460, left:"3%", top:"22%"}}
+        animate={{ scale:[1,1.04,1], opacity:[0.4,0.7,0.4] }}
+        transition={{ duration:7, repeat:Infinity, ease:"easeInOut" }}
+      />
+      <motion.div className="absolute rounded-full border border-violet-glow/8"
+        style={{ width:340, height:340, right:"6%", bottom:"28%"}}
+        animate={{ scale:[1,1.07,1], opacity:[0.3,0.6,0.3] }}
+        transition={{ duration:9, repeat:Infinity, ease:"easeInOut", delay:3 }}
+      />
+
+      {/* Katman 6: Yatay ışık çizgileri */}
+      <motion.div className="absolute h-px" style={{ top:"24%", left:0, right:0,
+        background:"linear-gradient(90deg,transparent 0%,rgba(139,92,246,0.25) 35%,rgba(168,85,247,0.45) 50%,rgba(139,92,246,0.25) 65%,transparent 100%)" }}
+        animate={{ opacity:[0.3,0.9,0.3] }}
+        transition={{ duration:5, repeat:Infinity, ease:"easeInOut" }}
+      />
+      <motion.div className="absolute h-px" style={{ bottom:"30%", left:0, right:0,
+        background:"linear-gradient(90deg,transparent 0%,rgba(217,70,239,0.2) 40%,rgba(217,70,239,0.38) 50%,rgba(217,70,239,0.2) 60%,transparent 100%)" }}
+        animate={{ opacity:[0.25,0.65,0.25] }}
+        transition={{ duration:7, repeat:Infinity, ease:"easeInOut", delay:2 }}
+      />
+      {/* Dikey çizgiler */}
+      <motion.div className="absolute w-px" style={{ left:"16%", top:0, bottom:0,
+        background:"linear-gradient(180deg,transparent 0%,rgba(139,92,246,0.2) 35%,rgba(139,92,246,0.32) 50%,rgba(139,92,246,0.2) 65%,transparent 100%)" }}
+        animate={{ opacity:[0.3,0.7,0.3] }}
+        transition={{ duration:9, repeat:Infinity, ease:"easeInOut", delay:1 }}
+      />
+      <motion.div className="absolute w-px" style={{ right:"16%", top:0, bottom:0,
+        background:"linear-gradient(180deg,transparent 0%,rgba(217,70,239,0.15) 35%,rgba(217,70,239,0.28) 50%,rgba(217,70,239,0.15) 65%,transparent 100%)" }}
+        animate={{ opacity:[0.25,0.6,0.25] }}
+        transition={{ duration:11, repeat:Infinity, ease:"easeInOut", delay:3 }}
+      />
+
+      {/* Katman 7: Parıltı noktaları */}
+      {[
+        { x:"22%", y:"14%", c:"rgba(139,92,246,0.9)", d:0   },
+        { x:"74%", y:"22%", c:"rgba(217,70,239,0.8)", d:1.5 },
+        { x:"12%", y:"58%", c:"rgba(139,92,246,0.8)", d:3   },
+        { x:"82%", y:"52%", c:"rgba(217,70,239,0.9)", d:0.8 },
+        { x:"48%", y:"82%", c:"rgba(139,92,246,0.7)", d:2   },
+        { x:"33%", y:"44%", c:"rgba(192,132,252,0.7)",d:4   },
+        { x:"63%", y:"70%", c:"rgba(139,92,246,0.8)", d:2.5 },
+      ].map((p,i)=>(
+        <motion.div key={i} className="absolute w-1 h-1 rounded-full"
+          style={{ left:p.x, top:p.y, background:p.c, boxShadow:`0 0 8px ${p.c}` }}
+          animate={{ opacity:[0,1,0], scale:[0,1.8,0] }}
+          transition={{ duration:3+i*0.5, repeat:Infinity, ease:"easeInOut", delay:p.d }}
         />
       ))}
 
-      {/* ── 10. KATMAN: Üstten gelen ışık huzmesi ──────────────── */}
-      <div
-        className="absolute"
-        style={{
-          top: 0, left: "50%", transform: "translateX(-50%)",
-          width: "600px", height: "300px",
-          background: "conic-gradient(from 180deg at 50% 0%, transparent 60deg, rgba(224,32,32,0.06) 120deg, transparent 180deg)",
-          filter: "blur(20px)",
-        }}
+      {/* Katman 8: Üst ışık huzmesi */}
+      <div className="absolute" style={{ top:0, left:"50%", transform:"translateX(-50%)", width:"600px", height:"280px",
+        background:"conic-gradient(from 180deg at 50% 0%, transparent 55deg, rgba(139,92,246,0.08) 120deg, transparent 185deg)",
+        filter:"blur(24px)" }}
       />
+
+      {/* Köşe aksanları */}
+      <div className="absolute top-0 left-0 w-36 h-36 opacity-15">
+        <svg viewBox="0 0 144 144" className="w-full h-full">
+          <path d="M0 0 L144 0 L0 144 Z" fill="none" stroke="rgba(139,92,246,0.7)" strokeWidth="0.5" />
+          <path d="M0 0 L72 0 L0 72 Z" fill="rgba(139,92,246,0.04)" />
+        </svg>
+      </div>
+      <div className="absolute bottom-0 right-0 w-36 h-36 opacity-15">
+        <svg viewBox="0 0 144 144" className="w-full h-full">
+          <path d="M144 144 L0 144 L144 0 Z" fill="none" stroke="rgba(217,70,239,0.7)" strokeWidth="0.5" />
+          <path d="M144 144 L72 144 L144 72 Z" fill="rgba(217,70,239,0.04)" />
+        </svg>
+      </div>
     </div>
   );
 }
