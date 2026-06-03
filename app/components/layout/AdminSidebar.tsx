@@ -6,16 +6,17 @@ import { useAuth } from "@/app/providers";
 import Logo from "@/app/components/shared/Logo";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
-  BookOpen, LogOut, Menu, X, ChevronRight, Package,
+  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield,
 } from "lucide-react";
 
 const links = [
-  { href: "/admin",            label: "Bugünün Dersleri", icon: LayoutDashboard, exact: true },
-  { href: "/admin/ogrenciler", label: "Öğrenciler",       icon: Users },
-  { href: "/admin/takvim",     label: "Takvim",           icon: Calendar },
-  { href: "/admin/paketler",   label: "Ders Paketleri",   icon: Package },
-  { href: "/admin/odemeler",   label: "Ödemeler",         icon: CreditCard },
-  { href: "/admin/dersler",    label: "Ders Notları",     icon: BookOpen },
+  { href: "/admin",                  label: "Bugünün Dersleri", icon: LayoutDashboard, exact: true },
+  { href: "/admin/ogrenciler",       label: "Öğrenciler",       icon: Users },
+  { href: "/admin/takvim",           label: "Takvim",           icon: Calendar },
+  { href: "/admin/paketler",         label: "Ders Paketleri",   icon: Package },
+  { href: "/admin/odemeler",         label: "Ödemeler",         icon: CreditCard },
+  { href: "/admin/dersler",          label: "Ders Notları",     icon: BookOpen },
+  { href: "/admin/salon-sahipleri",  label: "Salon Sahipleri",  icon: Shield },
 ];
 
 export default function AdminSidebar() {

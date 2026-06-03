@@ -5,7 +5,7 @@
 import type {
   Student, Appointment, AppointmentStudent, LessonRecord,
   Notification, TimeSlot, Payment, CompleteResult, LessonType,
-  DuetPartner, PendingInvite,
+  DuetPartner, PendingInvite, SalonOwner, SalonOwnerStudent,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
@@ -223,6 +223,100 @@ export async function updateStudent(id: string, updates: Partial<Student>): Prom
 export async function deleteStudent(id: string): Promise<void> {
   const { error } = await db().from("students").delete().eq("id", id);
   if (error) fail("deleteStudent", error);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SALON OWNERS
+   ═══════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapSalonOwner(r: any): SalonOwner {
+  return {
+    id: r.id, name: r.name, accessCode: r.access_code,
+    isActive: r.is_active ?? true, notes: r.notes ?? undefined,
+    createdAt: r.created_at ?? "",
+  };
+}
+
+function genAccessCode(): string {
+  const n = Math.floor(1000 + Math.random() * 9000);
+  return `SALON-${n}`;
+}
+
+export async function getSalonOwners(): Promise<SalonOwner[]> {
+  const { data, error } = await db().from("salon_owners").select("*").order("created_at", { ascending: false });
+  if (error) {
+    if (isSchemaError(error)) { console.warn("getSalonOwners: tablo hazır değil"); return []; }
+    console.error("getSalonOwners:", error.message); return [];
+  }
+  return (data ?? []).map(mapSalonOwner);
+}
+
+export async function getSalonOwnerById(id: string): Promise<SalonOwner | null> {
+  const { data, error } = await db().from("salon_owners").select("*").eq("id", id).maybeSingle();
+  if (error) { console.error("getSalonOwnerById:", error.message); return null; }
+  return data ? mapSalonOwner(data) : null;
+}
+
+export async function createSalonOwner(name: string, notes?: string): Promise<SalonOwner> {
+  // Benzersiz kod üret
+  let code = genAccessCode();
+  let attempts = 0;
+  while (attempts < 10) {
+    const { data } = await db().from("salon_owners").select("id").eq("access_code", code).maybeSingle();
+    if (!data) break;
+    code = genAccessCode();
+    attempts++;
+  }
+  const { data, error } = await db().from("salon_owners")
+    .insert({ name, access_code: code, is_active: true, notes: notes ?? null })
+    .select().single();
+  if (error) fail("createSalonOwner", error);
+  return mapSalonOwner(data);
+}
+
+export async function updateSalonOwner(id: string, updates: Partial<{ name: string; isActive: boolean; notes: string }>): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (updates.name     !== undefined) row.name      = updates.name;
+  if (updates.isActive !== undefined) row.is_active = updates.isActive;
+  if (updates.notes    !== undefined) row.notes     = updates.notes;
+  const { error } = await db().from("salon_owners").update(row).eq("id", id);
+  if (error) fail("updateSalonOwner", error);
+}
+
+export async function deleteSalonOwner(id: string): Promise<void> {
+  const { error } = await db().from("salon_owners").delete().eq("id", id);
+  if (error) fail("deleteSalonOwner", error);
+}
+
+/** Salon sahibine atanmış öğrencilerin ID listesi */
+export async function getSalonOwnerStudentIds(ownerId: string): Promise<string[]> {
+  const { data, error } = await db()
+    .from("salon_owner_students").select("student_id").eq("salon_owner_id", ownerId);
+  if (error) { console.error("getSalonOwnerStudentIds:", error.message); return []; }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((r: any) => r.student_id as string);
+}
+
+/** Salon sahibine atanmış öğrencilerin tam listesi */
+export async function getSalonOwnerStudents(ownerId: string): Promise<Student[]> {
+  const ids = await getSalonOwnerStudentIds(ownerId);
+  if (ids.length === 0) return [];
+  const { data, error } = await db().from("students").select("*").in("id", ids).order("full_name");
+  if (error) { console.error("getSalonOwnerStudents:", error.message); return []; }
+  return (data ?? []).map(ms);
+}
+
+export async function assignStudentToSalonOwner(ownerId: string, studentId: string): Promise<void> {
+  const { error } = await db().from("salon_owner_students")
+    .upsert({ salon_owner_id: ownerId, student_id: studentId }, { onConflict: "salon_owner_id,student_id" });
+  if (error) fail("assignStudentToSalonOwner", error);
+}
+
+export async function removeStudentFromSalonOwner(ownerId: string, studentId: string): Promise<void> {
+  const { error } = await db().from("salon_owner_students")
+    .delete().eq("salon_owner_id", ownerId).eq("student_id", studentId);
+  if (error) fail("removeStudentFromSalonOwner", error);
 }
 
 /* ═══════════════════════════════════════════════════════════════

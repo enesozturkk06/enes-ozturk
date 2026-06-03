@@ -1,38 +1,41 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import type { AuthState, Student } from "@/lib/types";
+import type { AuthState, Student, SalonOwner } from "@/lib/types";
 import { getSession, logout as doLogout } from "@/lib/auth";
 import { ToastProvider } from "@/app/components/shared/Toast";
 
 interface AuthCtx extends AuthState {
-  setStudent: (s: Student) => void;
-  setAdmin: () => void;
-  logout: () => void;
-  loaded: boolean;
+  setStudent:    (s: Student) => void;
+  setAdmin:      () => void;
+  setSalonOwner: (o: SalonOwner) => void;
+  logout:        () => void;
+  loaded:        boolean;
 }
 
+const EMPTY: AuthState = { role: null, student: null, isAdmin: false, salonOwner: null };
+
 const Ctx = createContext<AuthCtx>({
-  role: null, student: null, isAdmin: false,
-  setStudent: () => {}, setAdmin: () => {}, logout: () => {}, loaded: false,
+  ...EMPTY,
+  setStudent: () => {}, setAdmin: () => {}, setSalonOwner: () => {}, logout: () => {}, loaded: false,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>({ role: null, student: null, isAdmin: false });
+  const [state, setState] = useState<AuthState>(EMPTY);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const s = getSession();
-    setState(s);
+    setState(getSession());
     setLoaded(true);
   }, []);
 
-  const setStudent = (s: Student) => setState({ role: "student", student: s, isAdmin: false });
-  const setAdmin   = ()           => setState({ role: "admin",   student: null, isAdmin: true });
-  const logout     = ()           => { doLogout(); setState({ role: null, student: null, isAdmin: false }); };
+  const setStudent    = (s: Student)    => setState({ role:"student",     student: s, isAdmin: false, salonOwner: null });
+  const setAdmin      = ()              => setState({ role:"admin",       student: null, isAdmin: true, salonOwner: null });
+  const setSalonOwner = (o: SalonOwner) => setState({ role:"salon_owner", student: null, isAdmin: false, salonOwner: o });
+  const logout        = ()              => { doLogout(); setState(EMPTY); };
 
   return (
-    <Ctx.Provider value={{ ...state, setStudent, setAdmin, logout, loaded }}>
+    <Ctx.Provider value={{ ...state, setStudent, setAdmin, setSalonOwner, logout, loaded }}>
       <ToastProvider>{children}</ToastProvider>
     </Ctx.Provider>
   );

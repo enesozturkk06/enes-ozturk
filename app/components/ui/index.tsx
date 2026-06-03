@@ -90,12 +90,12 @@ export function StatCard({ label, value, sub, color = "white", icon, href, onCli
         minHeight: 88, // touch alanı
         cursor: isClickable ? "pointer" : "default",
       }}
-      onHoverStart={e => {
+      onMouseEnter={e => {
         if (!isClickable) return;
-        (e.currentTarget as HTMLElement).style.boxShadow = `0 0 24px ${c.glow}`;
+        e.currentTarget.style.boxShadow = `0 0 24px ${c.glow}`;
       }}
-      onHoverEnd={e => {
-        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+      onMouseLeave={e => {
+        e.currentTarget.style.boxShadow = "none";
       }}
     >
       {/* Üst vurgu çizgisi */}

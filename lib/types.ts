@@ -6,7 +6,7 @@ export type AttendanceStatus = "pending" | "attended" | "absent";
 export type InviteStatus     = "pending" | "accepted" | "declined";
 export type ParticipantRole  = "creator" | "partner";
 export type NotifType        = "info" | "warning" | "success" | "reminder";
-export type UserRole         = "student" | "admin";
+export type UserRole         = "student" | "admin" | "salon_owner";
 
 export interface Student {
   id: string; code: string; fullName: string; phone: string; email?: string;
@@ -101,6 +101,27 @@ export interface WorkoutExercise {
   rest?: string; description: string; icon: string;
 }
 
+/** Salon sahibi / gözlemci hesabı */
+export interface SalonOwner {
+  id: string;
+  name: string;
+  accessCode: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+/** Salon sahibine atanmış öğrenci bağlantısı */
+export interface SalonOwnerStudent {
+  id: string;
+  salonOwnerId: string;
+  studentId: string;
+  createdAt: string;
+}
+
 export interface AuthState {
-  role: UserRole | null; student: Student | null; isAdmin: boolean;
+  role: UserRole | null;
+  student: Student | null;
+  isAdmin: boolean;
+  salonOwner: SalonOwner | null;
 }
