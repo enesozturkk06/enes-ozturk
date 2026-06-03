@@ -3,7 +3,8 @@ import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   getAppointments, getStudents, getAdminNotifications,
-  completeAppointmentWithAttendance, getAppointmentStudents, createLessonRecord,
+  completeAppointmentWithAttendance, getAppointmentStudents,
+  bulkGetAppointmentStudents, createLessonRecord,
 } from "@/lib/db";
 import type { Appointment, Student, Notification, AppointmentStudent } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
@@ -47,14 +48,8 @@ export default function AdminDashboard() {
   const reloadApts = useCallback(async () => {
     const apts = await getAppointments({ date: today });
     setTodayApts(apts);
-    // Tüm randevular için appointment_students yükle (düet gösterimi + tamamla modal için)
-    const map: Record<string, AppointmentStudent[]> = {};
-    await Promise.all(
-      apts.map(async a => {
-        const apSt = await getAppointmentStudents(a.id);
-        if (apSt.length > 0) map[a.id] = apSt;
-      })
-    );
+    // Tek bulk sorguda tüm appointment_students (N+1 yerine 2 sorgu)
+    const map = await bulkGetAppointmentStudents(apts.map(a => a.id));
     setAptStudents(map);
   }, [today]);
 
@@ -146,8 +141,11 @@ export default function AdminDashboard() {
   /* ── Yardımcı: randevu öğrenci ismi ──────────────────────── */
   const aptDisplayName = (apt: Appointment): string => {
     const apSt = aptStudents[apt.id];
-    if (!apSt || apSt.length <= 1) return apt.studentName;
-    return apSt.map(s => s.studentName ?? "?").filter(Boolean).join(" + ");
+    if (!apSt || apSt.length === 0) return apt.studentName;
+    // filter(Boolean) kaldırıldı — "?" isimli partner silinmesin
+    const names = apSt.map(s => s.studentName || s.studentId.slice(0, 6));
+    if (names.length === 1) return names[0];
+    return names.join(" + ");
   };
 
   const aptTypeLabel = (apt: Appointment): string | null =>
@@ -227,16 +225,18 @@ export default function AdminDashboard() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      <div className="flex items-center gap-2 flex-wrap text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                         <span>{apt.studentCode} · {apt.startTime}–{apt.endTime}</span>
-                        {/* Düet partner davet durumu */}
-                        {apt.lessonType === "duet" && aptStudents[apt.id] && (() => {
-                          const pending  = (aptStudents[apt.id] ?? []).filter(s => s.inviteStatus === "pending").length;
-                          const declined = (aptStudents[apt.id] ?? []).filter(s => s.inviteStatus === "declined").length;
-                          if (pending > 0)  return <span className="text-yellow-500">· {pending} bekliyor</span>;
-                          if (declined > 0) return <span className="text-red-400">· {declined} reddetti</span>;
-                          return <span className="text-green-400">· tümü onayladı</span>;
-                        })()}
+                        {/* Düet öğrenci davet durumları */}
+                        {apt.lessonType === "duet" && (aptStudents[apt.id] ?? []).map(s => {
+                          const color = s.inviteStatus === "accepted" ? "#22c55e" : s.inviteStatus === "declined" ? "#ef4444" : "#d97706";
+                          const label = s.inviteStatus === "accepted" ? "Onayladı" : s.inviteStatus === "declined" ? "Reddetti" : "Bekliyor";
+                          return (
+                            <span key={s.studentId} style={{ color, fontFamily:"var(--font-barlow-condensed)" }}>
+                              · {s.studentName || "?"}: {label}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

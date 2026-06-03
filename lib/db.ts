@@ -459,9 +459,8 @@ export async function getPendingInviteCount(studentId: string): Promise<number> 
   return invites.length;
 }
 
-/** Randevuya bağlı tüm öğrenciler — schema cache hatasına karşı dayanıklı */
+/** Randevuya bağlı tüm öğrenciler — batch isim çekimi ile N+1 ortadan kalkar */
 export async function getAppointmentStudents(appointmentId: string): Promise<AppointmentStudent[]> {
-  // select("*") kullan — PostgREST'in kolon listesini bilmesine gerek yok
   const { data, error } = await db()
     .from("appointment_students")
     .select("*")
@@ -476,28 +475,75 @@ export async function getAppointmentStudents(appointmentId: string): Promise<App
     return [];
   }
 
-  // Öğrenci adlarını ayrı sorguda çek (JOIN yerine)
-  const rows = data ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (data ?? []) as any[];
   if (rows.length === 0) return [];
 
+  // Batch: tek sorguda tüm öğrenci adlarını çek (N+1 → 1 sorgu)
+  const studentIds = rows.map(r => r.student_id as string);
+  const { data: studs } = await db()
+    .from("students").select("id, full_name").in("id", studentIds);
+  const nameMap: Record<string, string> = {};
+  (studs ?? []).forEach((s: { id: string; full_name: string }) => { nameMap[s.id] = s.full_name; });
+
+  return rows.map(r => ({
+    id:               r.id,
+    appointmentId:    r.appointment_id,
+    studentId:        r.student_id,
+    studentName:      nameMap[r.student_id] || undefined,
+    role:             (r.role ?? "creator")             as AppointmentStudent["role"],
+    inviteStatus:     (r.invite_status ?? "accepted")   as AppointmentStudent["inviteStatus"],
+    attendanceStatus: (r.attendance_status ?? "pending") as AppointmentStudent["attendanceStatus"],
+    lessonDeducted:   r.lesson_deducted ?? false,
+    createdAt:        r.created_at ?? "",
+  }));
+}
+
+/** Salon paneli için: birden fazla öğrencinin randevularını tek sorguda çek */
+export async function getAppointmentsForStudentIds(studentIds: string[]): Promise<Appointment[]> {
+  if (studentIds.length === 0) return [];
+  const { data, error } = await db()
+    .from("appointments").select("*")
+    .in("student_id", studentIds)
+    .order("date", { ascending: false }).order("start_time");
+  if (error) { console.error("getAppointmentsForStudentIds:", error.message); return []; }
+  return (data ?? []).map(ma);
+}
+
+/** Birden fazla randevu için appointment_students bulk — salon/admin listesi için */
+export async function bulkGetAppointmentStudents(
+  aptIds: string[]
+): Promise<Record<string, AppointmentStudent[]>> {
+  if (aptIds.length === 0) return {};
+  const { data, error } = await db()
+    .from("appointment_students").select("*").in("appointment_id", aptIds);
+  if (error) { console.warn("bulkGetAppointmentStudents:", error.message); return {}; }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const withNames = await Promise.all(rows.map(async (r: any) => {
-    const { data: std } = await db()
-      .from("students").select("full_name").eq("id", r.student_id).maybeSingle();
-    return {
-      id:               r.id,
-      appointmentId:    r.appointment_id,
-      studentId:        r.student_id,
-      studentName:      std?.full_name ?? undefined,
-      role:             (r.role ?? "creator") as AppointmentStudent["role"],
-      inviteStatus:     (r.invite_status ?? "accepted") as AppointmentStudent["inviteStatus"],
+  const rows = (data ?? []) as any[];
+  if (rows.length === 0) return {};
+
+  // Batch isim çekimi
+  const studentIds = [...new Set(rows.map(r => r.student_id as string))];
+  const { data: studs } = await db().from("students").select("id, full_name").in("id", studentIds);
+  const nameMap: Record<string, string> = {};
+  (studs ?? []).forEach((s: { id: string; full_name: string }) => { nameMap[s.id] = s.full_name; });
+
+  const result: Record<string, AppointmentStudent[]> = {};
+  rows.forEach(r => {
+    const apSt: AppointmentStudent = {
+      id: r.id, appointmentId: r.appointment_id, studentId: r.student_id,
+      studentName:      nameMap[r.student_id] || undefined,
+      role:             (r.role ?? "creator")             as AppointmentStudent["role"],
+      inviteStatus:     (r.invite_status ?? "accepted")   as AppointmentStudent["inviteStatus"],
       attendanceStatus: (r.attendance_status ?? "pending") as AppointmentStudent["attendanceStatus"],
       lessonDeducted:   r.lesson_deducted ?? false,
       createdAt:        r.created_at ?? "",
-    } as AppointmentStudent;
-  }));
-
-  return withNames;
+    };
+    if (!result[r.appointment_id]) result[r.appointment_id] = [];
+    result[r.appointment_id].push(apSt);
+  });
+  return result;
 }
 
 /**
