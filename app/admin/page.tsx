@@ -159,17 +159,35 @@ export default function AdminDashboard() {
         />
       </motion.div>
 
-      <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Aktif Öğrenci" value={active.length} sub="Toplam kayıtlı" color="gold" icon={<Users size={18}/>} />
-        <StatCard label="Bugünkü Ders" value={todayApts.length} sub={`${todayApts.filter(a=>a.status==="tamamlandi").length} tamamlandı`} color="red" icon={<Calendar size={18}/>} />
-        <StatCard label="Ödeme Bekleyen" value={pendingPayment.length} sub="Öğrenci" color="white" icon={<TrendingUp size={18}/>} />
-        <StatCard label="Bildirim" value={unreadNotifs} sub="Okunmamış" color="gold" icon={<Bell size={18}/>} />
-      </motion.div>
+      {/* Stat kartları — tıklanabilir, animasyonlu */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard
+          label="Aktif Öğrenci" value={active.length}
+          sub="Tümünü görüntüle" color="gold" icon={<Users size={18}/>}
+          href="/admin/ogrenciler"
+        />
+        <StatCard
+          label="Bugünkü Ders" value={todayApts.length}
+          sub={`${todayApts.filter(a=>a.status==="tamamlandi").length} tamamlandı`}
+          color="red" icon={<Calendar size={18}/>}
+          onClick={() => document.getElementById("bugunun-dersleri")?.scrollIntoView({ behavior:"smooth" })}
+        />
+        <StatCard
+          label="Ödeme Bekleyen" value={pendingPayment.length}
+          sub="Borçlu öğrenciler" color="white" icon={<TrendingUp size={18}/>}
+          href="/admin/odemeler"
+        />
+        <StatCard
+          label="Bildirim" value={unreadNotifs}
+          sub="Okunmamış" color="gold" icon={<Bell size={18}/>}
+          onClick={() => window.scrollTo({ top: 9999, behavior: "smooth" })}
+        />
+      </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Bugünkü dersler */}
         <motion.div variants={fadeUp} className="lg:col-span-2">
-          <Card className="p-6">
+          <Card className="p-6" id="bugunun-dersleri">
             <h3 className="text-xl font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>
               Bugünkü Dersler
             </h3>

@@ -116,10 +116,16 @@
 /* ── Base ──────────────────────────────────────────────────── */
 html { scroll-behavior: smooth; }
 
-/* iPhone safe area desteği */
+/* iPhone safe area — tüm cihazlarda doğru hesaplama */
 :root {
-  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-top:    env(safe-area-inset-top,    0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+  /* Mobil header toplam yüksekliği: sabit + safe area */
+  --mobile-header-h: calc(56px + var(--safe-top));
+  /* İçerik padding-top mobil için */
+  --content-pt-mobile: calc(var(--mobile-header-h) + 16px);
 }
 
 body {

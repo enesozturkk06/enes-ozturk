@@ -1,6 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import { type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from "react";
+import Link from "next/link";
 
 // ── Button ────────────────────────────────────────────────────────────────────
 interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -39,12 +40,13 @@ export function Button({ variant = "primary", size = "md", loading, children, cl
 }
 
 // ── Card ──────────────────────────────────────────────────────────────────────
-interface CardProps { children: ReactNode; className?: string; hover?: boolean; glow?: "red" | "gold" }
-export function Card({ children, className = "", hover, glow }: CardProps) {
+interface CardProps { children: ReactNode; className?: string; hover?: boolean; glow?: "red" | "gold"; id?: string }
+export function Card({ children, className = "", hover, glow, id }: CardProps) {
   const glowClass = glow === "red" ? "hover:border-crimson/30 hover:shadow-[0_0_30px_rgba(220,38,38,0.08)]"
     : glow === "gold" ? "hover:border-gold/30 hover:shadow-[0_0_30px_rgba(217,119,6,0.08)]" : "";
   return (
     <motion.div
+      id={id}
       whileHover={hover ? { y: -2 } : undefined}
       className={`bg-carbon border border-white/8 ${glowClass} transition-all duration-300 ${className}`}
     >
@@ -53,26 +55,86 @@ export function Card({ children, className = "", hover, glow }: CardProps) {
   );
 }
 
-// ── StatCard ──────────────────────────────────────────────────────────────────
-interface StatCardProps { label: string; value: string | number; sub?: string; color?: "red" | "gold" | "white" | "green"; icon?: ReactNode }
-export function StatCard({ label, value, sub, color = "white", icon }: StatCardProps) {
-  const colors = { red: "text-crimson", gold: "text-gold-bright", white: "text-white", green: "text-green-400" };
-  return (
-    <Card hover glow={color === "red" ? "red" : color === "gold" ? "gold" : undefined}>
-      <div className="p-5">
-        <div className="flex items-start justify-between mb-3">
-          <span className="text-xs text-white/30 tracking-widest uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+// ── StatCard — tıklanabilir, animasyonlu, neon glow ─────────────────────────
+interface StatCardProps {
+  label: string; value: string | number; sub?: string;
+  color?: "red" | "gold" | "white" | "green";
+  icon?: ReactNode;
+  href?: string;       // yönlendirilecek sayfa
+  onClick?: () => void; // veya tıklama aksiyonu
+}
+export function StatCard({ label, value, sub, color = "white", icon, href, onClick }: StatCardProps) {
+  const colorMap = {
+    red:   { text: "#dc2626", glow: "rgba(220,38,38,0.18)", border: "rgba(220,38,38,0.25)" },
+    gold:  { text: "#f59e0b", glow: "rgba(217,119,6,0.15)",  border: "rgba(217,119,6,0.22)"  },
+    white: { text: "#ffffff", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.1)" },
+    green: { text: "#22c55e", glow: "rgba(34,197,94,0.14)",   border: "rgba(34,197,94,0.22)"  },
+  };
+  const c = colorMap[color];
+  const isClickable = !!(href || onClick);
+
+  const inner = (
+    <motion.div
+      whileHover={isClickable ? { y: -3, scale: 1.02 } : undefined}
+      whileTap={isClickable ? { scale: 0.97 } : undefined}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="relative overflow-hidden"
+      style={{
+        background: "rgba(15,15,22,0.95)",
+        border: `1px solid ${isClickable ? c.border : "rgba(255,255,255,0.08)"}`,
+        backdropFilter: "blur(16px)",
+        boxShadow: isClickable ? `0 0 0px ${c.glow}` : "none",
+        transition: "box-shadow 0.25s, border-color 0.25s",
+        minHeight: 88, // touch alanı
+        cursor: isClickable ? "pointer" : "default",
+      }}
+      onHoverStart={e => {
+        if (!isClickable) return;
+        (e.currentTarget as HTMLElement).style.boxShadow = `0 0 24px ${c.glow}`;
+      }}
+      onHoverEnd={e => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+      }}
+    >
+      {/* Üst vurgu çizgisi */}
+      <div className="absolute top-0 left-0 right-0 h-px"
+        style={{ background: `linear-gradient(90deg, transparent, ${c.text}50, transparent)` }} />
+
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start justify-between mb-2">
+          <span className="text-[10px] sm:text-xs text-white/35 tracking-widest uppercase leading-tight"
+            style={{ fontFamily: "var(--font-barlow-condensed)" }}>
             {label}
           </span>
-          {icon && <div className={colors[color]}>{icon}</div>}
+          {icon && <div style={{ color: c.text }} className="flex-shrink-0">{icon}</div>}
         </div>
-        <div className={`text-3xl font-display ${colors[color]}`} style={{ fontFamily: "var(--font-bebas)" }}>
+        <div className="text-2xl sm:text-3xl font-display" style={{ fontFamily: "var(--font-bebas)", color: c.text }}>
           {value}
         </div>
-        {sub && <div className="text-xs text-white/30 mt-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{sub}</div>}
+        {sub && (
+          <div className="text-[10px] sm:text-xs text-white/28 mt-1 leading-tight"
+            style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            {sub}
+          </div>
+        )}
+        {/* Tıklanabilir ok göstergesi */}
+        {isClickable && (
+          <div className="absolute bottom-3 right-3 opacity-30 group-hover:opacity-70 transition-opacity"
+            style={{ color: c.text, fontSize: 12 }}>→</div>
+        )}
       </div>
-    </Card>
+    </motion.div>
   );
+
+  if (href) {
+    return <Link href={href} className="block group">{inner}</Link>;
+  }
+  if (onClick) {
+    return <button onClick={onClick} className="block w-full text-left group">{inner}</button>;
+  }
+  return inner;
 }
 
 // ── Input ─────────────────────────────────────────────────────────────────────
@@ -194,14 +256,28 @@ export function Modal({ open, onClose, title, children, maxWidth = "max-w-lg" }:
 interface PageHeaderProps { title: string; subtitle?: string; accent?: string; actions?: ReactNode }
 export function PageHeader({ title, subtitle, accent, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6 sm:mb-8"
+    >
       <div>
-        {accent && <div className="flex items-center gap-3 mb-2"><span className="w-8 h-px bg-crimson" /><span className="text-crimson text-xs tracking-[0.4em] uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{accent}</span></div>}
-        <h1 className="text-3xl lg:text-4xl font-display text-white tracking-wide" style={{ fontFamily: "var(--font-bebas)" }}>{title}</h1>
-        {subtitle && <p className="text-white/40 text-sm mt-1" style={{ fontFamily: "var(--font-inter)" }}>{subtitle}</p>}
+        {accent && (
+          <div className="flex items-center gap-2.5 mb-2">
+            <span className="w-8 h-px bg-crimson" />
+            <span className="text-[10px] sm:text-xs text-crimson tracking-[0.4em] uppercase"
+              style={{ fontFamily:"var(--font-barlow-condensed)" }}>{accent}</span>
+          </div>
+        )}
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display text-white tracking-wide"
+          style={{ fontFamily:"var(--font-bebas)" }}>{title}</h1>
+        {subtitle && (
+          <p className="text-white/40 text-xs sm:text-sm mt-1"
+            style={{ fontFamily:"var(--font-inter)" }}>{subtitle}</p>
+        )}
       </div>
-      {actions && <div className="flex items-center gap-3">{actions}</div>}
-    </div>
+      {actions && <div className="flex items-center gap-2 sm:gap-3 flex-wrap">{actions}</div>}
+    </motion.div>
   );
 }
 

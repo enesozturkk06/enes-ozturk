@@ -84,11 +84,17 @@ export default function StudentNav() {
         </div>
       </aside>
 
-      {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/96 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-4"
-        style={{ paddingTop:"calc(env(safe-area-inset-top, 0px) + 8px)", paddingBottom:"8px", minHeight:"56px" }}>
+      {/* Mobile header — safe area uyumlu */}
+      <header
+        className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/97 backdrop-blur-xl border-b border-white/6 flex items-end justify-between px-5"
+        style={{
+          paddingTop:    "calc(env(safe-area-inset-top, 0px) + 10px)",
+          paddingBottom: "12px",
+          minHeight:     "calc(env(safe-area-inset-top, 0px) + 56px)",
+        }}
+      >
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-7 h-7">
+          <div className="w-7 h-7 flex-shrink-0">
             <svg viewBox="0 0 44 44" fill="none" className="w-full h-full">
               <polygon points="22,2 42,12 42,32 22,42 2,32 2,12" stroke="#dc2626" strokeWidth="2" fill="rgba(220,38,38,0.08)" />
               <text x="22" y="28" textAnchor="middle" fill="#dc2626" fontSize="13" fontFamily="var(--font-bebas)">EÖ</text>
@@ -96,26 +102,41 @@ export default function StudentNav() {
           </div>
           <span className="text-sm text-white tracking-widest" style={{ fontFamily: "var(--font-bebas)" }}>ÖĞRENCİ PANELİ</span>
         </Link>
-        <button onClick={() => setOpen(o => !o)} className="text-white/50 hover:text-white transition-colors">
-          {open ? <X size={21} /> : <Menu size={21} />}
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center justify-center text-white/55 hover:text-white active:text-white transition-colors"
+          style={{ minWidth: 44, minHeight: 44 }}
+          aria-label="Menü"
+        >
+          {open ? <X size={22} /> : <Menu size={22} />}
         </button>
       </header>
 
       {open && (
         <div className="lg:hidden fixed inset-0 z-40" onClick={() => setOpen(false)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <nav className="absolute top-14 left-0 right-0 bg-pitch border-b border-white/5 p-3 space-y-0.5">
+          <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
+          <nav
+            className="absolute left-0 right-0 bg-pitch border-b border-white/5 px-3 pb-4"
+            style={{
+              top: "calc(env(safe-area-inset-top, 0px) + 56px)",
+              paddingTop: "8px",
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             {links.map(({ href, label, icon: Icon, exact }) => {
               const active = isActive(href, exact);
               return (
                 <Link key={href} href={href} onClick={() => setOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-3 ${active ? "bg-crimson/10 text-white" : "text-white/40"}`}>
-                  <Icon size={16} className={active ? "text-crimson" : ""} />
+                  className={`flex items-center gap-3 px-3 rounded-xl transition-all ${active ? "bg-crimson/10 text-white" : "text-white/45 hover:text-white/70"}`}
+                  style={{ minHeight: 48 }}>
+                  <Icon size={17} className={active ? "text-crimson" : ""} />
                   <span className="text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{label}</span>
                 </Link>
               );
             })}
-            <button onClick={handleLogout} className="flex items-center gap-3 w-full px-3 py-3 text-white/25">
+            <button onClick={handleLogout}
+              className="flex items-center gap-3 w-full px-3 rounded-xl text-white/30 hover:text-red-400 transition-colors mt-2"
+              style={{ minHeight: 48 }}>
               <LogOut size={16} /><span className="text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Çıkış</span>
             </button>
           </nav>

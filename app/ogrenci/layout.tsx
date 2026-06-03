@@ -48,7 +48,10 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         transition={{ duration: 0.3 }}
         className="lg:ml-64 min-h-screen"
       >
-        <div className="pt-14 lg:pt-0 p-4 lg:p-8">
+        <div
+          className="lg:pt-0 lg:p-8 p-4"
+          style={{ paddingTop: "var(--content-pt-mobile, 72px)" }}
+        >
           {children}
         </div>
       </motion.main>
