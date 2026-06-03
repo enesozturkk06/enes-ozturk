@@ -207,7 +207,7 @@ export default function RandevuPage() {
      RENDER
      ═══════════════════════════════════════════════════════════ */
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="max-w-5xl mx-auto space-y-4 w-full" style={{ overflowX: "hidden" }}>
       <PageHeader title="Randevu Al" subtitle="Ders tipini seç, saat seç, randevu oluştur" accent="Özel Ders" />
 
       {/* Kalan ders uyarısı */}
@@ -284,25 +284,27 @@ export default function RandevuPage() {
         <div className="lg:col-span-2 space-y-4">
 
           {/* 1. Ders tipi */}
-          <div className="rounded-2xl p-5" style={CARD}>
+          <div className="rounded-2xl p-4 sm:p-5 overflow-hidden" style={CARD}>
             <p className="text-xs tracking-widest uppercase mb-3"
               style={{ color:VIOLET, fontFamily:"var(--font-barlow-condensed)" }}>Ders Tipi</p>
-            <div className="flex gap-3">
+            {/* Mobilde dikey grid, sm'den itibaren yatay */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
               {LESSON_TYPES.map(t => (
                 <button key={t.value}
                   onClick={() => { setLessonType(t.value); }}
-                  className="flex-1 flex flex-col items-center gap-1.5 py-3.5 px-3 rounded-xl transition-all"
+                  className="flex flex-col items-center gap-1.5 py-3 px-2 sm:py-3.5 sm:px-3 rounded-xl transition-all w-full sm:flex-1"
                   style={{
                     background: lessonType===t.value ? `${VIOLET}18` : "rgba(255,255,255,0.03)",
                     border: lessonType===t.value ? `1px solid ${VIOLET}55` : "1px solid rgba(255,255,255,0.08)",
                     boxShadow: lessonType===t.value ? `0 0 20px ${VIOLET}20` : "none",
+                    minWidth: 0,
                   }}>
                   <span style={{ color: lessonType===t.value ? VIOLET : "rgba(255,255,255,0.35)" }}>{t.icon}</span>
-                  <span className="text-sm font-semibold"
+                  <span className="text-xs sm:text-sm font-semibold leading-tight text-center"
                     style={{ color: lessonType===t.value ? "#fff" : "rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
                     {t.label}
                   </span>
-                  <span className="text-xs" style={{ color:"rgba(255,255,255,0.25)", fontFamily:"var(--font-barlow-condensed)" }}>{t.desc}</span>
+                  <span className="text-xs leading-tight text-center hidden sm:block" style={{ color:"rgba(255,255,255,0.25)", fontFamily:"var(--font-barlow-condensed)" }}>{t.desc}</span>
                 </button>
               ))}
             </div>
@@ -313,7 +315,7 @@ export default function RandevuPage() {
             {lessonType === "duet" && (
               <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:"auto" }}
                 exit={{ opacity:0, height:0 }} className="overflow-hidden">
-                <div className="rounded-2xl p-5" style={{
+                <div className="rounded-2xl p-4 sm:p-5 overflow-hidden" style={{
                   ...CARD,
                   border: partner
                     ? (partner.remainingLessons>0 ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(239,68,68,0.3)")
@@ -369,12 +371,14 @@ export default function RandevuPage() {
           </AnimatePresence>
 
           {/* 3. Tarih seçimi */}
-          <div className="rounded-2xl p-5" style={CARD}>
+          <div className="rounded-2xl p-4 sm:p-5 overflow-hidden" style={CARD}>
             <p className="text-xs tracking-widest uppercase mb-3 flex items-center gap-2"
               style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
-              <Calendar size={13}/>Tarih Seçin
+              <Calendar size={13} className="flex-shrink-0"/>Tarih Seçin
             </p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            {/* overflow-x-auto + clip için -mx + px ile kenar boşluklarını iptal edip yeniden ver */}
+            <div className="-mx-4 sm:-mx-5 px-4 sm:px-5">
+            <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth:"none", msOverflowStyle:"none" }}>
               {dates.map(d => {
                 const active = d === selectedDate;
                 const hasApt = appointments.some(a => a.date===d && a.status==="onaylandi");
@@ -399,15 +403,25 @@ export default function RandevuPage() {
                 );
               })}
             </div>
+            </div>{/* /scroll wrapper */}
           </div>
 
           {/* 4. Müsait saatler */}
-          <div className="rounded-2xl p-5" style={CARD}>
-            <p className="text-xs tracking-widest uppercase mb-3 flex items-center gap-2"
-              style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
-              <Clock size={13}/>
-              {format(parseISO(selectedDate),"dd MMMM yyyy (EEEE)",{locale:tr})} — Müsait Saatler
-            </p>
+          <div className="rounded-2xl p-4 sm:p-5 overflow-hidden" style={CARD}>
+            {/* Mobilde uzun tarih text'i iki satıra bölünmüş */}
+            <div className="flex items-start gap-2 mb-3 min-w-0">
+              <Clock size={13} className="flex-shrink-0 mt-0.5" style={{ color:"rgba(255,255,255,0.35)" }}/>
+              <div className="min-w-0">
+                <p className="text-xs tracking-widest uppercase"
+                  style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Müsait Saatler
+                </p>
+                <p className="text-xs mt-0.5 truncate"
+                  style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  {format(parseISO(selectedDate),"dd MMMM yyyy, EEEE",{locale:tr})}
+                </p>
+              </div>
+            </div>
 
             {myAptOnDate && (
               <div className="mb-4 p-3 rounded-xl flex items-center gap-2"
@@ -432,7 +446,7 @@ export default function RandevuPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
                 {slots.map(slot => {
                   const taken = !slot.isAvailable || !!myAptOnDate;
                   return (
@@ -459,7 +473,7 @@ export default function RandevuPage() {
 
         {/* ── Sağ sidebar ───────────────────────────────────── */}
         <div className="space-y-4">
-          <div className="rounded-2xl p-5" style={CARD}>
+          <div className="rounded-2xl p-4 sm:p-5 overflow-hidden" style={CARD}>
             <p className="text-xs tracking-widest uppercase mb-3"
               style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>Yaklaşan</p>
             {upcoming.length===0 ? (
@@ -489,7 +503,7 @@ export default function RandevuPage() {
             ))}
           </div>
 
-          <div className="rounded-2xl p-5" style={CARD}>
+          <div className="rounded-2xl p-4 sm:p-5 overflow-hidden" style={CARD}>
             <p className="text-xs tracking-widest uppercase mb-3"
               style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>Geçmiş</p>
             {past.length===0 ? (
