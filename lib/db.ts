@@ -10,11 +10,27 @@ import type {
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 /* ── Hata yönetimi ─────────────────────────────────────────── */
-function fail(fn: string, e: { message: string; details?: string }): never {
-  const msg = `[${fn}] ${e.message}${e.details ? " | " + e.details : ""}`;
+function isSchemaError(e: { message?: string; code?: string }): boolean {
+  const m = e.message ?? "";
+  return (
+    m.includes("schema cache") ||
+    m.includes("Could not find the table") ||
+    m.includes("Could not find the column") ||
+    e.code === "PGRST200" || e.code === "PGRST204"
+  );
+}
+
+function schemaHint(tableName: string): string {
+  return `\n\n👉 Supabase SQL Editor'de SUPABASE_FIX_NOW.sql dosyasını çalıştırın (${tableName} tablosu/kolonu eksik).`;
+}
+
+function fail(fn: string, e: { message: string; details?: string; code?: string }): never {
+  const hint = isSchemaError(e) ? schemaHint(fn) : "";
+  const msg  = `[${fn}] ${e.message}${e.details ? " | " + e.details : ""}${hint}`;
   console.error("⛔ Supabase:", msg);
   throw new Error(msg);
 }
+
 function db() {
   if (!isSupabaseConfigured || !supabase) throw new Error("Supabase bağlı değil");
   return supabase!;
@@ -182,18 +198,30 @@ export async function getAllDuetPairs(): Promise<DuetPartner[]> {
 
 export async function setDuetPartner(aId: string, bId: string): Promise<void> {
   // Önce ikisinin mevcut partnerlerini temizle
-  await db().from("duet_partners").delete()
+  const d1 = await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${aId},student_b_id.eq.${aId}`);
-  await db().from("duet_partners").delete()
+  if (d1.error && !isSchemaError(d1.error)) console.warn("setDuetPartner:del1", d1.error.message);
+
+  const d2 = await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${bId},student_b_id.eq.${bId}`);
+  if (d2.error && !isSchemaError(d2.error)) console.warn("setDuetPartner:del2", d2.error.message);
+
   const { error } = await db().from("duet_partners").insert({ student_a_id: aId, student_b_id: bId });
-  if (error) fail("setDuetPartner", error);
+  if (error) {
+    if (isSchemaError(error)) {
+      throw new Error(
+        "duet_partners tablosu henüz hazır değil.\n\n" +
+        "👉 Supabase Dashboard → SQL Editor'de SUPABASE_FIX_NOW.sql dosyasını çalıştırın."
+      );
+    }
+    fail("setDuetPartner", error);
+  }
 }
 
 export async function removeDuetPartner(studentId: string): Promise<void> {
   const { error } = await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${studentId},student_b_id.eq.${studentId}`);
-  if (error) fail("removeDuetPartner", error);
+  if (error && !isSchemaError(error)) fail("removeDuetPartner", error);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -251,7 +279,14 @@ export async function getAppointmentStudents(appointmentId: string): Promise<App
     .from("appointment_students")
     .select("*, students(full_name)")
     .eq("appointment_id", appointmentId);
-  if (error) { console.warn("getAppointmentStudents:", error.message); return []; }
+  if (error) {
+    if (isSchemaError(error)) {
+      console.warn("getAppointmentStudents: schema cache → SUPABASE_FIX_NOW.sql çalıştırın");
+      return [];
+    }
+    console.warn("getAppointmentStudents:", error.message);
+    return [];
+  }
   return (data ?? []).map(mApSt);
 }
 
@@ -264,10 +299,16 @@ export async function getPendingInvites(studentId: string): Promise<PendingInvit
     .from("appointment_students")
     .select("id, appointment_id, appointments(date, start_time, end_time, lesson_type, student_name)")
     .eq("student_id", studentId)
-    .eq("invite_status", "pending")
-    .eq("role", "partner");
+    .eq("invite_status", "pending");
 
-  if (error) { console.warn("getPendingInvites:", error.message); return []; }
+  if (error) {
+    if (isSchemaError(error)) {
+      console.warn("getPendingInvites: schema cache → SUPABASE_FIX_NOW.sql çalıştırın");
+      return [];
+    }
+    console.warn("getPendingInvites:", error.message);
+    return [];
+  }
 
   return (data ?? []).map((r: {
     id: string;
@@ -309,7 +350,13 @@ export async function respondToInvite(
     .eq("id", appointmentStudentId)
     .eq("student_id", studentId); // güvenlik: kendi kaydını güncelleyebilir
 
-  if (error) { console.error("respondToInvite:", error.message); return { success: false, error: error.message }; }
+  if (error) {
+    if (isSchemaError(error)) {
+      return { success: false, error: "Sistem güncelleniyor. SUPABASE_FIX_NOW.sql çalıştırın ve tekrar deneyin." };
+    }
+    console.error("respondToInvite:", error.message);
+    return { success: false, error: error.message };
+  }
   return { success: true };
 }
 
@@ -382,7 +429,13 @@ export async function createAppointment(apt: {
 
   if (rows.length > 0) {
     const { error: e2 } = await db().from("appointment_students").insert(rows);
-    if (e2) console.warn("[createAppointment] appointment_students:", e2.message);
+    if (e2) {
+      if (isSchemaError(e2)) {
+        console.warn("[createAppointment] appointment_students schema cache → SUPABASE_FIX_NOW.sql çalıştırın:", e2.message);
+      } else {
+        console.warn("[createAppointment] appointment_students:", e2.message);
+      }
+    }
   }
 
   return ma(aptData);
