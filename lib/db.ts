@@ -122,6 +122,60 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   return r;
 }
 
+/**
+ * appointment_students'a kayıt ekle — 3 kademeli fallback:
+ * 1. Tüm kolonlarla insert (ideal durum)
+ * 2. Sadece zorunlu kolonlarla insert + ayrı update
+ * 3. Sadece zorunlu kolonlarla insert (en az)
+ */
+async function insertAppointmentStudent(
+  appointmentId: string,
+  studentId: string,
+  role: string,
+  inviteStatus: string,
+): Promise<boolean> {
+  const fullRow = {
+    appointment_id:    appointmentId,
+    student_id:        studentId,
+    role,
+    invite_status:     inviteStatus,
+    attendance_status: "pending",
+    lesson_deducted:   false,
+  };
+
+  // Kademe 1: Tüm kolonlarla insert
+  const { error: e1 } = await db().from("appointment_students").insert(fullRow);
+  if (!e1) return true;
+
+  // Kademe 2: Schema hatası → temel kolonlarla insert, sonra update
+  if (isSchemaError(e1)) {
+    console.warn("[insertApSt] Schema cache sorunu, temel insert deneniyor:", e1.message);
+    const basicRow = { appointment_id: appointmentId, student_id: studentId };
+    const { data: inserted, error: e2 } = await db()
+      .from("appointment_students")
+      .upsert(basicRow, { onConflict: "appointment_id,student_id" })
+      .select("id").single();
+
+    if (e2) {
+      console.warn("[insertApSt] Temel insert de başarısız:", e2.message);
+      return false;
+    }
+
+    // Kolon güncelleme denemesi (cache refresh sonrası çalışır)
+    if (inserted?.id) {
+      const { error: e3 } = await db()
+        .from("appointment_students")
+        .update({ role, invite_status: inviteStatus, attendance_status: "pending", lesson_deducted: false })
+        .eq("id", inserted.id);
+      if (e3) console.warn("[insertApSt] Kolon güncelleme başarısız (OK):", e3.message);
+    }
+    return true;
+  }
+
+  console.error("[insertApSt] Insert hatası:", e1.message);
+  return false;
+}
+
 async function trySetPackageFields(id: string, packageId?: string, customPrice?: number) {
   if (packageId === undefined && customPrice === undefined) return;
   try {
@@ -272,22 +326,28 @@ export async function getAppointments(filters?: {
  * - Düet daveti kabul ettiği (appointment_students → invite_status != declined)
  */
 export async function getStudentAppointments(studentId: string): Promise<Appointment[]> {
+  // 1. Kendi oluşturduğu randevular
   const { data: direct, error: e1 } = await db()
     .from("appointments").select("*")
     .eq("student_id", studentId).order("date").order("start_time");
   if (e1) fail("getStudentAppointments:direct", e1);
 
-  // Kabul edilen (accepted) düet davetlerinden randevular
-  const { data: joined } = await db()
+  // 2. appointment_students üzerinden partner olduğu randevular
+  //    select("*") ile — schema cache bağımsız
+  const { data: apStRows } = await db()
     .from("appointment_students")
-    .select("appointment_id")
-    .eq("student_id", studentId)
-    .eq("invite_status", "accepted")
-    .neq("role", "creator"); // creator olanları zaten direct'te var
+    .select("*")
+    .eq("student_id", studentId);
 
-  const joinedIds = (joined ?? []).map((r: {appointment_id: string}) => r.appointment_id);
+  // JS'de filtrele: accepted olanlar ve creator olmayanlar
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const partnerAccepted = (apStRows ?? []).filter((r: any) =>
+    r.role !== "creator" && r.invite_status === "accepted"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ).map((r: any) => r.appointment_id as string);
+
   const directIds = (direct ?? []).map(r => r.id);
-  const extraIds  = joinedIds.filter(id => !directIds.includes(id));
+  const extraIds  = partnerAccepted.filter(id => !directIds.includes(id));
 
   if (extraIds.length === 0) return (direct ?? []).map(ma);
 
@@ -297,6 +357,12 @@ export async function getStudentAppointments(studentId: string): Promise<Appoint
 
   return [...(direct ?? []), ...(extra ?? [])].map(ma)
     .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+}
+
+/** Bekleyen davetleri sayısı (bildirim badge için) */
+export async function getPendingInviteCount(studentId: string): Promise<number> {
+  const invites = await getPendingInvites(studentId);
+  return invites.length;
 }
 
 /** Randevuya bağlı tüm öğrenciler — schema cache hatasına karşı dayanıklı */
@@ -497,14 +563,19 @@ export async function createAppointment(apt: {
     });
   }
 
-  if (rows.length > 0) {
-    const { error: e2 } = await db().from("appointment_students").insert(rows);
-    if (e2) {
-      if (isSchemaError(e2)) {
-        console.warn("[createAppointment] appointment_students schema cache → SUPABASE_FIX_NOW.sql çalıştırın:", e2.message);
-      } else {
-        console.warn("[createAppointment] appointment_students:", e2.message);
-      }
+  // appointment_students kayıtlarını 3 kademeli güvenli insert ile oluştur
+  for (const row of rows) {
+    const fullInsertOk = await insertAppointmentStudent(
+      appointmentId,
+      row.student_id as string,
+      row.role as string,
+      row.invite_status as string,
+    );
+    if (!fullInsertOk) {
+      console.error(
+        `[createAppointment] ${row.student_id} için appointment_students kaydı oluşturulamadı!` +
+        "\n→ SUPABASE_FIX_NOW.sql çalıştırın ve schema cache'i yenileyin."
+      );
     }
   }
 

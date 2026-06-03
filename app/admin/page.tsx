@@ -47,11 +47,12 @@ export default function AdminDashboard() {
   const reloadApts = useCallback(async () => {
     const apts = await getAppointments({ date: today });
     setTodayApts(apts);
-    // Düet randevular için appointment_students yükle
+    // Tüm randevular için appointment_students yükle (düet gösterimi + tamamla modal için)
     const map: Record<string, AppointmentStudent[]> = {};
     await Promise.all(
-      apts.filter(a => a.lessonType !== "bireysel" || a.status === "onaylandi").map(async a => {
-        map[a.id] = await getAppointmentStudents(a.id);
+      apts.map(async a => {
+        const apSt = await getAppointmentStudents(a.id);
+        if (apSt.length > 0) map[a.id] = apSt;
       })
     );
     setAptStudents(map);
@@ -67,18 +68,25 @@ export default function AdminDashboard() {
 
   /* ── Tamamla butonuna basıldı ─────────────────────────────── */
   const handleCompleteClick = async (apt: Appointment) => {
-    // appointment_students yükle
-    let apStudents = aptStudents[apt.id] ?? [];
-    if (apStudents.length === 0) {
-      apStudents = await getAppointmentStudents(apt.id);
+    // Önce DB'den taze yükle
+    let apStudents = await getAppointmentStudents(apt.id);
+
+    // appointment_students boşsa bireysel fallback: sadece oluşturan öğrenci
+    if (apStudents.length === 0 && apt.studentId) {
+      apStudents = [{
+        id: "", appointmentId: apt.id, studentId: apt.studentId,
+        studentName: apt.studentName,
+        role: "creator", inviteStatus: "accepted",
+        attendanceStatus: "pending", lessonDeducted: false, createdAt: "",
+      }];
     }
-    // Katılım başlangıç: hepsi "Geldi" (true)
+
+    // Katılım başlangıcı: accepted olanlar Geldi, pending/declined Gelmedi
     const init: Record<string, boolean> = {};
-    if (apStudents.length > 0) {
-      apStudents.forEach(s => { init[s.studentId] = true; });
-    } else if (apt.studentId) {
-      init[apt.studentId] = true;
-    }
+    apStudents.forEach(s => {
+      init[s.studentId] = s.inviteStatus === "accepted";
+    });
+
     setAttendances(init);
     setAptStudents(prev => ({ ...prev, [apt.id]: apStudents }));
     setAttendModal(apt);
@@ -92,14 +100,18 @@ export default function AdminDashboard() {
     try {
       const entries = Object.entries(attendances).map(([studentId, attended]) => ({ studentId, attended }));
       const result = await completeAppointmentWithAttendance(attendModal.id, entries);
+      await reloadApts();
       if (result.warnings.length > 0) {
         setAttendWarnings(result.warnings);
-        // Uyarı varsa modalı açık bırak göster
+        // Uyarıları göster ama 2s sonra devam et
+        setTimeout(() => {
+          setAttendModal(null);
+          setNoteModal(attendModal);
+        }, 2000);
       } else {
         setAttendModal(null);
         setNoteModal(attendModal);
       }
-      await reloadApts();
     } catch (err) {
       alert("Hata: " + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -215,8 +227,16 @@ export default function AdminDashboard() {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                        {apt.studentCode} · {apt.startTime}–{apt.endTime}
+                      <div className="flex items-center gap-2 text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        <span>{apt.studentCode} · {apt.startTime}–{apt.endTime}</span>
+                        {/* Düet partner davet durumu */}
+                        {apt.lessonType === "duet" && aptStudents[apt.id] && (() => {
+                          const pending  = (aptStudents[apt.id] ?? []).filter(s => s.inviteStatus === "pending").length;
+                          const declined = (aptStudents[apt.id] ?? []).filter(s => s.inviteStatus === "declined").length;
+                          if (pending > 0)  return <span className="text-yellow-500">· {pending} bekliyor</span>;
+                          if (declined > 0) return <span className="text-red-400">· {declined} reddetti</span>;
+                          return <span className="text-green-400">· tümü onayladı</span>;
+                        })()}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
