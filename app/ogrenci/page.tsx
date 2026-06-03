@@ -17,8 +17,8 @@ import Link from "next/link";
 import { format, parseISO, isFuture } from "date-fns";
 import { tr } from "date-fns/locale";
 
-const stagger = { animate: { transition: { staggerChildren: 0.06 } } };
-const fadeUp  = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } };
+const stagger = { animate: { transition: { staggerChildren: 0.05 } } };
+const fadeUp  = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" as const } } };
 
 export default function OgrenciDashboard() {
   const { student } = useAuth();

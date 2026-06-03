@@ -1,5 +1,5 @@
 "use client";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from "react";
 import Link from "next/link";
 
@@ -12,6 +12,7 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({ variant = "primary", size = "md", loading, children, className = "", ...props }: BtnProps) {
+  const reduced = useReducedMotion();
   const base = "inline-flex items-center justify-center gap-2 font-semibold tracking-widest uppercase transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed";
   const sizes = { sm: "px-4 py-2 text-xs", md: "px-6 py-3 text-sm", lg: "px-8 py-4 text-base" };
   const variants = {
@@ -23,7 +24,7 @@ export function Button({ variant = "primary", size = "md", loading, children, cl
   };
   return (
     <motion.button
-      whileTap={{ scale: 0.97 }}
+      whileTap={!reduced ? { scale: 0.97 } : undefined}
       className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
       disabled={loading || props.disabled}
       {...(props as Parameters<typeof motion.button>[0])}
@@ -64,6 +65,7 @@ interface StatCardProps {
   onClick?: () => void; // veya tıklama aksiyonu
 }
 export function StatCard({ label, value, sub, color = "white", icon, href, onClick }: StatCardProps) {
+  const reduced = useReducedMotion();
   const colorMap = {
     red:   { text: "#dc2626", glow: "rgba(220,38,38,0.18)", border: "rgba(220,38,38,0.25)" },
     gold:  { text: "#f59e0b", glow: "rgba(217,119,6,0.15)",  border: "rgba(217,119,6,0.22)"  },
@@ -75,11 +77,11 @@ export function StatCard({ label, value, sub, color = "white", icon, href, onCli
 
   const inner = (
     <motion.div
-      whileHover={isClickable ? { y: -3, scale: 1.02 } : undefined}
-      whileTap={isClickable ? { scale: 0.97 } : undefined}
-      initial={{ opacity: 0, y: 16 }}
+      whileHover={isClickable && !reduced ? { y: -3, scale: 1.02 } : undefined}
+      whileTap={isClickable && !reduced ? { scale: 0.97 } : undefined}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
       className="relative overflow-hidden"
       style={{
         background: "rgba(15,15,22,0.95)",
@@ -90,13 +92,12 @@ export function StatCard({ label, value, sub, color = "white", icon, href, onCli
         minHeight: 88, // touch alanı
         cursor: isClickable ? "pointer" : "default",
       }}
-      onMouseEnter={e => {
-        if (!isClickable) return;
+      onMouseEnter={!reduced && isClickable ? e => {
         e.currentTarget.style.boxShadow = `0 0 24px ${c.glow}`;
-      }}
-      onMouseLeave={e => {
+      } : undefined}
+      onMouseLeave={!reduced && isClickable ? e => {
         e.currentTarget.style.boxShadow = "none";
-      }}
+      } : undefined}
     >
       {/* Üst vurgu çizgisi */}
       <div className="absolute top-0 left-0 right-0 h-px"

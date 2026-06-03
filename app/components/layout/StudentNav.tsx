@@ -86,7 +86,7 @@ export default function StudentNav() {
 
       {/* Mobile header — safe area uyumlu */}
       <header
-        className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/97 backdrop-blur-xl border-b border-white/6 flex items-end justify-between px-5"
+        className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/98 backdrop-blur-md border-b border-white/6 flex items-end justify-between px-5"
         style={{
           paddingTop:    "calc(env(safe-area-inset-top, 0px) + 10px)",
           paddingBottom: "12px",

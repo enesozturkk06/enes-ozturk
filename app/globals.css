@@ -113,6 +113,44 @@
   .text-gradient-gold { background:linear-gradient(90deg,#8B5CF6,#D946EF,#8B5CF6); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:shimmer-violet 3s linear infinite; }
 }
 
+/* ── Mobile performance ────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Backdrop blur: mobilde en pahalı CSS özelliği — küçült */
+  .glass        { backdrop-filter: blur(6px);  -webkit-backdrop-filter: blur(6px); }
+  .glass-strong { backdrop-filter: blur(8px);  -webkit-backdrop-filter: blur(8px); }
+  .glass-dark   { backdrop-filter: blur(5px);  -webkit-backdrop-filter: blur(5px); }
+  .glass-card   { backdrop-filter: blur(6px);  -webkit-backdrop-filter: blur(6px); }
+
+  /* Shimmer animasyonu: her frame GPU paint — mobilde kapat */
+  .text-gradient-violet,
+  .text-gradient-gold { animation: none; }
+
+  /* Glow shadow'ları hafiflet */
+  .glow-violet  { box-shadow: 0 0 10px rgba(139,92,246,0.3); }
+  .glow-magenta { box-shadow: 0 0 10px rgba(217,70,239,0.25); }
+  .glow-ring    { box-shadow: 0 0 0 1px rgba(139,92,246,0.3); }
+
+  /* Float animasyonlarını yavaşlat */
+  .animate-float-slow   { animation-duration: 10s; }
+  .animate-float-medium { animation-duration: 7s; }
+  .animate-neon-pulse   { animation-duration: 5s; }
+
+  /* Scroll sırasında smooth kalması için */
+  * { -webkit-overflow-scrolling: touch; }
+}
+
+/* ── Reduced motion (sistem tercihi) ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration:       0.01ms !important;
+    animation-iteration-count: 1     !important;
+    transition-duration:       0.01ms !important;
+    scroll-behavior:           auto   !important;
+  }
+}
+
 /* ── Base ──────────────────────────────────────────────────── */
 html { scroll-behavior: smooth; }
 
