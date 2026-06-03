@@ -66,7 +66,7 @@ export default function TakvimPage() {
         studentId: std.id, studentName: std.fullName,
         studentCode: std.code, studentPhone: std.phone,
         date: selectedDate, startTime: aptTime, endTime: slotEnd,
-        lessonType: aptType, secondStudentIds: secondIds,
+        lessonType: aptType, partnerStudentIds: secondIds,
       });
       setAptPanel(false);
       setAptStudent(""); setAptStudent2(""); setAptTime(""); setAptType("bireysel");

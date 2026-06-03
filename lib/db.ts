@@ -1,14 +1,15 @@
 /**
  * lib/db.ts — Supabase veri katmanı
+ * Düet davet sistemi: creator/partner, invite_status, attendance
  */
 import type {
   Student, Appointment, AppointmentStudent, LessonRecord,
   Notification, TimeSlot, Payment, CompleteResult, LessonType,
-  DuetPartner, AttendanceStatus,
+  DuetPartner, PendingInvite,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
-/* ── Hata yönetimi ─────────────────────────────────────────────── */
+/* ── Hata yönetimi ─────────────────────────────────────────── */
 function fail(fn: string, e: { message: string; details?: string }): never {
   const msg = `[${fn}] ${e.message}${e.details ? " | " + e.details : ""}`;
   console.error("⛔ Supabase:", msg);
@@ -19,7 +20,7 @@ function db() {
   return supabase!;
 }
 
-/* ── Row mappers ────────────────────────────────────────────────── */
+/* ── Row mappers ────────────────────────────────────────────── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ms = (r: any): Student => ({
   id: r.id, code: r.code, fullName: r.full_name, phone: r.phone,
@@ -38,8 +39,9 @@ const ms = (r: any): Student => ({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ma = (r: any): Appointment => ({
-  id: r.id, studentId: r.student_id ?? "", studentName: r.student_name ?? "",
-  studentCode: r.student_code ?? "", studentPhone: r.student_phone ?? "",
+  id: r.id, studentId: r.student_id ?? "",
+  studentName: r.student_name ?? "", studentCode: r.student_code ?? "",
+  studentPhone: r.student_phone ?? "",
   date: r.date, startTime: r.start_time, endTime: r.end_time, status: r.status,
   lessonType: (r.lesson_type ?? "bireysel") as LessonType,
   cancelledAt: r.cancelled_at ?? undefined, completedAt: r.completed_at ?? undefined,
@@ -52,7 +54,9 @@ const mApSt = (r: any): AppointmentStudent => ({
   appointmentId:    r.appointment_id,
   studentId:        r.student_id,
   studentName:      r.students?.full_name ?? r.student_name ?? undefined,
-  attendanceStatus: (r.attendance_status ?? "pending") as AttendanceStatus,
+  role:             (r.role ?? "creator") as AppointmentStudent["role"],
+  inviteStatus:     (r.invite_status ?? "accepted") as AppointmentStudent["inviteStatus"],
+  attendanceStatus: (r.attendance_status ?? "pending") as AppointmentStudent["attendanceStatus"],
   lessonDeducted:   r.lesson_deducted ?? false,
   createdAt:        r.created_at ?? "",
 });
@@ -65,12 +69,14 @@ const ml = (r: any): LessonRecord => ({
   overall: r.overall ?? 5, trainerNotes: r.trainer_notes ?? "",
   durationMinutes: r.duration_minutes ?? 60, createdAt: r.created_at ?? "",
 });
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mp = (r: any): Payment => ({
   id: r.id, studentId: r.student_id, studentName: r.student_name,
   amount: Number(r.amount), paidAt: r.paid_at, method: r.method ?? "nakit",
   notes: r.notes ?? undefined,
 });
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mn = (r: any): Notification => ({
   id: r.id, studentId: r.student_id ?? undefined, title: r.title, message: r.message,
@@ -79,24 +85,24 @@ const mn = (r: any): Notification => ({
 
 function sRow(s: Partial<Student>): Record<string, unknown> {
   const r: Record<string, unknown> = {};
-  if (s.code              !== undefined) r.code               = s.code;
-  if (s.fullName          !== undefined) r.full_name          = s.fullName;
-  if (s.phone             !== undefined) r.phone              = s.phone;
-  if (s.email             !== undefined) r.email              = s.email;
-  if (s.level             !== undefined) r.level              = s.level;
-  if (s.packageType       !== undefined) r.package_type       = s.packageType;
-  if (s.totalLessons      !== undefined) r.total_lessons      = s.totalLessons;
-  if (s.remainingLessons  !== undefined) r.remaining_lessons  = s.remainingLessons;
-  if (s.completedLessons  !== undefined) r.completed_lessons  = s.completedLessons;
-  if (s.paymentStatus     !== undefined) r.payment_status     = s.paymentStatus;
-  if (s.amountPaid        !== undefined) r.amount_paid        = s.amountPaid;
-  if (s.amountDue         !== undefined) r.amount_due         = s.amountDue;
-  if (s.packageStartDate  !== undefined) r.package_start_date = s.packageStartDate || null;
-  if (s.packageEndDate    !== undefined) r.package_end_date   = s.packageEndDate || null;
-  if (s.notes             !== undefined) r.notes              = s.notes;
-  if (s.isActive          !== undefined) r.is_active          = s.isActive;
-  if (s.weight            !== undefined) r.weight             = s.weight;
-  if (s.age               !== undefined) r.age                = s.age;
+  if (s.code             !== undefined) r.code               = s.code;
+  if (s.fullName         !== undefined) r.full_name          = s.fullName;
+  if (s.phone            !== undefined) r.phone              = s.phone;
+  if (s.email            !== undefined) r.email              = s.email;
+  if (s.level            !== undefined) r.level              = s.level;
+  if (s.packageType      !== undefined) r.package_type       = s.packageType;
+  if (s.totalLessons     !== undefined) r.total_lessons      = s.totalLessons;
+  if (s.remainingLessons !== undefined) r.remaining_lessons  = s.remainingLessons;
+  if (s.completedLessons !== undefined) r.completed_lessons  = s.completedLessons;
+  if (s.paymentStatus    !== undefined) r.payment_status     = s.paymentStatus;
+  if (s.amountPaid       !== undefined) r.amount_paid        = s.amountPaid;
+  if (s.amountDue        !== undefined) r.amount_due         = s.amountDue;
+  if (s.packageStartDate !== undefined) r.package_start_date = s.packageStartDate || null;
+  if (s.packageEndDate   !== undefined) r.package_end_date   = s.packageEndDate || null;
+  if (s.notes            !== undefined) r.notes              = s.notes;
+  if (s.isActive         !== undefined) r.is_active          = s.isActive;
+  if (s.weight           !== undefined) r.weight             = s.weight;
+  if (s.age              !== undefined) r.age                = s.age;
   return r;
 }
 
@@ -110,9 +116,9 @@ async function trySetPackageFields(id: string, packageId?: string, customPrice?:
   } catch { /* kolon henüz yoksa sessizce geç */ }
 }
 
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    STUDENTS
-   ════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 export async function getStudents(): Promise<Student[]> {
   const { data, error } = await db().from("students").select("*").order("full_name");
@@ -149,11 +155,10 @@ export async function deleteStudent(id: string): Promise<void> {
   if (error) fail("deleteStudent", error);
 }
 
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    DUET PARTNERS
-   ════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
-/** Öğrencinin düet partnerini getir (tek partner — iki yönlü) */
 export async function getDuetPartner(studentId: string): Promise<Student | null> {
   const { data, error } = await db()
     .from("duet_partners")
@@ -166,7 +171,6 @@ export async function getDuetPartner(studentId: string): Promise<Student | null>
   return getStudent(partnerId);
 }
 
-/** Tüm düet çiftlerini getir (admin için) */
 export async function getAllDuetPairs(): Promise<DuetPartner[]> {
   const { data, error } = await db()
     .from("duet_partners").select("*").order("created_at", { ascending: false });
@@ -176,28 +180,25 @@ export async function getAllDuetPairs(): Promise<DuetPartner[]> {
   }));
 }
 
-/** Düet partneri ata */
 export async function setDuetPartner(aId: string, bId: string): Promise<void> {
   // Önce ikisinin mevcut partnerlerini temizle
   await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${aId},student_b_id.eq.${aId}`);
   await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${bId},student_b_id.eq.${bId}`);
-  // Yeni çift ekle
   const { error } = await db().from("duet_partners").insert({ student_a_id: aId, student_b_id: bId });
   if (error) fail("setDuetPartner", error);
 }
 
-/** Düet partnerliğini kaldır */
 export async function removeDuetPartner(studentId: string): Promise<void> {
   const { error } = await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${studentId},student_b_id.eq.${studentId}`);
   if (error) fail("removeDuetPartner", error);
 }
 
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    APPOINTMENTS
-   ════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 export async function getAppointments(filters?: {
   studentId?: string; date?: string; status?: string;
@@ -211,16 +212,24 @@ export async function getAppointments(filters?: {
   return (data ?? []).map(ma);
 }
 
-/** Öğrencinin tüm randevuları — düet dahil */
+/**
+ * Öğrenciye ait tüm randevular:
+ * - Kendi oluşturduğu (student_id)
+ * - Düet daveti kabul ettiği (appointment_students → invite_status != declined)
+ */
 export async function getStudentAppointments(studentId: string): Promise<Appointment[]> {
   const { data: direct, error: e1 } = await db()
     .from("appointments").select("*")
     .eq("student_id", studentId).order("date").order("start_time");
   if (e1) fail("getStudentAppointments:direct", e1);
 
-  // appointment_students üzerinden katıldığı randevular
+  // Kabul edilen (accepted) düet davetlerinden randevular
   const { data: joined } = await db()
-    .from("appointment_students").select("appointment_id").eq("student_id", studentId);
+    .from("appointment_students")
+    .select("appointment_id")
+    .eq("student_id", studentId)
+    .eq("invite_status", "accepted")
+    .neq("role", "creator"); // creator olanları zaten direct'te var
 
   const joinedIds = (joined ?? []).map((r: {appointment_id: string}) => r.appointment_id);
   const directIds = (direct ?? []).map(r => r.id);
@@ -236,6 +245,7 @@ export async function getStudentAppointments(studentId: string): Promise<Appoint
     .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 }
 
+/** Randevuya bağlı tüm öğrenciler (rol + davet durumu dahil) */
 export async function getAppointmentStudents(appointmentId: string): Promise<AppointmentStudent[]> {
   const { data, error } = await db()
     .from("appointment_students")
@@ -245,26 +255,94 @@ export async function getAppointmentStudents(appointmentId: string): Promise<App
   return (data ?? []).map(mApSt);
 }
 
+/**
+ * Bekleyen davetler — öğrenci panelinde gösterilecek
+ * invite_status = 'pending' olan kayıtlar
+ */
+export async function getPendingInvites(studentId: string): Promise<PendingInvite[]> {
+  const { data, error } = await db()
+    .from("appointment_students")
+    .select("id, appointment_id, appointments(date, start_time, end_time, lesson_type, student_name)")
+    .eq("student_id", studentId)
+    .eq("invite_status", "pending")
+    .eq("role", "partner");
+
+  if (error) { console.warn("getPendingInvites:", error.message); return []; }
+
+  return (data ?? []).map((r: {
+    id: string;
+    appointment_id: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    appointments: any;
+  }) => ({
+    appointmentId:       r.appointment_id,
+    appointmentStudentId: r.id,
+    creatorName:         r.appointments?.student_name ?? "?",
+    date:                r.appointments?.date ?? "",
+    startTime:           r.appointments?.start_time ?? "",
+    endTime:             r.appointments?.end_time ?? "",
+    lessonType:          (r.appointments?.lesson_type ?? "duet") as LessonType,
+  }));
+}
+
+/**
+ * Düet davetini onayla veya reddet
+ * Onaylamadan önce: öğrencinin kalan dersi > 0 kontrolü
+ */
+export async function respondToInvite(
+  appointmentStudentId: string,
+  studentId: string,
+  accept: boolean
+): Promise<{ success: boolean; error?: string }> {
+  if (accept) {
+    // Kalan ders kontrolü
+    const { data: std } = await db()
+      .from("students").select("remaining_lessons, full_name").eq("id", studentId).single();
+    if (!std || Number(std.remaining_lessons ?? 0) <= 0) {
+      return { success: false, error: "Kalan dersiniz yok. Düet randevusunu onaylayamazsınız." };
+    }
+  }
+
+  const { error } = await db()
+    .from("appointment_students")
+    .update({ invite_status: accept ? "accepted" : "declined" })
+    .eq("id", appointmentStudentId)
+    .eq("student_id", studentId); // güvenlik: kendi kaydını güncelleyebilir
+
+  if (error) { console.error("respondToInvite:", error.message); return { success: false, error: error.message }; }
+  return { success: true };
+}
+
+/** Randevu oluştur (creator + partner davetleri) */
 export async function createAppointment(apt: {
   studentId: string; studentName: string; studentCode: string; studentPhone?: string;
   date: string; startTime: string; endTime: string;
   lessonType?: LessonType; notes?: string; status?: string;
-  secondStudentIds?: string[];
+  partnerStudentIds?: string[]; // düet partnerleri — pending olarak eklenir
 }): Promise<Appointment> {
   const lessonType = apt.lessonType ?? "bireysel";
+
+  // Temel randevu insert
   const baseRow: Record<string, unknown> = {
-    student_id: apt.studentId, student_name: apt.studentName,
-    student_code: apt.studentCode, student_phone: apt.studentPhone ?? "",
-    date: apt.date, start_time: apt.startTime, end_time: apt.endTime,
-    status: apt.status ?? "onaylandi", notes: apt.notes ?? null,
+    student_id:    apt.studentId,
+    student_name:  apt.studentName,
+    student_code:  apt.studentCode,
+    student_phone: apt.studentPhone ?? "",
+    date:          apt.date,
+    start_time:    apt.startTime,
+    end_time:      apt.endTime,
+    status:        apt.status ?? "onaylandi",
+    notes:         apt.notes ?? null,
   };
 
-  // lesson_type ile dene, schema cache sorunu varsa fallback
-  let result = await db().from("appointments").insert({ ...baseRow, lesson_type: lessonType }).select().single();
+  // lesson_type schema cache sorunu için fallback
+  let result = await db().from("appointments")
+    .insert({ ...baseRow, lesson_type: lessonType }).select().single();
+
   if (result.error) {
     const msg = result.error.message ?? "";
     if (msg.includes("lesson_type") || msg.includes("schema cache")) {
-      console.warn("[createAppointment] lesson_type schema cache sorunu, fallback ile deneniyor");
+      console.warn("[createAppointment] lesson_type schema sorunu, fallback");
       const r2 = await db().from("appointments").insert(baseRow).select().single();
       if (r2.error) fail("createAppointment:fallback", r2.error);
       result = r2;
@@ -276,21 +354,38 @@ export async function createAppointment(apt: {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = (result as any).data;
-  const appointmentId = data.id;
+  const aptData = (result as any).data;
+  const appointmentId = aptData.id;
 
-  // appointment_students — tüm katılımcılar
-  const allStudents = [apt.studentId, ...(apt.secondStudentIds ?? [])].filter(Boolean);
-  if (allStudents.length > 0) {
-    const rows = allStudents.map(sid => ({
-      appointment_id: appointmentId, student_id: sid,
-      attendance_status: "pending", lesson_deducted: false,
-    }));
+  // appointment_students: creator (accepted) + partnerler (pending)
+  const rows: Record<string, unknown>[] = [
+    {
+      appointment_id:   appointmentId,
+      student_id:       apt.studentId,
+      role:             "creator",
+      invite_status:    "accepted",
+      attendance_status:"pending",
+      lesson_deducted:  false,
+    },
+  ];
+
+  for (const partnerId of (apt.partnerStudentIds ?? [])) {
+    rows.push({
+      appointment_id:   appointmentId,
+      student_id:       partnerId,
+      role:             "partner",
+      invite_status:    "pending",
+      attendance_status:"pending",
+      lesson_deducted:  false,
+    });
+  }
+
+  if (rows.length > 0) {
     const { error: e2 } = await db().from("appointment_students").insert(rows);
     if (e2) console.warn("[createAppointment] appointment_students:", e2.message);
   }
 
-  return ma(data);
+  return ma(aptData);
 }
 
 export async function updateAppointment(id: string, updates: Partial<Appointment>): Promise<void> {
@@ -308,9 +403,11 @@ export async function cancelAppointment(id: string): Promise<void> {
 }
 
 /**
- * Katılım bilgisiyle tamamla (Geldi/Gelmedi modalından çağrılır)
- * attendances: [{studentId, attended}]
- * Sadece attended=true olan öğrencilerden ders düşer.
+ * Randevuyu katılım bilgisiyle tamamla.
+ * Ders düşme kuralı:
+ *   invite_status = 'accepted' VE attendance = 'attended' ise düş
+ *   invite_status = 'pending' veya 'declined' ise düşme
+ *   lesson_deducted = true ise tekrar düşme (çift koruma)
  */
 export async function completeAppointmentWithAttendance(
   id: string,
@@ -319,86 +416,100 @@ export async function completeAppointmentWithAttendance(
   const today = new Date().toISOString().split("T")[0];
   const warnings: string[] = [];
 
-  // 1. Randevuyu tamamlandı yap
+  // Randevuyu tamamlandı yap
   const { error: e1 } = await db()
     .from("appointments")
     .update({ status: "tamamlandi", completed_at: today })
     .eq("id", id);
   if (e1) fail("completeAppointment:update", e1);
 
-  // 2. Her katılımcı için işlem
-  for (const { studentId, attended } of attendances) {
-    const newStatus: string = attended ? "attended" : "absent";
+  // appointment_students kayıtlarını al
+  const { data: apStudents } = await db()
+    .from("appointment_students")
+    .select("id, student_id, role, invite_status, lesson_deducted")
+    .eq("appointment_id", id);
 
-    // Mevcut appointment_students kaydını bul
-    const { data: existing } = await db()
-      .from("appointment_students")
-      .select("id, lesson_deducted")
-      .eq("appointment_id", id)
-      .eq("student_id", studentId)
-      .maybeSingle();
+  const rows = apStudents ?? [];
 
-    if (existing?.lesson_deducted) {
-      // Zaten tamamlanmış — çift düşme koruması
-      continue;
+  // Fallback: tablo boşsa ana student_id'yi kullan
+  if (rows.length === 0) {
+    const { data: apt } = await db().from("appointments").select("student_id").eq("id", id).single();
+    if (apt?.student_id) {
+      rows.push({ id: "", student_id: apt.student_id, role: "creator", invite_status: "accepted", lesson_deducted: false });
     }
+  }
 
-    if (attended) {
-      // Ders düş
-      const { data: std, error: e2 } = await db()
+  for (const { studentId, attended } of attendances) {
+    const row = rows.find(r => r.student_id === studentId);
+
+    // İkinci kez tamamlama koruması
+    if (row?.lesson_deducted) continue;
+
+    // Sadece accepted olanlar ders düşer
+    const isAccepted = !row || row.invite_status === "accepted" || row.invite_status === null;
+
+    const newStatus = attended ? "attended" : "absent";
+
+    if (attended && isAccepted) {
+      const { data: std } = await db()
         .from("students")
         .select("full_name, remaining_lessons, completed_lessons")
-        .eq("id", studentId)
-        .single();
-      if (e2 || !std) { warnings.push(`Öğrenci bulunamadı (${studentId})`); continue; }
+        .eq("id", studentId).single();
 
-      const remaining = Number(std.remaining_lessons ?? 0);
-      if (remaining <= 0) {
-        warnings.push(`⚠️ ${std.full_name} adlı öğrencinin kalan dersi yok — ders düşülmedi.`);
-      } else {
-        await db().from("students").update({
-          remaining_lessons: remaining - 1,
-          completed_lessons: Number(std.completed_lessons ?? 0) + 1,
-        }).eq("id", studentId);
+      if (!std) { warnings.push(`Öğrenci bulunamadı (${studentId})`); }
+      else {
+        const remaining = Number(std.remaining_lessons ?? 0);
+        if (remaining <= 0) {
+          warnings.push(`⚠️ ${std.full_name} adlı öğrencinin kalan dersi yok.`);
+        } else {
+          await db().from("students").update({
+            remaining_lessons: remaining - 1,
+            completed_lessons: Number(std.completed_lessons ?? 0) + 1,
+          }).eq("id", studentId);
+        }
       }
     }
 
     // attendance_status + lesson_deducted güncelle
+    const shouldDeduct = attended && isAccepted;
     try {
-      if (existing?.id) {
+      if (row?.id) {
         await db().from("appointment_students").update({
           attendance_status: newStatus,
-          lesson_deducted: attended,
-        }).eq("id", existing.id);
+          lesson_deducted: shouldDeduct,
+        }).eq("id", row.id);
       } else {
         await db().from("appointment_students").upsert({
           appointment_id: id, student_id: studentId,
-          attendance_status: newStatus, lesson_deducted: attended,
+          role: "creator", invite_status: "accepted",
+          attendance_status: newStatus, lesson_deducted: shouldDeduct,
         }, { onConflict: "appointment_id,student_id" });
       }
-    } catch { /* appointment_students tablosu yoksa sessizce geç */ }
+    } catch { /* tablo yoksa sessizce geç */ }
   }
 
   return { success: true, warnings };
 }
 
-/** Geriye dönük uyumluluk — Attendance bilgisi yoksa hepsini "attended" say */
+/** Geriye dönük uyumluluk */
 export async function completeAppointment(id: string): Promise<CompleteResult> {
   const students = await getAppointmentStudents(id);
   if (students.length === 0) {
-    // appointment_students boşsa — ana student_id'yi kullan
     const { data: apt } = await db().from("appointments").select("student_id").eq("id", id).single();
     if (apt?.student_id) {
       return completeAppointmentWithAttendance(id, [{ studentId: apt.student_id, attended: true }]);
     }
   }
-  const attendances = students.map(s => ({ studentId: s.studentId, attended: true }));
-  return completeAppointmentWithAttendance(id, attendances);
+  // Sadece accepted olanları al
+  const entries = students
+    .filter(s => s.inviteStatus === "accepted")
+    .map(s => ({ studentId: s.studentId, attended: true }));
+  return completeAppointmentWithAttendance(id, entries.length > 0 ? entries : []);
 }
 
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    TIME SLOTS
-   ════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 export async function getTimeSlots(date: string): Promise<TimeSlot[]> {
   const { getSlotsForDate } = await import("./slots");
@@ -414,9 +525,9 @@ export async function getTimeSlots(date: string): Promise<TimeSlot[]> {
   }));
 }
 
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    LESSON RECORDS
-   ════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 export async function getLessonRecords(studentId?: string): Promise<LessonRecord[]> {
   let q = db().from("lesson_records").select("*").order("date", { ascending: false });
@@ -425,20 +536,23 @@ export async function getLessonRecords(studentId?: string): Promise<LessonRecord
   if (error) fail("getLessonRecords", error);
   return (data ?? []).map(ml);
 }
+
 export async function createLessonRecord(record: Omit<LessonRecord, "id" | "createdAt">): Promise<LessonRecord> {
   const { data, error } = await db().from("lesson_records").insert({
-    appointment_id: record.appointmentId || null, student_id: record.studentId, date: record.date,
-    conditioning: record.conditioning, punch: record.punch, kick: record.kick,
-    defense: record.defense, combination: record.combination, sparring: record.sparring,
-    overall: record.overall, trainer_notes: record.trainerNotes, duration_minutes: record.durationMinutes,
+    appointment_id:   record.appointmentId || null,
+    student_id:       record.studentId, date: record.date,
+    conditioning:     record.conditioning, punch: record.punch, kick: record.kick,
+    defense:          record.defense, combination: record.combination, sparring: record.sparring,
+    overall:          record.overall, trainer_notes: record.trainerNotes,
+    duration_minutes: record.durationMinutes,
   }).select().single();
   if (error) fail("createLessonRecord", error);
   return ml(data);
 }
 
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    NOTIFICATIONS
-   ════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 export async function getStudentNotifications(studentId: string): Promise<Notification[]> {
   const { data, error } = await db()
@@ -447,6 +561,7 @@ export async function getStudentNotifications(studentId: string): Promise<Notifi
   if (error) fail("getStudentNotifications", error);
   return (data ?? []).map(mn);
 }
+
 export async function getAdminNotifications(): Promise<Notification[]> {
   const { data, error } = await db()
     .from("notifications").select("*").is("student_id", null)
@@ -454,19 +569,21 @@ export async function getAdminNotifications(): Promise<Notification[]> {
   if (error) { console.error("getAdminNotifications:", error.message); return []; }
   return (data ?? []).map(mn);
 }
+
 export async function markNotificationRead(id: string): Promise<void> {
   await db().from("notifications").update({ is_read: true }).eq("id", id);
 }
 
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    PAYMENTS
-   ════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 
 export async function getPayments(): Promise<Payment[]> {
   const { data, error } = await db().from("payments").select("*").order("paid_at", { ascending: false });
   if (error) fail("getPayments", error);
   return (data ?? []).map(mp);
 }
+
 export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment> {
   const { data, error } = await db().from("payments").insert({
     student_id: payment.studentId, student_name: payment.studentName,
@@ -484,6 +601,7 @@ export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment>
   }
   return mp(data);
 }
+
 export async function deletePayment(id: string): Promise<void> {
   const { data: pay, error: e1 } = await db().from("payments").select("student_id, amount").eq("id", id).single();
   if (e1) fail("deletePayment:get", e1);

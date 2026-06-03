@@ -1,10 +1,12 @@
-export type PackageType    = "savasci" | "sampiyon" | "efsane";
-export type PaymentStatus  = "odendi" | "kismi" | "beklemede";
-export type AppointmentStatus = "onaylandi" | "iptal" | "tamamlandi" | "gelmedi";
-export type LessonType     = "bireysel" | "duet" | "grup";
+export type PackageType      = "savasci" | "sampiyon" | "efsane";
+export type PaymentStatus    = "odendi" | "kismi" | "beklemede";
+export type AppointmentStatus= "onaylandi" | "iptal" | "tamamlandi" | "gelmedi";
+export type LessonType       = "bireysel" | "duet" | "grup";
 export type AttendanceStatus = "pending" | "attended" | "absent";
-export type NotifType      = "info" | "warning" | "success" | "reminder";
-export type UserRole       = "student" | "admin";
+export type InviteStatus     = "pending" | "accepted" | "declined";
+export type ParticipantRole  = "creator" | "partner";
+export type NotifType        = "info" | "warning" | "success" | "reminder";
+export type UserRole         = "student" | "admin";
 
 export interface Student {
   id: string; code: string; fullName: string; phone: string; email?: string;
@@ -28,14 +30,30 @@ export interface Appointment {
   status: AppointmentStatus; lessonType: LessonType;
   cancelledAt?: string; completedAt?: string;
   notes?: string; createdAt: string;
-  partnerNames?: string[];
 }
 
+/** Bir randevuya bağlı öğrenci kaydı */
 export interface AppointmentStudent {
-  id: string; appointmentId: string; studentId: string;
+  id: string;
+  appointmentId: string;
+  studentId: string;
   studentName?: string;
-  attendanceStatus: AttendanceStatus;
-  lessonDeducted: boolean; createdAt: string;
+  role: ParticipantRole;          // creator | partner
+  inviteStatus: InviteStatus;     // pending | accepted | declined
+  attendanceStatus: AttendanceStatus; // pending | attended | absent
+  lessonDeducted: boolean;
+  createdAt: string;
+}
+
+/** Bekleyen davet — öğrenci panelinde gösterilir */
+export interface PendingInvite {
+  appointmentId: string;
+  appointmentStudentId: string;
+  creatorName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  lessonType: LessonType;
 }
 
 export interface DuetPartner {

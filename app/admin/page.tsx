@@ -294,34 +294,67 @@ export default function AdminDashboard() {
               Sadece "Geldi" seçilen öğrencilerden ders düşülür.
             </p>
 
-            {/* Öğrenci listesi */}
+            {/* Öğrenci listesi — invite_status gösterimli */}
             <div className="space-y-2">
               {Object.entries(attendances).map(([studentId, attended]) => {
-                const std = students.find(s => s.id === studentId);
-                const apSt = (aptStudents[attendModal.id] ?? []).find(s => s.studentId === studentId);
-                const name = std?.fullName ?? apSt?.studentName ?? studentId;
+                const std   = students.find(s => s.id === studentId);
+                const apSt  = (aptStudents[attendModal.id] ?? []).find(s => s.studentId === studentId);
+                const name  = std?.fullName ?? apSt?.studentName ?? studentId;
+                const role  = apSt?.role ?? "creator";
+                const invite= apSt?.inviteStatus ?? "accepted";
+
+                const inviteLabel: Record<string, { label: string; color: string }> = {
+                  accepted: { label: "Onayladı",  color: "#22c55e" },
+                  pending:  { label: "Bekliyor",  color: "#d97706" },
+                  declined: { label: "Reddetti",  color: "#ef4444" },
+                };
+                const invInfo = inviteLabel[invite] ?? inviteLabel.accepted;
+
+                // Reddeden veya bekleyen öğrenciden ders düşmez — disabled
+                const canDeduct = invite === "accepted";
+
                 return (
-                  <div key={studentId} className="flex items-center justify-between p-3 bg-steel/30 border border-white/5">
-                    <div>
-                      <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{name}</div>
-                      <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                        {std?.remainingLessons ?? "?"} ders kaldı
+                  <div key={studentId} className="p-3 bg-steel/30 border border-white/5">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          {name}
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+                            {role === "creator" ? "Oluşturan" : "Partner"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs" style={{ color:invInfo.color, fontFamily:"var(--font-barlow-condensed)" }}>
+                            {invInfo.label}
+                          </span>
+                          <span className="text-[10px] text-white/25" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            · {std?.remainingLessons ?? "?"} ders kaldı
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setAttendances(p => ({ ...p, [studentId]: true }))}
-                        className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded transition-all ${attended ? "bg-green-600 text-white" : "border border-white/15 text-white/40 hover:border-green-600/40"}`}
-                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                        <UserCheck size={13}/>Geldi
-                      </button>
-                      <button
-                        onClick={() => setAttendances(p => ({ ...p, [studentId]: false }))}
-                        className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded transition-all ${!attended ? "bg-red-700 text-white" : "border border-white/15 text-white/40 hover:border-red-600/40"}`}
-                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                        <UserX size={13}/>Gelmedi
-                      </button>
-                    </div>
+
+                    {canDeduct ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setAttendances(p => ({ ...p, [studentId]: true }))}
+                          className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded transition-all ${attended ? "bg-green-600 text-white" : "border border-white/15 text-white/40 hover:border-green-600/40"}`}
+                          style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          <UserCheck size={13}/>Geldi
+                        </button>
+                        <button
+                          onClick={() => setAttendances(p => ({ ...p, [studentId]: false }))}
+                          className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded transition-all ${!attended ? "bg-red-700 text-white" : "border border-white/15 text-white/40 hover:border-red-600/40"}`}
+                          style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          <UserX size={13}/>Gelmedi
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs italic" style={{ color:"rgba(255,255,255,0.25)", fontFamily:"var(--font-barlow-condensed)" }}>
+                        {invite === "declined" ? "Reddetti — ders düşülmeyecek" : "Henüz onaylamadı — ders düşülmeyecek"}
+                      </p>
+                    )}
                   </div>
                 );
               })}
