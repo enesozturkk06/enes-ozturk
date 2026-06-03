@@ -175,29 +175,48 @@ export async function deleteStudent(id: string): Promise<void> {
    DUET PARTNERS
    ═══════════════════════════════════════════════════════════════ */
 
+/** Öğrencinin düet partnerini döndür — tablo yoksa null */
 export async function getDuetPartner(studentId: string): Promise<Student | null> {
-  const { data, error } = await db()
-    .from("duet_partners")
-    .select("student_a_id, student_b_id")
-    .or(`student_a_id.eq.${studentId},student_b_id.eq.${studentId}`)
-    .maybeSingle();
-  if (error) { console.warn("getDuetPartner:", error.message); return null; }
-  if (!data) return null;
-  const partnerId = data.student_a_id === studentId ? data.student_b_id : data.student_a_id;
-  return getStudent(partnerId);
+  try {
+    // Önce select("*") ile tablo erişilebilir mi kontrol et
+    const { data, error } = await db()
+      .from("duet_partners")
+      .select("*")
+      .or(`student_a_id.eq.${studentId},student_b_id.eq.${studentId}`)
+      .limit(1);
+
+    if (error) {
+      if (isSchemaError(error)) {
+        console.warn("getDuetPartner: duet_partners tablosu hazır değil (SUPABASE_FIX_NOW.sql çalıştırın)");
+        return null;
+      }
+      console.warn("getDuetPartner:", error.message);
+      return null;
+    }
+
+    if (!data || data.length === 0) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = data[0] as any;
+    const partnerId = row.student_a_id === studentId ? row.student_b_id : row.student_a_id;
+    return getStudent(partnerId);
+  } catch {
+    return null;
+  }
 }
 
 export async function getAllDuetPairs(): Promise<DuetPartner[]> {
-  const { data, error } = await db()
-    .from("duet_partners").select("*").order("created_at", { ascending: false });
-  if (error) { console.warn("getAllDuetPairs:", error.message); return []; }
-  return (data ?? []).map(r => ({
-    id: r.id, studentAId: r.student_a_id, studentBId: r.student_b_id, createdAt: r.created_at,
-  }));
+  try {
+    const { data, error } = await db().from("duet_partners").select("*");
+    if (error) { console.warn("getAllDuetPairs:", error.message); return []; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []).map((r: any) => ({
+      id: r.id, studentAId: r.student_a_id, studentBId: r.student_b_id, createdAt: r.created_at,
+    }));
+  } catch { return []; }
 }
 
 export async function setDuetPartner(aId: string, bId: string): Promise<void> {
-  // Önce ikisinin mevcut partnerlerini temizle
+  // Temizle
   const d1 = await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${aId},student_b_id.eq.${aId}`);
   if (d1.error && !isSchemaError(d1.error)) console.warn("setDuetPartner:del1", d1.error.message);
@@ -206,12 +225,18 @@ export async function setDuetPartner(aId: string, bId: string): Promise<void> {
     .or(`student_a_id.eq.${bId},student_b_id.eq.${bId}`);
   if (d2.error && !isSchemaError(d2.error)) console.warn("setDuetPartner:del2", d2.error.message);
 
-  const { error } = await db().from("duet_partners").insert({ student_a_id: aId, student_b_id: bId });
+  const { error } = await db().from("duet_partners")
+    .insert({ student_a_id: aId, student_b_id: bId });
+
   if (error) {
     if (isSchemaError(error)) {
       throw new Error(
-        "duet_partners tablosu henüz hazır değil.\n\n" +
-        "👉 Supabase Dashboard → SQL Editor'de SUPABASE_FIX_NOW.sql dosyasını çalıştırın."
+        "duet_partners tablosu Supabase schema cache'inde görünmüyor.\n\n" +
+        "Çözüm adımları:\n" +
+        "1. Supabase Dashboard → SQL Editor\n" +
+        "2. SUPABASE_FIX_NOW.sql dosyasındaki SQL'i çalıştırın\n" +
+        "3. Dashboard → Settings → API → 'Reload Schema Cache' butonuna basın\n" +
+        "4. 1 dakika bekleyip tekrar deneyin"
       );
     }
     fail("setDuetPartner", error);
@@ -222,6 +247,7 @@ export async function removeDuetPartner(studentId: string): Promise<void> {
   const { error } = await db().from("duet_partners").delete()
     .or(`student_a_id.eq.${studentId},student_b_id.eq.${studentId}`);
   if (error && !isSchemaError(error)) fail("removeDuetPartner", error);
+  // Schema hatası → sessizce devam et (tablo yoksa silecek bir şey de yok)
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -273,57 +299,101 @@ export async function getStudentAppointments(studentId: string): Promise<Appoint
     .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 }
 
-/** Randevuya bağlı tüm öğrenciler (rol + davet durumu dahil) */
+/** Randevuya bağlı tüm öğrenciler — schema cache hatasına karşı dayanıklı */
 export async function getAppointmentStudents(appointmentId: string): Promise<AppointmentStudent[]> {
+  // select("*") kullan — PostgREST'in kolon listesini bilmesine gerek yok
   const { data, error } = await db()
     .from("appointment_students")
-    .select("*, students(full_name)")
+    .select("*")
     .eq("appointment_id", appointmentId);
+
   if (error) {
     if (isSchemaError(error)) {
-      console.warn("getAppointmentStudents: schema cache → SUPABASE_FIX_NOW.sql çalıştırın");
-      return [];
+      console.warn("getAppointmentStudents: schema cache hazır değil → SUPABASE_FIX_NOW.sql çalıştırın");
+    } else {
+      console.warn("getAppointmentStudents:", error.message);
     }
-    console.warn("getAppointmentStudents:", error.message);
     return [];
   }
-  return (data ?? []).map(mApSt);
+
+  // Öğrenci adlarını ayrı sorguda çek (JOIN yerine)
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const withNames = await Promise.all(rows.map(async (r: any) => {
+    const { data: std } = await db()
+      .from("students").select("full_name").eq("id", r.student_id).maybeSingle();
+    return {
+      id:               r.id,
+      appointmentId:    r.appointment_id,
+      studentId:        r.student_id,
+      studentName:      std?.full_name ?? undefined,
+      role:             (r.role ?? "creator") as AppointmentStudent["role"],
+      inviteStatus:     (r.invite_status ?? "accepted") as AppointmentStudent["inviteStatus"],
+      attendanceStatus: (r.attendance_status ?? "pending") as AppointmentStudent["attendanceStatus"],
+      lessonDeducted:   r.lesson_deducted ?? false,
+      createdAt:        r.created_at ?? "",
+    } as AppointmentStudent;
+  }));
+
+  return withNames;
 }
 
 /**
  * Bekleyen davetler — öğrenci panelinde gösterilecek
  * invite_status = 'pending' olan kayıtlar
  */
+/** Bekleyen davetler — select("*") kullanarak schema cache'ten bağımsız */
 export async function getPendingInvites(studentId: string): Promise<PendingInvite[]> {
-  const { data, error } = await db()
+  // Önce appointment_students'tan pending kayıtları al (select * ile)
+  const { data: apStRows, error } = await db()
     .from("appointment_students")
-    .select("id, appointment_id, appointments(date, start_time, end_time, lesson_type, student_name)")
-    .eq("student_id", studentId)
-    .eq("invite_status", "pending");
+    .select("*")
+    .eq("student_id", studentId);
 
   if (error) {
     if (isSchemaError(error)) {
-      console.warn("getPendingInvites: schema cache → SUPABASE_FIX_NOW.sql çalıştırın");
-      return [];
+      console.warn("getPendingInvites: schema cache hazır değil → SUPABASE_FIX_NOW.sql çalıştırın");
+    } else {
+      console.warn("getPendingInvites:", error.message);
     }
-    console.warn("getPendingInvites:", error.message);
     return [];
   }
 
-  return (data ?? []).map((r: {
-    id: string;
-    appointment_id: string;
+  // invite_status = 'pending' ve role = 'partner' olanları JS'de filtrele
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pending = (apStRows ?? []).filter((r: any) =>
+    r.invite_status === "pending" && r.role === "partner"
+  );
+
+  if (pending.length === 0) return [];
+
+  // Her pending kayıt için randevu detayını ayrı çek
+  const results: PendingInvite[] = [];
+  for (const row of pending) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    appointments: any;
-  }) => ({
-    appointmentId:       r.appointment_id,
-    appointmentStudentId: r.id,
-    creatorName:         r.appointments?.student_name ?? "?",
-    date:                r.appointments?.date ?? "",
-    startTime:           r.appointments?.start_time ?? "",
-    endTime:             r.appointments?.end_time ?? "",
-    lessonType:          (r.appointments?.lesson_type ?? "duet") as LessonType,
-  }));
+    const r = row as any;
+    const { data: apt } = await db()
+      .from("appointments")
+      .select("date, start_time, end_time, lesson_type, student_name")
+      .eq("id", r.appointment_id)
+      .maybeSingle();
+
+    if (apt) {
+      results.push({
+        appointmentId:        r.appointment_id,
+        appointmentStudentId: r.id,
+        creatorName:          apt.student_name ?? "?",
+        date:                 apt.date ?? "",
+        startTime:            apt.start_time ?? "",
+        endTime:              apt.end_time ?? "",
+        lessonType:           (apt.lesson_type ?? "duet") as LessonType,
+      });
+    }
+  }
+
+  return results;
 }
 
 /**
