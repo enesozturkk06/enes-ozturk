@@ -4,17 +4,17 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudentNotifications,
-  getPendingInvites, respondToInvite,
+  getPendingInvites, respondToInvite, cancelAppointment,
 } from "@/lib/db";
 import type { Appointment, LessonRecord, Notification, PendingInvite } from "@/lib/types";
 import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components/ui";
-import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS } from "@/lib/constants";
+import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS } from "@/lib/constants";
 import {
   Calendar, Clock, TrendingUp, BookOpen, Bell,
   CheckCircle, XCircle, ChevronRight, Users,
 } from "lucide-react";
 import Link from "next/link";
-import { format, parseISO, isFuture } from "date-fns";
+import { format, parseISO, isFuture, differenceInHours } from "date-fns";
 import { tr } from "date-fns/locale";
 
 const stagger = { animate: { transition: { staggerChildren: 0.05 } } };
@@ -28,6 +28,8 @@ export default function OgrenciDashboard() {
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading]             = useState(true);
   const [inviteLoading, setInviteLoading] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget]   = useState<Appointment | null>(null);
+  const [cancelBusy, setCancelBusy]       = useState(false);
 
   // Section refs for scroll navigation
   const randevuRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,24 @@ export default function OgrenciDashboard() {
     setInviteLoading(null);
   };
 
+  const handleCancelClick = (apt: Appointment) => {
+    const hoursLeft = differenceInHours(parseISO(`${apt.date}T${apt.startTime}`), new Date());
+    if (hoursLeft < CANCEL_LIMIT_HOURS) {
+      alert(`Randevuya ${CANCEL_LIMIT_HOURS} saatten az kaldığı için iptal edemezsiniz. Lütfen antrenörünüzle iletişime geçin.`);
+      return;
+    }
+    setCancelTarget(apt);
+  };
+
+  const handleCancelConfirm = async () => {
+    if (!cancelTarget) return;
+    setCancelBusy(true);
+    await cancelAppointment(cancelTarget.id);
+    setCancelBusy(false);
+    setCancelTarget(null);
+    await reload();
+  };
+
   if (!student || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -77,6 +97,7 @@ export default function OgrenciDashboard() {
   const progressPct  = Math.round((student.completedLessons / totalLessons) * 100);
 
   return (
+    <>
     <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5">
 
       {/* Header */}
@@ -233,41 +254,58 @@ export default function OgrenciDashboard() {
               </div>
             ) : (
               <div className="space-y-2.5">
-                {upcoming.map(apt => (
-                  <div key={apt.id} className="flex items-center gap-3 p-3 rounded-xl"
-                    style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-                    <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
-                      style={{ background:"rgba(220,38,38,0.1)", border:"1px solid rgba(220,38,38,0.2)" }}>
-                      <span className="text-crimson text-xs font-display" style={{ fontFamily:"var(--font-bebas)" }}>
-                        {format(parseISO(apt.date), "dd")}
-                      </span>
-                      <span className="text-crimson/60 text-[9px]" style={{ fontFamily:"var(--font-bebas)" }}>
-                        {format(parseISO(apt.date), "MMM", { locale: tr }).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-sm font-semibold text-white"
-                          style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                          {format(parseISO(apt.date), "EEEE", { locale: tr })}
+                {upcoming.map(apt => {
+                  const hoursLeft = differenceInHours(parseISO(`${apt.date}T${apt.startTime}`), new Date());
+                  const canCancel = hoursLeft >= CANCEL_LIMIT_HOURS;
+                  return (
+                    <div key={apt.id} className="flex items-center gap-3 p-3 rounded-xl"
+                      style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
+                      {/* Tarih bloğu */}
+                      <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+                        style={{ background:"rgba(220,38,38,0.1)", border:"1px solid rgba(220,38,38,0.2)" }}>
+                        <span className="text-crimson text-xs font-display" style={{ fontFamily:"var(--font-bebas)" }}>
+                          {format(parseISO(apt.date), "dd")}
                         </span>
-                        {apt.lessonType !== "bireysel" && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded"
-                            style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>
-                            {apt.lessonType === "duet" ? "Düet" : "Grup"}
+                        <span className="text-crimson/60 text-[9px]" style={{ fontFamily:"var(--font-bebas)" }}>
+                          {format(parseISO(apt.date), "MMM", { locale: tr }).toUpperCase()}
+                        </span>
+                      </div>
+                      {/* Bilgi */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-semibold text-white"
+                            style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            {format(parseISO(apt.date), "EEEE", { locale: tr })}
                           </span>
-                        )}
+                          {apt.lessonType !== "bireysel" && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded"
+                              style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>
+                              {apt.lessonType === "duet" ? "Düet" : "Grup"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.4)" }}>
+                          <Clock size={11}/>
+                          <span style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            {apt.startTime} – {apt.endTime}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.4)" }}>
-                        <Clock size={11}/>
-                        <span style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                          {apt.startTime} – {apt.endTime}
-                        </span>
+                      {/* Sağ: Badge + iptal */}
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                        <Badge color="green">{STATUS_LABELS[apt.status]}</Badge>
+                        <button
+                          onClick={() => handleCancelClick(apt)}
+                          className="text-[10px] transition-colors"
+                          style={{ color: canCancel ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)", fontFamily:"var(--font-barlow-condensed)", cursor: canCancel ? "pointer" : "default" }}
+                          title={canCancel ? "Randevuyu iptal et" : `${CANCEL_LIMIT_HOURS} saatten az kaldı`}
+                        >
+                          {canCancel ? "İptal et" : "⏱ İptal edilemez"}
+                        </button>
                       </div>
                     </div>
-                    <Badge color="green">{STATUS_LABELS[apt.status]}</Badge>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -359,5 +397,63 @@ export default function OgrenciDashboard() {
         </div>
       </motion.div>
     </motion.div>
+
+    {/* ══ Randevu İptal Onay Modalı ══ */}
+
+    {cancelTarget && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
+        <div className="w-full max-w-sm rounded-2xl overflow-hidden"
+          style={{ background:"rgba(15,15,22,0.99)", border:"1px solid rgba(239,68,68,0.3)" }}>
+          <div className="absolute top-0 left-0 right-0 h-px"
+            style={{ background:"linear-gradient(90deg,transparent,#ef4444,transparent)" }} />
+          <div className="p-5">
+            <h3 className="text-xl text-white mb-1" style={{ fontFamily:"var(--font-bebas)", letterSpacing:"0.08em" }}>
+              RANDEVU İPTAL
+            </h3>
+            {/* Randevu özeti */}
+            <div className="my-3 p-3 rounded-xl space-y-1"
+              style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
+              <p className="text-xs text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {format(parseISO(cancelTarget.date), "dd MMMM yyyy (EEEE)", { locale: tr })}
+              </p>
+              <p className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+                {cancelTarget.startTime} – {cancelTarget.endTime}
+                {cancelTarget.lessonType !== "bireysel" && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded text-[9px]"
+                    style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7" }}>
+                    {cancelTarget.lessonType === "duet" ? "Düet" : "Grup"}
+                  </span>
+                )}
+              </p>
+            </div>
+            <p className="text-sm mb-1" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-inter)" }}>
+              Bu randevuyu iptal etmek istediğine emin misin?
+            </p>
+            {cancelTarget.lessonType === "duet" && (
+              <p className="text-xs mb-3" style={{ color:"rgba(217,70,239,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
+                ℹ️ Düet randevu — partnerin de panelinde iptal olarak görünecek.
+              </p>
+            )}
+            <p className="text-xs mb-4" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+              İptal edilen randevudan ders düşülmez. Slot tekrar müsait hale gelir.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setCancelTarget(null)}
+                className="py-3 rounded-xl text-xs font-semibold uppercase"
+                style={{ border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+                Vazgeç
+              </button>
+              <button onClick={handleCancelConfirm} disabled={cancelBusy}
+                className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50"
+                style={{ background:"rgba(239,68,68,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
+                {cancelBusy ? "İptal ediliyor..." : "İptal Et"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
