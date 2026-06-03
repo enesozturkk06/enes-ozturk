@@ -71,7 +71,10 @@ export default function OgrenciDashboard() {
   const pkg         = PACKAGES.find(p => p.type === student.packageType);
   const unreadNotifs = notifications.filter(n => !n.isRead).length;
   const lastRecord  = records[0];
-  const progressPct = pkg ? Math.round((student.completedLessons / pkg.lessonCount) * 100) : 0;
+  // totalLessons = öğrenciye atanan gerçek ders sayısı (admin'in girdiği değer)
+  // pkg.lessonCount = paket şablonundaki varsayılan — sabit olduğu için KULLANILMAZ
+  const totalLessons = student.totalLessons > 0 ? student.totalLessons : (pkg?.lessonCount ?? 1);
+  const progressPct  = Math.round((student.completedLessons / totalLessons) * 100);
 
   return (
     <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5">
@@ -199,8 +202,8 @@ export default function OgrenciDashboard() {
               {PAYMENT_LABELS[student.paymentStatus]}
             </Badge>
           </div>
-          <ProgressBar value={student.completedLessons} max={pkg?.lessonCount ?? 1} color="red"
-            label={`${student.completedLessons} / ${pkg?.lessonCount} ders`} />
+          <ProgressBar value={student.completedLessons} max={totalLessons} color="red"
+            label={`${student.completedLessons} / ${totalLessons} ders`} />
           <div className="mt-2 text-right text-xs text-white/30"
             style={{ fontFamily:"var(--font-barlow-condensed)" }}>{progressPct}% tamamlandı</div>
         </Card>
