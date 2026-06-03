@@ -85,7 +85,8 @@ export default function StudentNav() {
       </aside>
 
       {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/96 backdrop-blur-md border-b border-white/5 h-14 flex items-center justify-between px-4">
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/96 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-4"
+        style={{ paddingTop:"calc(env(safe-area-inset-top, 0px) + 8px)", paddingBottom:"8px", minHeight:"56px" }}>
         <Link href="/" className="flex items-center gap-2">
           <div className="w-7 h-7">
             <svg viewBox="0 0 44 44" fill="none" className="w-full h-full">

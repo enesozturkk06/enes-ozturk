@@ -1,9 +1,20 @@
 "use client";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
 const HEX = "M50 2 L93 26 L93 74 L50 98 L7 74 L7 26 Z";
 
 export default function LandingBackground() {
+  const reduced = useReducedMotion();
+
+  // Hareketi azaltılmış modda veya düşük performanslı cihazlarda statik arka plan
+  if (reduced) {
+    return (
+      <div className="fixed inset-0 pointer-events-none z-0" style={{
+        background: "radial-gradient(ellipse 70% 50% at 20% 30%, rgba(139,92,246,0.1) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 70%, rgba(217,70,239,0.07) 0%, transparent 60%), #09090B",
+      }} />
+    );
+  }
+
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
 

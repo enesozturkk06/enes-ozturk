@@ -2,12 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getStudents, createStudent, updateStudent, deleteStudent } from "@/lib/db";
+import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner } from "@/lib/db";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { getPackages, type LessonPackage } from "@/lib/packages";
 import type { Student } from "@/lib/types";
 import { PAYMENT_LABELS, LEVEL_LABELS } from "@/lib/constants";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Package } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon } from "lucide-react";
 
 /* ── Sıralı kod üret: ENES001, ENES002... ────────────────────────────── */
 function genCodeSequential(students: Student[]): string {
@@ -110,6 +110,41 @@ export default function OgrencilerPage() {
   const [ePS, setEPS]             = useState("beklemede");
   const [eNotes, setENotes]       = useState("");
   const [eSaving, setESaving]     = useState(false);
+
+  /* Düet partner */
+  const [partnerModal, setPartnerModal]   = useState<Student | null>(null);
+  const [currentPartner, setCurrentPartner] = useState<Student | null>(null);
+  const [partnerSearch, setPartnerSearch] = useState("");
+  const [partnerSaving, setPartnerSaving] = useState(false);
+
+  const openPartnerModal = async (s: Student) => {
+    setPartnerModal(s);
+    setPartnerSearch("");
+    const p = await getDuetPartner(s.id);
+    setCurrentPartner(p);
+  };
+
+  const handleSetPartner = async (targetId: string) => {
+    if (!partnerModal) return;
+    setPartnerSaving(true);
+    try {
+      await setDuetPartner(partnerModal.id, targetId);
+      const p = await getDuetPartner(partnerModal.id);
+      setCurrentPartner(p);
+      setPartnerSearch("");
+    } catch (err) { alert("Hata: " + (err instanceof Error ? err.message : String(err))); }
+    finally { setPartnerSaving(false); }
+  };
+
+  const handleRemovePartner = async () => {
+    if (!partnerModal) return;
+    setPartnerSaving(true);
+    try {
+      await removeDuetPartner(partnerModal.id);
+      setCurrentPartner(null);
+    } catch (err) { alert("Hata: " + (err instanceof Error ? err.message : String(err))); }
+    finally { setPartnerSaving(false); }
+  };
 
   /* Sil */
   const [delSt, setDelSt]         = useState<Student | null>(null);
@@ -403,7 +438,7 @@ export default function OgrencilerPage() {
               {/* Paket Seçimi */}
               <div className="mb-3 p-3 bg-steel/30 border border-gold/20">
                 <div className="flex items-center gap-2 mb-2">
-                  <Package size={14} className="text-gold" />
+                  <PackageIcon size={14} className="text-gold" />
                   <span className="text-xs text-gold tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                     Ders Paketi Seç (otomatik doldurur)
                   </span>
@@ -566,6 +601,7 @@ export default function OgrencilerPage() {
                           <a href={`https://wa.me/90${s.phone.replace(/\D/g,"").slice(-10)}`} target="_blank" rel="noopener noreferrer"
                             className="p-1.5 text-white/25 hover:text-green-400 transition-colors" title="WhatsApp"><Phone size={13} /></a>
                           <button onClick={() => openEdit(s)} className="p-1.5 text-white/25 hover:text-gold transition-colors" title="Düzenle"><Edit size={13} /></button>
+                          <button onClick={() => openPartnerModal(s)} className="p-1.5 text-white/25 hover:text-violet transition-colors" title="Düet Partneri"><Users size={13} /></button>
                           <button onClick={() => setDelSt(s)} className="p-1.5 text-white/25 hover:text-crimson transition-colors" title="Sil"><Trash2 size={13} /></button>
                         </div>
                       </td>
@@ -694,6 +730,74 @@ export default function OgrencilerPage() {
                 style={{ fontFamily: "var(--font-barlow-condensed)" }}>
                 {delSaving ? "Siliniyor..." : "Evet, Sil"}
               </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── DÜET PARTNER MODAL ────────────────────────────────────── */}
+      {partnerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setPartnerModal(null)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setPartnerModal(null)} />
+          <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }}
+            className="relative z-10 w-full max-w-md bg-carbon border border-white/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+            onClick={e => e.stopPropagation()}>
+            <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background:"linear-gradient(90deg,transparent,#8B5CF6,transparent)" }} />
+            <div className="flex items-center gap-3 mb-5">
+              <Users size={20} className="text-violet" />
+              <div>
+                <h3 className="text-lg font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>DÜET PARTNERİ</h3>
+                <p className="text-xs text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{partnerModal.fullName} ({partnerModal.code})</p>
+              </div>
+              <button onClick={() => setPartnerModal(null)} className="ml-auto text-white/25 hover:text-white"><X size={18}/></button>
+            </div>
+
+            {/* Mevcut partner */}
+            {currentPartner ? (
+              <div className="mb-4 p-3 rounded-xl flex items-center justify-between" style={{ background:"rgba(139,92,246,0.08)", border:"1px solid rgba(139,92,246,0.25)" }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background:"rgba(139,92,246,0.2)", color:"#A855F7" }}>
+                    {currentPartner.fullName.split(" ").map(n=>n[0]).join("").slice(0,2)}
+                  </div>
+                  <div>
+                    <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{currentPartner.fullName}</div>
+                    <div className="text-xs text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{currentPartner.code} · {currentPartner.remainingLessons} ders</div>
+                  </div>
+                </div>
+                <button onClick={handleRemovePartner} disabled={partnerSaving}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-400 border border-red-400/25 hover:border-red-400/50 rounded transition-all"
+                  style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <Unlink size={12}/> Kaldır
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-white/30 mb-4 text-center py-3" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Henüz düet partneri yok</p>
+            )}
+
+            {/* Arama */}
+            <div className="space-y-1.5 mb-4">
+              <label className="text-xs text-white/40 tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Partner Seç</label>
+              <input value={partnerSearch} onChange={e => setPartnerSearch(e.target.value)} placeholder="İsim veya kod ara..."
+                className="w-full bg-carbon border border-white/10 focus:border-violet/50 text-white placeholder-white/20 px-3 py-2 text-sm outline-none rounded-lg"
+                style={{ fontFamily:"var(--font-inter)" }} />
+            </div>
+
+            <div className="space-y-1.5 max-h-52 overflow-y-auto">
+              {students.filter(s =>
+                s.id !== partnerModal.id && s.isActive &&
+                (s.fullName.toLowerCase().includes(partnerSearch.toLowerCase()) ||
+                 s.code.toLowerCase().includes(partnerSearch.toLowerCase()))
+              ).slice(0,8).map(s => (
+                <button key={s.id} onClick={() => handleSetPartner(s.id)} disabled={partnerSaving}
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-all hover:bg-steel/40 disabled:opacity-50"
+                  style={{ border:"1px solid rgba(255,255,255,0.05)" }}>
+                  <div>
+                    <div className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.fullName}</div>
+                    <div className="text-[10px] text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.code} · {s.remainingLessons} ders</div>
+                  </div>
+                  <LinkIcon size={13} className="text-violet/50" />
+                </button>
+              ))}
             </div>
           </motion.div>
         </div>

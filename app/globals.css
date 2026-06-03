@@ -116,6 +116,12 @@
 /* ── Base ──────────────────────────────────────────────────── */
 html { scroll-behavior: smooth; }
 
+/* iPhone safe area desteği */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 body {
   background: #09090B;
   color: #F8FAFC;

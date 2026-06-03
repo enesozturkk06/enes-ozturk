@@ -5,14 +5,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getTimeSlots, getAppointments, createAppointment,
-  cancelAppointment, getStudentByCode,
+  cancelAppointment, getDuetPartner,
 } from "@/lib/db";
 import type { TimeSlot, Appointment, Student, LessonType } from "@/lib/types";
 import { PageHeader } from "@/app/components/ui";
 import { TRAINER_NAME, TRAINER_WHATSAPP, CANCEL_LIMIT_HOURS } from "@/lib/constants";
 import {
   Calendar, Clock, CheckCircle, XCircle, AlertTriangle,
-  Users, User, Search, ChevronRight,
+  Users, User,
 } from "lucide-react";
 import { format, addDays, parseISO, differenceInHours, isFuture } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -63,11 +63,9 @@ export default function RandevuPage() {
   /* Ders tipi */
   const [lessonType, setLessonType]       = useState<LessonType>("bireysel");
 
-  /* Düet: ikinci öğrenci */
-  const [partnerCode, setPartnerCode]     = useState("");
+  /* Düet: admin tarafından atanmış partner (otomatik) */
   const [partner, setPartner]             = useState<Student | null>(null);
-  const [partnerError, setPartnerError]   = useState("");
-  const [searchingPartner, setSearching]  = useState(false);
+  const [partnerLoading, setPartnerLoading] = useState(false);
 
   /* Modal durumları */
   const [confirmOpen, setConfirmOpen]     = useState(false);
@@ -95,32 +93,17 @@ export default function RandevuPage() {
 
   useEffect(() => { reload(); }, [reload]);
 
-  /* ── Partner kod araması ─────────────────────────────────────────── */
-  const searchPartner = async () => {
-    const code = partnerCode.trim().toUpperCase();
-    if (!code) return;
-    if (code === student?.code) {
-      setPartnerError("Kendi kodunuzu giremezsiniz.");
-      return;
-    }
-    setSearching(true);
-    setPartnerError("");
-    setPartner(null);
-    try {
-      const found = await getStudentByCode(code);
-      if (!found) {
-        setPartnerError("Bu kodla kayıtlı öğrenci bulunamadı.");
-      } else if (!found.isActive) {
-        setPartnerError("Bu öğrenci aktif değil.");
-      } else {
-        setPartner(found);
-      }
-    } catch {
-      setPartnerError("Arama sırasında hata oluştu.");
-    } finally {
-      setSearching(false);
-    }
-  };
+  /* Düet partneri yükle */
+  useEffect(() => {
+    if (!student) return;
+    setPartnerLoading(true);
+    getDuetPartner(student.id)
+      .then(p => setPartner(p))
+      .catch(() => setPartner(null))
+      .finally(() => setPartnerLoading(false));
+  }, [student]);
+
+  /* Partner arama kaldırıldı — admin atar, öğrenci görür */
 
   /* ── Saat seçince onay ekranını aç ──────────────────────────────── */
   const handleSlotClick = (slot: TimeSlot) => {
@@ -141,14 +124,14 @@ export default function RandevuPage() {
       return;
     }
 
-    // 2. Düet için ikinci öğrenci seçildi mi?
+    // 2. Düet için partner kontrolü
     if (lessonType === "duet") {
       if (!partner) {
-        setBookError("Düet ders için ikinci öğrenci seçilmedi.");
+        setBookError("Düet partneriniz henüz tanımlanmamış. Antrenörünüzle iletişime geçin.");
         return;
       }
       if (partner.remainingLessons <= 0) {
-        setBookError(`${partner.fullName} adlı öğrencinin kalan dersi yok. Randevu oluşturulamaz.`);
+        setBookError(`${partner.fullName} adlı partnerinizin kalan dersi yok. Randevu oluşturulamaz.`);
         return;
       }
     }
@@ -239,7 +222,7 @@ export default function RandevuPage() {
             </p>
             <div className="flex gap-3">
               {LESSON_TYPES.map(t => (
-                <button key={t.value} onClick={() => { setLessonType(t.value); setPartner(null); setPartnerCode(""); setPartnerError(""); }}
+                <button key={t.value} onClick={() => { setLessonType(t.value); if (t.value !== "duet") setPartner(null); }}
                   className="flex-1 flex flex-col items-center gap-1.5 py-3.5 px-3 rounded-xl transition-all"
                   style={{
                     background: lessonType === t.value ? `${VIOLET}18` : "rgba(255,255,255,0.03)",
@@ -259,94 +242,62 @@ export default function RandevuPage() {
             </div>
           </div>
 
-          {/* 2. Düet: İkinci öğrenci */}
+          {/* 2. Düet: Atanmış partner göster */}
           <AnimatePresence>
             {lessonType === "duet" && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden">
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                 <div className="rounded-2xl p-5" style={{
                   ...CARD, border: partner
-                    ? "1px solid rgba(34,197,94,0.3)"
-                    : partnerError ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(139,92,246,0.25)",
+                    ? (partner.remainingLessons > 0 ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(239,68,68,0.3)")
+                    : "1px solid rgba(139,92,246,0.25)",
                 }}>
                   <p className="text-xs tracking-widest uppercase mb-3"
                     style={{ color: VIOLET, fontFamily: "var(--font-barlow-condensed)" }}>
-                    Düet Partneri — Öğrenci Kodu ile Ara
+                    Düet Partneri
                   </p>
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      value={partnerCode}
-                      onChange={e => { setPartnerCode(e.target.value.toUpperCase()); setPartnerError(""); setPartner(null); }}
-                      onKeyDown={e => e.key === "Enter" && searchPartner()}
-                      placeholder="örn: ENES002"
-                      className="flex-1 px-4 py-2.5 text-sm rounded-xl outline-none"
-                      style={{
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(139,92,246,0.2)",
-                        color: "#fff",
-                        fontFamily: "var(--font-bebas)",
-                        fontSize: "1.1rem",
-                        letterSpacing: "0.15em",
-                      }}
-                    />
-                    <button onClick={searchPartner} disabled={!partnerCode.trim() || searchingPartner}
-                      className="px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase transition-all disabled:opacity-40"
-                      style={{
-                        background: `linear-gradient(135deg,${VIOLET},#A855F7)`,
-                        color: "#fff",
-                        fontFamily: "var(--font-barlow-condensed)",
-                      }}>
-                      <Search size={14} />
-                      {searchingPartner ? "Arıyor..." : "Ara"}
-                    </button>
-                  </div>
 
-                  {/* Partner bulundu */}
-                  {partner && (
-                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center justify-between p-3 rounded-xl"
-                      style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)" }}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-                          style={{ background: "rgba(34,197,94,0.2)", color: "#22c55e" }}>
-                          {partner.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                        </div>
-                        <div>
-                          <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                            {partner.fullName}
-                          </div>
-                          <div className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
-                            {partner.code} · {partner.remainingLessons} ders kaldı
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {partner.remainingLessons > 0
-                          ? <CheckCircle size={16} className="text-green-400" />
-                          : <XCircle size={16} className="text-red-400" />}
-                        <button onClick={() => { setPartner(null); setPartnerCode(""); }}
-                          className="text-xs text-white/25 hover:text-red-400 transition-colors"
-                          style={{ fontFamily: "var(--font-barlow-condensed)" }}>✕</button>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {/* Hata */}
-                  {partnerError && (
-                    <p className="text-xs text-red-400 mt-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                      ⚠️ {partnerError}
-                    </p>
-                  )}
-
-                  {/* Kalan ders uyarısı */}
-                  {partner && partner.remainingLessons === 0 && (
-                    <div className="mt-2 p-2 rounded-lg text-xs text-red-400"
-                      style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
-                      {partner.fullName} adlı öğrencinin kalan dersi yok. Bu öğrenci ile düet randevu oluşturamazsınız.
+                  {partnerLoading ? (
+                    <div className="flex items-center gap-2 py-2">
+                      <div className="w-4 h-4 border-2 border-violet/40 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yükleniyor...</span>
                     </div>
+                  ) : partner ? (
+                    <div className="flex items-center gap-3 p-3 rounded-xl"
+                      style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                        style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>
+                        {partner.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                          {partner.fullName}
+                        </div>
+                        <div className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                          {partner.code} · {partner.remainingLessons} ders kaldı
+                        </div>
+                      </div>
+                      {partner.remainingLessons > 0
+                        ? <CheckCircle size={18} className="text-green-400 flex-shrink-0" />
+                        : <XCircle size={18} className="text-red-400 flex-shrink-0" />}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl text-center"
+                      style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                      <p className="text-sm text-red-400 mb-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        Düet partneriniz tanımlanmamış
+                      </p>
+                      <p className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        Antrenörünüzden düet partneri atamasını isteyin.
+                      </p>
+                    </div>
+                  )}
+
+                  {partner && partner.remainingLessons === 0 && (
+                    <p className="text-xs text-red-400 mt-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      ⚠️ Partnerinizin kalan dersi yok. Düet randevu oluşturulamaz.
+                    </p>
                   )}
                 </div>
               </motion.div>

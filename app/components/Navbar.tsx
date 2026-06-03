@@ -38,7 +38,8 @@ export default function Navbar() {
         boxShadow: "0 4px 30px rgba(139,92,246,0.08)",
       } : {}}
     >
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 lg:h-[72px]">
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 lg:h-[72px]"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
 
         {/* Logo + isim */}
         <a href="#hero" onClick={() => setMenuOpen(false)}

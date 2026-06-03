@@ -76,7 +76,8 @@ export default function AdminSidebar() {
       </aside>
 
       {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/96 backdrop-blur-md border-b border-white/5 h-14 flex items-center justify-between px-4">
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/96 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-4"
+        style={{ paddingTop:"calc(env(safe-area-inset-top, 0px) + 8px)", paddingBottom:"8px", minHeight:"56px" }}>
         <span className="text-sm text-white tracking-widest" style={{ fontFamily: "var(--font-bebas)" }}>ADMİN PANELİ</span>
         <button onClick={() => setOpen(o => !o)} className="text-white/50 hover:text-white">
           {open ? <X size={21} /> : <Menu size={21} />}
