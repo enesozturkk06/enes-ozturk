@@ -71,7 +71,7 @@ export default function OgrenciDashboard() {
           `İptal isteği engellendi: ${student.fullName}`,
           `${student.fullName}, ${format(parseISO(apt.date), "dd MMM", { locale: tr })} ${apt.startTime} randevusunu iptal etmek istedi fakat ${CANCEL_LIMIT_HOURS} saat kuralı nedeniyle yapamadı.`,
           "warning",
-          { appointmentId: apt.id, studentId: student.id },
+          { appointmentId: apt.id },   // student_id = NULL → admin bildirimi
         );
       }
       return;

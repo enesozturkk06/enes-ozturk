@@ -109,24 +109,33 @@ function fmtNotifDate(dateStr: string, timeStr?: string): string {
   return timeStr ? `${base} ${timeStr}` : base;
 }
 
-/** Admin bildirimi oluştur — appointment_id kolonu yoksa fallback ile sessizce devam eder */
+/**
+ * Admin bildirimi oluştur.
+ * KURAL: student_id HER ZAMAN NULL — böylece sadece admin görebilir.
+ * Öğrenci bildirimleri ayrı fonksiyon ile oluşturulur.
+ */
 export async function createAdminNotification(
   title: string,
   message: string,
   type: NotifType = "info",
-  options?: { appointmentId?: string; studentId?: string },
+  options?: { appointmentId?: string },
 ): Promise<void> {
-  const base = { title, message, type, is_read: false, student_id: options?.studentId ?? null };
+  // student_id her zaman null → admin bildirim
+  const base = { title, message, type, is_read: false, student_id: null };
   if (options?.appointmentId) {
-    const { error } = await db().from("notifications").insert({ ...base, appointment_id: options.appointmentId });
+    const { error } = await db().from("notifications")
+      .insert({ ...base, appointment_id: options.appointmentId });
     if (!error) return;
-    // appointment_id kolonu henüz yoksa sessizce devam et
-    if (!error.message.includes("appointment_id") && !isSchemaError(error)) {
-      console.error("createAdminNotification:", error.message); return;
+    // appointment_id kolonu henüz yoksa fallback
+    if (isSchemaError(error) || error.message.includes("appointment_id")) {
+      console.warn("[createAdminNotification] appointment_id kolonu yok, fallback:", error.message);
+    } else {
+      console.error("[createAdminNotification]", error.message);
+      return;
     }
   }
   const { error } = await db().from("notifications").insert(base);
-  if (error) console.error("createAdminNotification:", error.message);
+  if (error) console.error("[createAdminNotification] Hata:", error.message);
 }
 
 function sRow(s: Partial<Student>): Record<string, unknown> {
@@ -683,7 +692,7 @@ export async function respondToInvite(
           ? `${stdName}, ${label} tarihli düet randevu davetini onayladı.`
           : `${stdName}, ${label} tarihli düet randevu davetini reddetti.`,
         accept ? "success" : "warning",
-        { appointmentId: aptId, studentId },
+        { appointmentId: aptId },
       );
     }
   } catch { /* bildirim hatası randevu akışını durdurmaz */ }
@@ -786,14 +795,14 @@ export async function createAppointment(apt: {
       `Düet randevu: ${apt.studentName}`,
       `${apt.studentName}, ${dateLabel} için düet randevu oluşturdu. Partner daveti gönderildi: ${partnerName}`,
       "info",
-      { appointmentId, studentId: apt.studentId },
+      { appointmentId },   // student_id = NULL → admin bildirimi
     );
   } else {
     await createAdminNotification(
       `Yeni randevu: ${apt.studentName}`,
       `${apt.studentName}, ${dateLabel} için ${typeLabel} randevu aldı.`,
       "info",
-      { appointmentId, studentId: apt.studentId },
+      { appointmentId },   // student_id = NULL → admin bildirimi
     );
   }
 
