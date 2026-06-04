@@ -132,6 +132,14 @@ export default function RandevuPage() {
   const confirmBook = async () => {
     if (!selectedSlot || !student) return;
     setBookError("");
+
+    // UUID formatı kontrolü — mock/eski ID'lerin yanlışlıkla kullanılmasını engelle
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(student.id);
+    if (!isUUID) {
+      setBookError("Öğrenci kaydı bulunamadı, lütfen çıkış yapıp tekrar giriş yapın veya antrenörle iletişime geçin.");
+      return;
+    }
+
     if (student.remainingLessons <= 0) { setBookError("Paketinizde ders kalmadı."); return; }
     if (lessonType === "duet" && !partner) {
       setBookError("Düet partneriniz henüz tanımlanmamış. Antrenörünüzle iletişime geçin."); return;

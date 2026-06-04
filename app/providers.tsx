@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import type { AuthState, Student, SalonOwner } from "@/lib/types";
-import { getSession, logout as doLogout } from "@/lib/auth";
+import { getSession, logout as doLogout, verifyAndRefreshStudent } from "@/lib/auth";
 import { ToastProvider } from "@/app/components/shared/Toast";
 
 interface AuthCtx extends AuthState {
@@ -25,9 +25,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setState(getSession());
-    setLoaded(true);
-  }, []);
+    const session = getSession();
+    setState(session);
+
+    // Öğrenci session'ı varsa Supabase'den doğrula (mock/eski ID'leri temizler)
+    if (session.role === "student" && session.student) {
+      verifyAndRefreshStudent(session.student).then(fresh => {
+        if (fresh) {
+          setState({ role: "student", student: fresh, isAdmin: false, salonOwner: null });
+        } else {
+          // Öğrenci Supabase'de yok → logout
+          doLogout();
+          setState(EMPTY);
+        }
+        setLoaded(true);
+      });
+    } else {
+      setLoaded(true);
+    }
+  }, []);  // eslint-disable-line
 
   const setStudent    = (s: Student)    => setState({ role:"student",     student: s, isAdmin: false, salonOwner: null });
   const setAdmin      = ()              => setState({ role:"admin",       student: null, isAdmin: true, salonOwner: null });

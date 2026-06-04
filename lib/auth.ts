@@ -108,11 +108,37 @@ export function getSession(): AuthState {
   if (raw) {
     try {
       const student = JSON.parse(raw) as Student;
+      // Mock ID kontrolü: Supabase UUID formatı değilse session'ı temizle
+      // UUID formatı: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      const isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(student.id);
+      if (!isRealUUID) {
+        console.warn("[getSession] Mock/geçersiz student ID temizleniyor:", student.id);
+        localStorage.removeItem(STUDENT_KEY);
+        return { role: null, student: null, isAdmin: false, salonOwner: null };
+      }
       return { role: "student", student, isAdmin: false, salonOwner: null };
     } catch { /* ignore */ }
   }
 
   return { role: null, student: null, isAdmin: false, salonOwner: null };
+}
+
+/**
+ * Öğrencinin Supabase'deki gerçek verisini çek ve localStorage'ı güncelle.
+ * Sayfa yüklenince çağrılır — eski/mock session'ları temizler.
+ */
+export async function verifyAndRefreshStudent(student: Student): Promise<Student | null> {
+  if (!isSupabaseConfigured || !supabase) return student;
+  const { data, error } = await supabase
+    .from("students").select("*").eq("id", student.id).eq("is_active", true).maybeSingle();
+  if (error || !data) {
+    console.warn("[verifyAndRefreshStudent] Öğrenci Supabase'de bulunamadı, session temizleniyor:", student.id);
+    localStorage.removeItem(STUDENT_KEY);
+    return null;
+  }
+  const fresh = mapStudent(data);
+  saveStudentSession(fresh);
+  return fresh;
 }
 
 export function logout(): void {
