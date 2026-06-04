@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/providers";
 import Logo from "@/app/components/shared/Logo";
+import { useUnreadNotifCount } from "@/hooks/useUnreadNotifCount";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
   BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell,
@@ -21,18 +22,17 @@ const links = [
 ];
 
 export default function AdminSidebar() {
-  const { logout } = useAuth();
-  const pathname = usePathname();
-  const router = useRouter();
+  const { logout }    = useAuth();
+  const pathname      = usePathname();
+  const router        = useRouter();
   const [open, setOpen] = useState(false);
+  const { count: unread } = useUnreadNotifCount(30_000);
 
   const handleLogout = () => { logout(); router.push("/admin/login"); };
-  const isActive = (href: string, exact?: boolean) =>
-    exact ? pathname === href : pathname.startsWith(href) && href !== "/admin";
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* ── Desktop sidebar ──────────────────────────────── */}
       <aside className="hidden lg:flex flex-col w-64 min-h-screen bg-pitch border-r border-white/5 fixed left-0 top-0 z-40">
         <div className="p-5 border-b border-white/5">
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -47,27 +47,40 @@ export default function AdminSidebar() {
         <div className="mx-4 mt-4 p-3 bg-gold/5 border border-gold/15">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            <span className="text-xs text-white/50 tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Antrenör Enes Öztürk</span>
+            <span className="text-xs text-white/50 tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              Antrenör Enes Öztürk
+            </span>
           </div>
-          <div className="text-xs text-gold/50 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Tam erişim · Çevrimiçi</div>
+          <div className="text-xs text-gold/50 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            Tam erişim · Çevrimiçi
+          </div>
         </div>
 
         <nav className="flex-1 p-3 space-y-0.5 mt-3">
           {links.map(({ href, label, icon: Icon, exact }) => {
             const active = exact ? pathname === href : pathname.startsWith(href);
+            const isBell = href === "/admin/bildirimler";
             return (
               <Link key={href} href={href}
                 className={`flex items-center gap-3 px-3 py-2.5 transition-all duration-200 group ${active ? "bg-gold/8 border-l-2 border-gold text-white" : "text-white/35 hover:text-white hover:bg-white/3"}`}>
                 <Icon size={16} className={active ? "text-gold" : "group-hover:text-white/60"} />
-                <span className="text-sm tracking-wide" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{label}</span>
-                {active && <ChevronRight size={13} className="ml-auto text-gold" />}
+                <span className="text-sm tracking-wide flex-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{label}</span>
+                {/* Bildirim badge */}
+                {isBell && unread > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"
+                    style={{ background: "#dc2626", color: "#fff" }}>
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+                {active && !isBell && <ChevronRight size={13} className="ml-auto text-gold" />}
               </Link>
             );
           })}
         </nav>
 
         <div className="p-3 border-t border-white/5 space-y-1">
-          <Link href="/" className="flex items-center gap-3 px-3 py-2 text-white/25 hover:text-white/50 transition-colors text-xs" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <Link href="/" className="flex items-center gap-3 px-3 py-2 text-white/25 hover:text-white/50 transition-colors text-xs"
+            style={{ fontFamily: "var(--font-barlow-condensed)" }}>
             Ana Sayfaya Dön
           </Link>
           <button onClick={handleLogout} className="flex items-center gap-3 w-full px-3 py-2.5 text-white/25 hover:text-crimson transition-colors duration-200">
@@ -77,58 +90,85 @@ export default function AdminSidebar() {
         </div>
       </aside>
 
-      {/* Mobile header — safe area uyumlu */}
+      {/* ── Mobil header ─────────────────────────────────── */}
       <header
-        className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/98 backdrop-blur-md border-b border-white/6 flex items-end justify-between px-5"
+        className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/98 backdrop-blur-md border-b border-white/6 flex items-end justify-between px-4"
         style={{
           paddingTop:    "calc(env(safe-area-inset-top, 0px) + 10px)",
-          paddingBottom: "12px",
+          paddingBottom: "10px",
           minHeight:     "calc(env(safe-area-inset-top, 0px) + 56px)",
         }}
       >
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background:"#D97706" }} />
+          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#D97706" }} />
           <span className="text-sm text-white tracking-widest" style={{ fontFamily: "var(--font-bebas)" }}>
             ADMİN PANELİ
           </span>
         </div>
-        {/* Touch target min 44px */}
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="flex items-center justify-center text-white/60 hover:text-white active:text-white transition-colors"
-          style={{ minWidth: 44, minHeight: 44 }}
-          aria-label="Menü"
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
+
+        <div className="flex items-center gap-1">
+          {/* Bildirim zili — sağ üst */}
+          <Link href="/admin/bildirimler"
+            className="relative flex items-center justify-center"
+            style={{ minWidth: 40, minHeight: 40 }}
+            aria-label="Bildirimler">
+            <Bell size={18} style={{ color: unread > 0 ? "#d97706" : "rgba(255,255,255,0.35)" }} />
+            {unread > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center rounded-full text-white font-bold"
+                style={{
+                  background: "#dc2626",
+                  fontSize: 9,
+                  minWidth: 16,
+                  height: 16,
+                  padding: "0 3px",
+                  lineHeight: 1,
+                }}>
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </Link>
+
+          {/* Hamburger */}
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="flex items-center justify-center text-white/60 hover:text-white active:text-white transition-colors"
+            style={{ minWidth: 44, minHeight: 44 }}
+            aria-label="Menü"
+          >
+            {open ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
       </header>
 
-      {/* Mobil menü — safe area altından başlar */}
+      {/* ── Mobil menü ───────────────────────────────────── */}
       {open && (
         <div className="lg:hidden fixed inset-0 z-40" onClick={() => setOpen(false)}>
           <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
           <nav
             className="absolute left-0 right-0 bg-pitch border-b border-white/5 px-3 pb-4"
-            style={{
-              top: "calc(env(safe-area-inset-top, 0px) + 56px)",
-              paddingTop: "8px",
-            }}
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 56px)", paddingTop: "8px" }}
             onClick={e => e.stopPropagation()}
           >
             {links.map(({ href, label, icon: Icon, exact }) => {
               const active = exact ? pathname === href : pathname.startsWith(href);
+              const isBell = href === "/admin/bildirimler";
               return (
                 <Link key={href} href={href} onClick={() => setOpen(false)}
                   className={`flex items-center gap-3 px-3 rounded-xl transition-all ${active ? "bg-gold/8 text-white" : "text-white/45 hover:text-white/70"}`}
                   style={{ minHeight: 48 }}>
                   <Icon size={17} className={active ? "text-gold" : ""} />
-                  <span className="text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{label}</span>
+                  <span className="text-sm flex-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{label}</span>
+                  {isBell && unread > 0 && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ background: "#dc2626", color: "#fff" }}>
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
                 </Link>
               );
             })}
             <div className="mt-2 pt-2 border-t border-white/5">
-              <button
-                onClick={handleLogout}
+              <button onClick={handleLogout}
                 className="flex items-center gap-3 w-full px-3 rounded-xl text-white/30 hover:text-red-400 transition-colors"
                 style={{ minHeight: 48 }}>
                 <LogOut size={16} />
