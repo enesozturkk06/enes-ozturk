@@ -120,22 +120,22 @@ export async function createAdminNotification(
   type: NotifType = "info",
   options?: { appointmentId?: string },
 ): Promise<void> {
-  // student_id her zaman null → admin bildirim
+  // student_id her zaman NULL — admin bildirimi
   const base = { title, message, type, is_read: false, student_id: null };
+
+  // appointment_id kolonu varsa dahil et, yoksa sade insert yap
   if (options?.appointmentId) {
-    const { error } = await db().from("notifications")
+    const { error: e1 } = await db().from("notifications")
       .insert({ ...base, appointment_id: options.appointmentId });
-    if (!error) return;
-    // appointment_id kolonu henüz yoksa fallback
-    if (isSchemaError(error) || error.message.includes("appointment_id")) {
-      console.warn("[createAdminNotification] appointment_id kolonu yok, fallback:", error.message);
-    } else {
-      console.error("[createAdminNotification]", error.message);
-      return;
-    }
+    if (!e1) return; // başarılı
+    console.warn("[createAdminNotification] appointment_id ile insert başarısız:", e1.message);
+    // Her türlü hatada fallback — return YOK, aşağıdaki insert çalışır
   }
-  const { error } = await db().from("notifications").insert(base);
-  if (error) console.error("[createAdminNotification] Hata:", error.message);
+
+  // Sade insert — appointment_id olmadan
+  const { error: e2 } = await db().from("notifications").insert(base);
+  if (e2) console.error("[createAdminNotification] Sade insert de başarısız:", e2.message, e2.code);
+  else    console.log("[createAdminNotification] Bildirim oluşturuldu ✓ (sade)");
 }
 
 function sRow(s: Partial<Student>): Record<string, unknown> {
@@ -783,18 +783,27 @@ export async function createAppointment(apt: {
     }
   }
 
-  // Admin bildirimi — cancelAppointment ile aynı pattern
-  // try-catch ile sarılı: bildirim hatası randevu akışını durdurmaz
+  // Admin bildirimi — DOĞRUDAN INSERT (cancelAppointment ile aynı)
+  // createAdminNotification bypass edildi: fallback logic riski yok
   try {
-    const dateLabel = fmtNotifDate(apt.date, apt.startTime);
+    const dateLabel   = fmtNotifDate(apt.date, apt.startTime);
     const lessonLabel = lessonType === "duet" ? " (Düet)" : lessonType === "grup" ? " (Grup)" : "";
-    const title   = `Yeni randevu: ${apt.studentName}`;
-    const message = `${apt.studentName}, ${dateLabel} için randevu aldı${lessonLabel}.`;
-    console.log("[createAppointment] Admin bildirimi oluşturuluyor:", title);
-    await createAdminNotification(title, message, "info", { appointmentId });
-    console.log("[createAppointment] Admin bildirimi oluşturuldu ✓");
-  } catch (notifErr) {
-    console.error("[createAppointment] Bildirim oluşturulamadı:", notifErr);
+    const notifRow = {
+      title:      `Yeni randevu: ${apt.studentName}`,
+      message:    `${apt.studentName}, ${dateLabel} için randevu aldı${lessonLabel}.`,
+      type:       "info" as NotifType,
+      is_read:    false,
+      student_id: null,          // NULL = admin bildirimi
+    };
+    console.log("[createAppointment] Admin bildirimi insert ediliyor →", notifRow.title);
+    const { error: ne } = await db().from("notifications").insert(notifRow);
+    if (ne) {
+      console.error("[createAppointment] Admin bildirimi HATA:", ne.message, ne.code, ne.details);
+    } else {
+      console.log("[createAppointment] Admin bildirimi başarıyla oluşturuldu ✓");
+    }
+  } catch (err) {
+    console.error("[createAppointment] Admin bildirimi exception:", err);
   }
 
   return ma(aptData);
