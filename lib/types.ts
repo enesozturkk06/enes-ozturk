@@ -72,7 +72,8 @@ export interface LessonRecord {
 }
 
 export interface Notification {
-  id: string; studentId?: string; title: string; message: string;
+  id: string; studentId?: string; appointmentId?: string;
+  title: string; message: string;
   type: NotifType; isRead: boolean; createdAt: string;
 }
 

@@ -4,7 +4,7 @@
  */
 import type {
   Student, Appointment, AppointmentStudent, LessonRecord,
-  Notification, TimeSlot, Payment, CompleteResult, LessonType,
+  Notification, NotifType, TimeSlot, Payment, CompleteResult, LessonType,
   DuetPartner, PendingInvite, SalonOwner, SalonOwnerStudent,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
@@ -95,9 +95,39 @@ const mp = (r: any): Payment => ({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mn = (r: any): Notification => ({
-  id: r.id, studentId: r.student_id ?? undefined, title: r.title, message: r.message,
+  id: r.id, studentId: r.student_id ?? undefined,
+  appointmentId: r.appointment_id ?? undefined,
+  title: r.title, message: r.message,
   type: r.type, isRead: r.is_read ?? false, createdAt: r.created_at ?? "",
 });
+
+/** Türkçe kısa tarih: "7 Haz 17:00" */
+function fmtNotifDate(dateStr: string, timeStr?: string): string {
+  const months = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+  const [, m, d] = (dateStr ?? "").split("-").map(Number);
+  const base = `${d} ${months[(m ?? 1)-1]}`;
+  return timeStr ? `${base} ${timeStr}` : base;
+}
+
+/** Admin bildirimi oluştur — appointment_id kolonu yoksa fallback ile sessizce devam eder */
+export async function createAdminNotification(
+  title: string,
+  message: string,
+  type: NotifType = "info",
+  options?: { appointmentId?: string; studentId?: string },
+): Promise<void> {
+  const base = { title, message, type, is_read: false, student_id: options?.studentId ?? null };
+  if (options?.appointmentId) {
+    const { error } = await db().from("notifications").insert({ ...base, appointment_id: options.appointmentId });
+    if (!error) return;
+    // appointment_id kolonu henüz yoksa sessizce devam et
+    if (!error.message.includes("appointment_id") && !isSchemaError(error)) {
+      console.error("createAdminNotification:", error.message); return;
+    }
+  }
+  const { error } = await db().from("notifications").insert(base);
+  if (error) console.error("createAdminNotification:", error.message);
+}
 
 function sRow(s: Partial<Student>): Record<string, unknown> {
   const r: Record<string, unknown> = {};
@@ -633,6 +663,31 @@ export async function respondToInvite(
     console.error("respondToInvite:", error.message);
     return { success: false, error: error.message };
   }
+
+  // Admin bildirimi: kim, hangi randevu, onayladı/reddetti
+  try {
+    const { data: stdRow } = await db().from("students").select("full_name").eq("id", studentId).maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stdName = (stdRow as any)?.full_name ?? "Öğrenci";
+    const { data: apStRow } = await db().from("appointment_students").select("appointment_id").eq("id", appointmentStudentId).maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const aptId = (apStRow as any)?.appointment_id as string | undefined;
+    if (aptId) {
+      const { data: aptRow } = await db().from("appointments").select("date,start_time").eq("id", aptId).maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const r = aptRow as any;
+      const label = r ? fmtNotifDate(r.date, r.start_time) : "?";
+      await createAdminNotification(
+        accept ? `Düet kabul: ${stdName}` : `Düet red: ${stdName}`,
+        accept
+          ? `${stdName}, ${label} tarihli düet randevu davetini onayladı.`
+          : `${stdName}, ${label} tarihli düet randevu davetini reddetti.`,
+        accept ? "success" : "warning",
+        { appointmentId: aptId, studentId },
+      );
+    }
+  } catch { /* bildirim hatası randevu akışını durdurmaz */ }
+
   return { success: true };
 }
 
@@ -719,6 +774,29 @@ export async function createAppointment(apt: {
     }
   }
 
+  // Admin bildirimi oluştur
+  const dateLabel = fmtNotifDate(apt.date, apt.startTime);
+  const typeLabel = lessonType === "duet" ? "düet" : lessonType === "grup" ? "grup" : "bireysel";
+  if (lessonType === "duet" && (apt.partnerStudentIds ?? []).length > 0) {
+    // Partner adını çek
+    const partnerId = apt.partnerStudentIds![0];
+    const { data: partnerRow } = await db().from("students").select("full_name").eq("id", partnerId).maybeSingle();
+    const partnerName = (partnerRow as { full_name?: string } | null)?.full_name ?? "Partner";
+    await createAdminNotification(
+      `Düet randevu: ${apt.studentName}`,
+      `${apt.studentName}, ${dateLabel} için düet randevu oluşturdu. Partner daveti gönderildi: ${partnerName}`,
+      "info",
+      { appointmentId, studentId: apt.studentId },
+    );
+  } else {
+    await createAdminNotification(
+      `Yeni randevu: ${apt.studentName}`,
+      `${apt.studentName}, ${dateLabel} için ${typeLabel} randevu aldı.`,
+      "info",
+      { appointmentId, studentId: apt.studentId },
+    );
+  }
+
   return ma(aptData);
 }
 
@@ -732,8 +810,21 @@ export async function updateAppointment(id: string, updates: Partial<Appointment
   if (error) fail("updateAppointment", error);
 }
 
-export async function cancelAppointment(id: string): Promise<void> {
-  return updateAppointment(id, { status: "iptal", cancelledAt: new Date().toISOString().split("T")[0] });
+export async function cancelAppointment(id: string, cancelledByStudentName?: string): Promise<void> {
+  await updateAppointment(id, { status: "iptal", cancelledAt: new Date().toISOString().split("T")[0] });
+  // Admin bildirimi
+  if (cancelledByStudentName) {
+    const { data: apt } = await db().from("appointments").select("date,start_time,lesson_type").eq("id", id).maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = apt as any;
+    const label = r ? fmtNotifDate(r.date, r.start_time) : "?";
+    await createAdminNotification(
+      `Randevu iptal: ${cancelledByStudentName}`,
+      `${cancelledByStudentName}, ${label} tarihli randevusunu iptal etti.`,
+      "warning",
+      { appointmentId: id },
+    );
+  }
 }
 
 /**
@@ -896,16 +987,21 @@ export async function getStudentNotifications(studentId: string): Promise<Notifi
   return (data ?? []).map(mn);
 }
 
-export async function getAdminNotifications(): Promise<Notification[]> {
+export async function getAdminNotifications(limit = 50): Promise<Notification[]> {
   const { data, error } = await db()
     .from("notifications").select("*").is("student_id", null)
-    .order("created_at", { ascending: false }).limit(20);
+    .order("created_at", { ascending: false }).limit(limit);
   if (error) { console.error("getAdminNotifications:", error.message); return []; }
   return (data ?? []).map(mn);
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
   await db().from("notifications").update({ is_read: true }).eq("id", id);
+}
+
+export async function markAllAdminNotificationsRead(): Promise<void> {
+  await db().from("notifications").update({ is_read: true })
+    .is("student_id", null).eq("is_read", false);
 }
 
 /* ═══════════════════════════════════════════════════════════════

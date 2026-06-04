@@ -1,16 +1,17 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   getAppointments, getStudents, getAdminNotifications,
   completeAppointmentWithAttendance, getAppointmentStudents,
   bulkGetAppointmentStudents, createLessonRecord,
+  markNotificationRead, markAllAdminNotificationsRead,
 } from "@/lib/db";
 import type { Appointment, Student, Notification, AppointmentStudent } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
 import { STATUS_LABELS } from "@/lib/constants";
-import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX } from "lucide-react";
-import { format } from "date-fns";
+import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
 import Link from "next/link";
 
@@ -36,6 +37,10 @@ export default function AdminDashboard() {
   const [attendSaving, setAttendSaving]   = useState(false);
   const [attendWarnings, setAttendWarnings] = useState<string[]>([]);
 
+  /* Bildirim paneli */
+  const [notifOpen, setNotifOpen]     = useState(false);
+  const [loginToast, setLoginToast]   = useState<Notification | null>(null);
+
   /* Ders notu modalı (tamamlama sonrası) */
   const [noteModal, setNoteModal] = useState<Appointment | null>(null);
   const [scores, setScores] = useState<Record<string,number>>({
@@ -58,6 +63,9 @@ export default function AdminDashboard() {
       setStudents(s);
       setNotifs(n);
       setLoading(false);
+      // Giriş toast'u: okunmamış önemli bildirimler varsa göster
+      const unread = n.filter(x => !x.isRead);
+      if (unread.length > 0) setLoginToast(unread[0]);
     });
   }, [reloadApts]);
 
@@ -160,6 +168,7 @@ export default function AdminDashboard() {
 
   /* ── Render ───────────────────────────────────────────────── */
   return (
+    <>
     <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-6">
       <motion.div variants={fadeUp}>
         <PageHeader
@@ -189,8 +198,9 @@ export default function AdminDashboard() {
         />
         <StatCard
           label="Bildirim" value={unreadNotifs}
-          sub="Okunmamış" color="gold" icon={<Bell size={18}/>}
-          onClick={() => window.scrollTo({ top: 9999, behavior: "smooth" })}
+          sub={unreadNotifs > 0 ? "Okunmamış — tıkla" : "Bildirim yok"} color="gold"
+          icon={<Bell size={18}/>}
+          onClick={() => setNotifOpen(true)}
         />
       </div>
 
@@ -259,20 +269,34 @@ export default function AdminDashboard() {
         {/* Sidebar */}
         <div className="space-y-4">
           <motion.div variants={fadeUp}>
+            <div className="cursor-pointer" onClick={() => setNotifOpen(true)}>
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>Bildirimler</h3>
-                {unreadNotifs > 0 && <span className="text-xs bg-crimson text-white px-2 py-0.5">{unreadNotifs}</span>}
+                <div className="flex items-center gap-2">
+                  <Bell size={14} className="text-gold"/>
+                  <h3 className="text-base font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>Bildirimler</h3>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {unreadNotifs > 0 && <span className="text-xs bg-crimson text-white px-2 py-0.5">{unreadNotifs} yeni</span>}
+                  <ChevronRight size={13} className="text-white/20"/>
+                </div>
               </div>
               <div className="space-y-2">
-                {notifs.slice(0,4).map(n => (
-                  <div key={n.id} className={`p-2 border-l-2 ${n.isRead?"border-white/10 opacity-50":n.type==="warning"?"border-gold":"border-crimson"}`}>
-                    <div className="text-xs text-white/70 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{n.title}</div>
-                    <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{n.message.slice(0,60)}...</div>
+                {notifs.filter(n => !n.isRead).slice(0, 3).map(n => (
+                  <div key={n.id} className={`p-2 border-l-2 ${n.type==="warning"?"border-gold":"border-crimson"}`}>
+                    <div className="text-xs text-white/70 font-semibold truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{n.title}</div>
+                    <div className="text-xs text-white/30 truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{n.message}</div>
                   </div>
                 ))}
+                {unreadNotifs === 0 && (
+                  <p className="text-xs text-center py-2 text-white/20" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Okunmamış bildirim yok</p>
+                )}
               </div>
+              {notifs.length > 0 && (
+                <p className="text-xs text-white/20 mt-2 text-right" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Tümünü gör →</p>
+              )}
             </Card>
+            </div>
           </motion.div>
 
           {lowLessons.length > 0 && (
@@ -447,5 +471,171 @@ export default function AdminDashboard() {
         )}
       </Modal>
     </motion.div>
+
+    {/* ══ BİLDİRİM PANELİ ve GİRİŞ TOAST ═════════════════════════ */}
+    <AnimatePresence>
+      {notifOpen && (
+        <>
+          {/* Overlay */}
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            className="fixed inset-0 z-40 bg-black/50"
+            onClick={() => setNotifOpen(false)} />
+          {/* Panel */}
+          <motion.div
+            initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+            transition={{ type:"spring", damping:28, stiffness:280 }}
+            className="fixed right-0 top-0 bottom-0 z-50 w-full sm:w-[420px] flex flex-col"
+            style={{ background:"#18181B", borderLeft:"1px solid rgba(255,255,255,0.08)", boxShadow:"-20px 0 60px rgba(0,0,0,0.5)" }}>
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"
+              style={{ borderColor:"rgba(255,255,255,0.08)" }}>
+              <div className="flex items-center gap-2.5">
+                <Bell size={16} className="text-gold"/>
+                <span className="text-white font-display tracking-wider text-lg" style={{ fontFamily:"var(--font-bebas)" }}>
+                  BİLDİRİMLER
+                </span>
+                {unreadNotifs > 0 && (
+                  <span className="text-xs bg-crimson text-white px-2 py-0.5">{unreadNotifs} yeni</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {unreadNotifs > 0 && (
+                  <button
+                    onClick={async () => {
+                      await markAllAdminNotificationsRead();
+                      const fresh = await getAdminNotifications();
+                      setNotifs(fresh);
+                    }}
+                    className="text-xs px-2.5 py-1 transition-colors"
+                    style={{ color:"rgba(255,255,255,0.35)", border:"1px solid rgba(255,255,255,0.1)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    Tümünü okundu yap
+                  </button>
+                )}
+                <button onClick={() => setNotifOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full"
+                  style={{ background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)" }}>
+                  <X size={15}/>
+                </button>
+              </div>
+            </div>
+
+            {/* Liste */}
+            <div className="flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling:"touch" }}>
+              {notifs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+                  <Bell size={32} style={{ color:"rgba(255,255,255,0.08)" }}/>
+                  <p className="text-sm" style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>Henüz bildirim yok</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor:"rgba(255,255,255,0.05)" }}>
+                  {notifs.map(n => {
+                    const borderColor = n.type === "success" ? "#22c55e"
+                      : n.type === "warning" ? "#d97706"
+                      : n.type === "reminder" ? "#8B5CF6" : "#ef4444";
+                    return (
+                      <div
+                        key={n.id}
+                        className="flex gap-3 px-4 py-3.5 cursor-pointer transition-colors"
+                        style={{ background: n.isRead ? "transparent" : "rgba(255,255,255,0.02)" }}
+                        onClick={async () => {
+                          if (!n.isRead) {
+                            await markNotificationRead(n.id);
+                            setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, isRead: true } : x));
+                          }
+                        }}>
+                        {/* Renk aksanı */}
+                        <div className="w-0.5 flex-shrink-0 rounded-full self-stretch" style={{ background: n.isRead ? "rgba(255,255,255,0.08)" : borderColor }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs font-semibold leading-tight" style={{ color: n.isRead ? "rgba(255,255,255,0.4)" : "#fff", fontFamily:"var(--font-barlow-condensed)" }}>
+                              {n.title}
+                            </p>
+                            {!n.isRead && <div className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5" style={{ background: borderColor }} />}
+                          </div>
+                          <p className="text-xs mt-0.5 leading-relaxed" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                            {n.message}
+                          </p>
+                          <p className="text-[10px] mt-1" style={{ color:"rgba(255,255,255,0.18)", fontFamily:"var(--font-barlow-condensed)" }}>
+                            {n.createdAt ? format(parseISO(n.createdAt), "dd MMM yyyy HH:mm", { locale: tr }) : ""}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex-shrink-0 px-5 py-4 border-t" style={{ borderColor:"rgba(255,255,255,0.08)" }}>
+              <Link href="/admin/bildirimler"
+                className="flex items-center justify-center gap-2 w-full py-2.5 text-xs tracking-widest uppercase transition-colors"
+                style={{ border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}
+                onClick={() => setNotifOpen(false)}>
+                Tüm Bildirimleri Görüntüle
+              </Link>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+
+    {/* ══ GİRİŞ TOAST ══════════════════════════════════════════════ */}
+    <AnimatePresence>
+      {loginToast && (
+        <motion.div
+          initial={{ opacity:0, y: 20, scale:0.96 }}
+          animate={{ opacity:1, y: 0, scale:1 }}
+          exit={{ opacity:0, y: 20, scale:0.96 }}
+          transition={{ duration:0.3 }}
+          className="fixed bottom-6 left-1/2 z-50 w-full max-w-sm -translate-x-1/2 px-4"
+          style={{ filter:"drop-shadow(0 8px 32px rgba(0,0,0,0.5))" }}>
+          <div className="rounded-2xl overflow-hidden"
+            style={{ background:"rgba(24,24,27,0.98)", border:"1px solid rgba(139,92,246,0.3)" }}>
+            <div className="h-0.5" style={{ background:"linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
+            <div className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center"
+                  style={{ background:"rgba(139,92,246,0.15)", border:"1px solid rgba(139,92,246,0.3)" }}>
+                  <Bell size={14} style={{ color:"#8B5CF6" }}/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    {loginToast.title}
+                  </p>
+                  <p className="text-xs mt-0.5 leading-relaxed" style={{ color:"rgba(255,255,255,0.45)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    {loginToast.message}
+                  </p>
+                </div>
+                <button onClick={() => setLoginToast(null)}
+                  className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full"
+                  style={{ background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.4)" }}>
+                  <X size={12}/>
+                </button>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={async () => {
+                    await markNotificationRead(loginToast.id);
+                    setNotifs(prev => prev.map(x => x.id === loginToast.id ? { ...x, isRead: true } : x));
+                    setLoginToast(null);
+                  }}
+                  className="flex-1 py-2 text-xs tracking-widest uppercase"
+                  style={{ border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Okundu Yap
+                </button>
+                <button
+                  onClick={() => { setNotifOpen(true); setLoginToast(null); }}
+                  className="flex-1 py-2 text-xs tracking-widest uppercase text-white"
+                  style={{ background:"linear-gradient(135deg,#8B5CF6,#A855F7)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Detayı Gör
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   );
 }

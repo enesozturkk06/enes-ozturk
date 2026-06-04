@@ -6,7 +6,7 @@ import { useAuth } from "@/app/providers";
 import Logo from "@/app/components/shared/Logo";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
-  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield,
+  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell,
 } from "lucide-react";
 
 const links = [
@@ -17,6 +17,7 @@ const links = [
   { href: "/admin/odemeler",         label: "Ödemeler",         icon: CreditCard },
   { href: "/admin/dersler",          label: "Ders Notları",     icon: BookOpen },
   { href: "/admin/salon-sahipleri",  label: "Salon Sahipleri",  icon: Shield },
+  { href: "/admin/bildirimler",      label: "Bildirimler",      icon: Bell },
 ];
 
 export default function AdminSidebar() {

@@ -159,7 +159,8 @@ export default function RandevuPage() {
 
   const confirmCancel = async () => {
     if (!cancelId) return;
-    await cancelAppointment(cancelId); setCancelId(null); await reload();
+    await cancelAppointment(cancelId, student?.fullName);
+    setCancelId(null); await reload();
   };
 
   const myAptOnDate = appointments.find(a => a.date === selectedDate && a.status === "onaylandi");

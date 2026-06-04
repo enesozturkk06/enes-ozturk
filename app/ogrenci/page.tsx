@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudentNotifications,
-  getPendingInvites, respondToInvite, cancelAppointment,
+  getPendingInvites, respondToInvite, cancelAppointment, createAdminNotification,
 } from "@/lib/db";
 import type { Appointment, LessonRecord, Notification, PendingInvite } from "@/lib/types";
 import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components/ui";
@@ -65,6 +65,15 @@ export default function OgrenciDashboard() {
     const hoursLeft = differenceInHours(parseISO(`${apt.date}T${apt.startTime}`), new Date());
     if (hoursLeft < CANCEL_LIMIT_HOURS) {
       alert(`Randevuya ${CANCEL_LIMIT_HOURS} saatten az kaldığı için iptal edemezsiniz. Lütfen antrenörünüzle iletişime geçin.`);
+      // Admin'e bildir: öğrenci iptal etmek istedi ama kural engelledi
+      if (student) {
+        createAdminNotification(
+          `İptal isteği engellendi: ${student.fullName}`,
+          `${student.fullName}, ${format(parseISO(apt.date), "dd MMM", { locale: tr })} ${apt.startTime} randevusunu iptal etmek istedi fakat ${CANCEL_LIMIT_HOURS} saat kuralı nedeniyle yapamadı.`,
+          "warning",
+          { appointmentId: apt.id, studentId: student.id },
+        );
+      }
       return;
     }
     setCancelTarget(apt);
@@ -73,7 +82,8 @@ export default function OgrenciDashboard() {
   const handleCancelConfirm = async () => {
     if (!cancelTarget) return;
     setCancelBusy(true);
-    await cancelAppointment(cancelTarget.id);
+    // öğrenci adını gönderiyoruz — db.ts bildirim oluşturacak
+    await cancelAppointment(cancelTarget.id, student?.fullName);
     setCancelBusy(false);
     setCancelTarget(null);
     await reload();
