@@ -480,25 +480,43 @@ export default function AdminDashboard() {
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
             className="fixed inset-0 z-40 bg-black/50"
             onClick={() => setNotifOpen(false)} />
-          {/* Panel */}
+          {/* Panel — mobilde alt yarı, desktop'ta tam yükseklik sağ kenar */}
           <motion.div
             initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
             transition={{ type:"spring", damping:28, stiffness:280 }}
-            className="fixed right-0 top-0 bottom-0 z-50 w-full sm:w-[420px] flex flex-col"
-            style={{ background:"#18181B", borderLeft:"1px solid rgba(255,255,255,0.08)", boxShadow:"-20px 0 60px rgba(0,0,0,0.5)" }}>
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"
-              style={{ borderColor:"rgba(255,255,255,0.08)" }}>
-              <div className="flex items-center gap-2.5">
-                <Bell size={16} className="text-gold"/>
-                <span className="text-white font-display tracking-wider text-lg" style={{ fontFamily:"var(--font-bebas)" }}>
+            className="fixed right-0 z-50 w-full sm:w-[420px] flex flex-col"
+            style={{
+              background: "#18181B",
+              borderLeft: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "-20px 0 60px rgba(0,0,0,0.5)",
+              // iOS safe-area: üst ve alt boşlukları dahil et
+              top:    0,
+              bottom: 0,
+              maxHeight: "100dvh",          // dynamic viewport height
+              paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            }}>
+
+            {/* Panel header — sticky, safe-area-inset-top ile durum çubuğunun altına iner */}
+            <div
+              className="flex items-center justify-between border-b flex-shrink-0"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                // iPhone notch / Dynamic Island için safe area
+                paddingTop:    "calc(env(safe-area-inset-top, 0px) + 14px)",
+                paddingBottom: "14px",
+                paddingLeft:   "20px",
+                paddingRight:  "12px",
+              }}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Bell size={16} className="text-gold flex-shrink-0"/>
+                <span className="text-white font-display tracking-wider text-lg truncate" style={{ fontFamily:"var(--font-bebas)" }}>
                   BİLDİRİMLER
                 </span>
                 {unreadNotifs > 0 && (
-                  <span className="text-xs bg-crimson text-white px-2 py-0.5">{unreadNotifs} yeni</span>
+                  <span className="text-xs bg-crimson text-white px-2 py-0.5 flex-shrink-0">{unreadNotifs} yeni</span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 {unreadNotifs > 0 && (
                   <button
                     onClick={async () => {
@@ -506,20 +524,43 @@ export default function AdminDashboard() {
                       const fresh = await getAdminNotifications();
                       setNotifs(fresh);
                     }}
-                    className="text-xs px-2.5 py-1 transition-colors"
+                    className="hidden sm:block text-xs px-2.5 py-1 transition-colors"
                     style={{ color:"rgba(255,255,255,0.35)", border:"1px solid rgba(255,255,255,0.1)", fontFamily:"var(--font-barlow-condensed)" }}>
                     Tümünü okundu yap
                   </button>
                 )}
-                <button onClick={() => setNotifOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full"
-                  style={{ background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)" }}>
-                  <X size={15}/>
+                {/* X butonu — min 44×44px dokunma alanı */}
+                <button
+                  onClick={() => setNotifOpen(false)}
+                  className="flex items-center justify-center rounded-full"
+                  style={{
+                    minWidth: 44, minHeight: 44,
+                    background: "rgba(255,255,255,0.06)",
+                    color: "rgba(255,255,255,0.6)",
+                  }}
+                  aria-label="Kapat">
+                  <X size={18}/>
                 </button>
               </div>
             </div>
 
-            {/* Liste */}
+            {/* Mobilde "Tümünü okundu yap" ikinci satıra iner */}
+            {unreadNotifs > 0 && (
+              <div className="sm:hidden flex-shrink-0 px-4 py-2 border-b" style={{ borderColor:"rgba(255,255,255,0.06)" }}>
+                <button
+                  onClick={async () => {
+                    await markAllAdminNotificationsRead();
+                    const fresh = await getAdminNotifications();
+                    setNotifs(fresh);
+                  }}
+                  className="w-full text-xs py-2 transition-colors"
+                  style={{ color:"rgba(255,255,255,0.4)", border:"1px solid rgba(255,255,255,0.08)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Tümünü okundu yap
+                </button>
+              </div>
+            )}
+
+            {/* Liste — scroll içerik */}
             <div className="flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling:"touch" }}>
               {notifs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
@@ -567,10 +608,19 @@ export default function AdminDashboard() {
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 px-5 py-4 border-t" style={{ borderColor:"rgba(255,255,255,0.08)" }}>
+            <div className="flex-shrink-0 px-5 pt-4 border-t"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                paddingBottom: "max(16px, env(safe-area-inset-bottom, 16px))",
+              }}>
               <Link href="/admin/bildirimler"
-                className="flex items-center justify-center gap-2 w-full py-2.5 text-xs tracking-widest uppercase transition-colors"
-                style={{ border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}
+                className="flex items-center justify-center gap-2 w-full py-3 text-xs tracking-widest uppercase transition-colors"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "rgba(255,255,255,0.3)",
+                  fontFamily: "var(--font-barlow-condensed)",
+                  minHeight: 44,   // touch target
+                }}
                 onClick={() => setNotifOpen(false)}>
                 Tüm Bildirimleri Görüntüle
               </Link>
