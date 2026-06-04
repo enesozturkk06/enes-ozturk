@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner } from "@/lib/db";
+import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner, renewStudentPackage, getStudentPackageHistory } from "@/lib/db";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { getPackages, type LessonPackage } from "@/lib/packages";
-import type { Student } from "@/lib/types";
-import { PAYMENT_LABELS, LEVEL_LABELS } from "@/lib/constants";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon } from "lucide-react";
+import type { Student, PackagePurchase } from "@/lib/types";
+import { PAYMENT_LABELS, LEVEL_LABELS, PACKAGES } from "@/lib/constants";
+import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History } from "lucide-react";
+import { useToast } from "@/app/components/shared/Toast";
+import { format } from "date-fns";
 
 /* ── Sıralı kod üret: ENES001, ENES002... ────────────────────────────── */
 function genCodeSequential(students: Student[]): string {
@@ -111,6 +113,19 @@ export default function OgrencilerPage() {
   const [eNotes, setENotes]       = useState("");
   const [eSaving, setESaving]     = useState(false);
 
+  /* Paket yenile */
+  const [renewSt, setRenewSt]           = useState<Student | null>(null);
+  const [pkgHistory, setPkgHistory]     = useState<PackagePurchase[]>([]);
+  const [pkgHistLoading, setPkgHistLoading] = useState(false);
+  const [histOpen, setHistOpen]         = useState(false);
+  const [selPkg, setSelPkg]             = useState(PACKAGES[1]);       // Şampiyon default
+  const [rListPrice, setRListPrice]     = useState(String(PACKAGES[1].price));
+  const [rPaidAmount, setRPaidAmount]   = useState("");
+  const [rPayStatus, setRPayStatus]     = useState("beklemede");
+  const [rNotes, setRNotes]             = useState("");
+  const [rSaving, setRSaving]           = useState(false);
+  const { toast } = useToast();
+
   /* Düet partner */
   const [partnerModal, setPartnerModal]   = useState<Student | null>(null);
   const [currentPartner, setCurrentPartner] = useState<Student | null>(null);
@@ -122,6 +137,58 @@ export default function OgrencilerPage() {
     setPartnerSearch("");
     const p = await getDuetPartner(s.id);
     setCurrentPartner(p);
+  };
+
+  const openRenewModal = async (s: Student) => {
+    setRenewSt(s);
+    setSelPkg(PACKAGES[1]);
+    setRListPrice(String(PACKAGES[1].price));
+    setRPaidAmount("");
+    setRPayStatus("beklemede");
+    setRNotes("");
+    setHistOpen(false);
+    // Paket geçmişini arka planda yükle
+    setPkgHistLoading(true);
+    const hist = await getStudentPackageHistory(s.id);
+    setPkgHistory(hist);
+    setPkgHistLoading(false);
+  };
+
+  const handleRenew = async () => {
+    if (!renewSt) return;
+    setRSaving(true);
+    try {
+      const today = new Date();
+      const end   = new Date(today);
+      end.setDate(end.getDate() + selPkg.durationDays);
+      const fmt = (d: Date) => d.toISOString().split("T")[0];
+      const paid = Number(rPaidAmount) || 0;
+
+      const { newRemaining } = await renewStudentPackage({
+        studentId:     renewSt.id,
+        studentName:   renewSt.fullName,
+        packageType:   selPkg.type,
+        packageName:   `${selPkg.name} Paketi`,
+        lessonCount:   selPkg.lessonCount,
+        listPrice:     Number(rListPrice) || selPkg.price,
+        paidAmount:    paid,
+        paymentStatus: rPayStatus as "odendi" | "kismi" | "beklemede",
+        startDate:     fmt(today),
+        endDate:       fmt(end),
+        notes:         rNotes || undefined,
+      });
+
+      // Öğrenci listesini yenile
+      const updated = await getStudents();
+      setStudents(updated);
+
+      toast(`Paket başarıyla yenilendi. Yeni kalan ders: ${newRemaining}`, "success");
+      setRenewSt(null);
+    } catch (err) {
+      toast("Hata: " + (err instanceof Error ? err.message : String(err)), "error");
+    } finally {
+      setRSaving(false);
+    }
   };
 
   const handleSetPartner = async (targetId: string) => {
@@ -601,6 +668,7 @@ export default function OgrencilerPage() {
                           <a href={`https://wa.me/90${s.phone.replace(/\D/g,"").slice(-10)}`} target="_blank" rel="noopener noreferrer"
                             className="p-1.5 text-white/25 hover:text-green-400 transition-colors" title="WhatsApp"><Phone size={13} /></a>
                           <button onClick={() => openEdit(s)} className="p-1.5 text-white/25 hover:text-gold transition-colors" title="Düzenle"><Edit size={13} /></button>
+                          <button onClick={() => openRenewModal(s)} className="p-1.5 text-white/25 hover:text-green-400 transition-colors" title="Paket Yenile"><RotateCcw size={13} /></button>
                           <button onClick={() => openPartnerModal(s)} className="p-1.5 text-white/25 hover:text-violet transition-colors" title="Düet Partneri"><Users size={13} /></button>
                           <button onClick={() => setDelSt(s)} className="p-1.5 text-white/25 hover:text-crimson transition-colors" title="Sil"><Trash2 size={13} /></button>
                         </div>
@@ -851,6 +919,204 @@ export default function OgrencilerPage() {
             </p>
             <button onClick={() => setQrSt(null)} className="mt-4 text-xs text-white/30 hover:text-white tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kapat</button>
           </div>
+        </div>
+      )}
+
+      {/* ── PAKET YENİLE MODAL ──────────────────────────────────────── */}
+      {renewSt && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          style={{ padding: 0 }} onClick={() => setRenewSt(null)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+            className="relative z-10 w-full sm:max-w-2xl bg-carbon border border-white/10 flex flex-col"
+            style={{ borderRadius: "16px 16px 0 0", maxHeight: "92dvh" }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="flex-shrink-0 relative">
+              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background:"linear-gradient(90deg,#22c55e,#86efac)" }} />
+              <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/6">
+                <div className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-green-400 font-display text-sm"
+                  style={{ background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.25)", fontFamily:"var(--font-bebas)" }}>
+                  {renewSt.fullName.split(" ").map(n => n[0]).join("").slice(0,2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-base font-display text-white tracking-wider truncate" style={{ fontFamily:"var(--font-bebas)" }}>{renewSt.fullName}</div>
+                  <div className="text-xs" style={{ color:"rgba(34,197,94,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    {renewSt.code} · Mevcut kalan: <strong>{renewSt.remainingLessons}</strong> ders
+                  </div>
+                </div>
+                <button onClick={() => setRenewSt(null)}
+                  className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full"
+                  style={{ background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Kaydırılabilir içerik */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5"
+              style={{ WebkitOverflowScrolling:"touch" }}>
+
+              {/* Paket Seç */}
+              <div>
+                <p className="text-xs tracking-widest uppercase mb-3"
+                  style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Yeni Paket Seç
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {PACKAGES.map(pkg => {
+                    const active = selPkg.type === pkg.type;
+                    return (
+                      <button key={pkg.type}
+                        onClick={() => { setSelPkg(pkg); setRListPrice(String(pkg.price)); }}
+                        className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl transition-all"
+                        style={{
+                          background: active ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.03)",
+                          border: active ? "1px solid rgba(34,197,94,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                        }}>
+                        <PackageIcon size={16} style={{ color: active ? "#22c55e" : "rgba(255,255,255,0.3)" }} />
+                        <span className="text-xs font-semibold" style={{ color: active ? "#fff" : "rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>{pkg.name}</span>
+                        <span className="text-[10px]" style={{ color: active ? "rgba(34,197,94,0.7)" : "rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                          {pkg.lessonCount} ders · ₺{pkg.price.toLocaleString("tr-TR")}
+                        </span>
+                        <span className="text-[9px]" style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                          {pkg.durationDays} gün
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Ders özeti */}
+              <div className="p-3 rounded-xl" style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.15)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>Mevcut Kalan</span>
+                  <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{renewSt.remainingLessons} ders</span>
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>+ Yeni Paket</span>
+                  <span className="text-sm font-semibold" style={{ color:"#22c55e", fontFamily:"var(--font-barlow-condensed)" }}>+ {selPkg.lessonCount} ders</span>
+                </div>
+                <div className="h-px my-2" style={{ background:"rgba(255,255,255,0.06)" }} />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-barlow-condensed)" }}>Yeni Kalan</span>
+                  <span className="text-lg font-bold" style={{ color:"#22c55e", fontFamily:"var(--font-bebas)", letterSpacing:"0.05em" }}>
+                    {renewSt.remainingLessons + selPkg.lessonCount} ders
+                  </span>
+                </div>
+              </div>
+
+              {/* Ödeme Bilgileri */}
+              <div className="p-4 space-y-3" style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8 }}>
+                <p className="text-xs tracking-widest uppercase" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>Ödeme Bilgileri</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      Paket Fiyatı (₺)
+                    </label>
+                    <input type="number" value={rListPrice} onChange={e => setRListPrice(e.target.value)}
+                      className="w-full bg-carbon border border-white/10 focus:border-gold/50 text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily:"var(--font-inter)" }} />
+                    <p className="text-[10px] text-white/20 mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Katalog: ₺{selPkg.price.toLocaleString("tr-TR")}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      Ödenen (₺)
+                    </label>
+                    <input type="number" value={rPaidAmount} onChange={e => setRPaidAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-carbon border border-white/10 focus:border-green-500/50 text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily:"var(--font-inter)" }} />
+                    {Number(rPaidAmount) > 0 && Number(rListPrice) > 0 && (
+                      <p className="text-[10px] mt-1" style={{ color: Number(rPaidAmount) >= Number(rListPrice) ? "#22c55e" : "#d97706", fontFamily:"var(--font-barlow-condensed)" }}>
+                        Kalan: ₺{Math.max(0, Number(rListPrice) - Number(rPaidAmount)).toLocaleString("tr-TR")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Ödeme Durumu</label>
+                  <select value={rPayStatus} onChange={e => setRPayStatus(e.target.value)}
+                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none appearance-none"
+                    style={{ fontFamily:"var(--font-inter)" }}>
+                    <option value="beklemede">Beklemede</option>
+                    <option value="kismi">Kısmi Ödeme</option>
+                    <option value="odendi">Ödendi</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Not (opsiyonel)</label>
+                  <input type="text" value={rNotes} onChange={e => setRNotes(e.target.value)}
+                    placeholder="İndirim nedeni, özel not..."
+                    className="w-full bg-carbon border border-white/10 text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none"
+                    style={{ fontFamily:"var(--font-inter)" }} />
+                </div>
+              </div>
+
+              {/* Paket Geçmişi */}
+              <div>
+                <button className="flex items-center gap-2 w-full text-left py-2" onClick={() => setHistOpen(o => !o)}>
+                  <History size={13} style={{ color:"rgba(255,255,255,0.3)" }} />
+                  <span className="text-xs tracking-widest uppercase flex-1"
+                    style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    Paket Geçmişi {pkgHistory.length > 0 && `(${pkgHistory.length})`}
+                  </span>
+                  {histOpen ? <ChevronUp size={12} style={{ color:"rgba(255,255,255,0.2)" }}/> : <ChevronDown size={12} style={{ color:"rgba(255,255,255,0.2)"}}/> }
+                </button>
+                {histOpen && (
+                  <div className="space-y-1.5 mt-2">
+                    {pkgHistLoading ? (
+                      <div className="flex justify-center py-4">
+                        <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor:"rgba(255,255,255,0.2)", borderTopColor:"transparent" }} />
+                      </div>
+                    ) : pkgHistory.length === 0 ? (
+                      <p className="text-xs text-center py-4" style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                        Henüz paket geçmişi yok
+                      </p>
+                    ) : pkgHistory.map(h => (
+                      <div key={h.id} className="flex items-center gap-3 px-3 py-2.5 rounded"
+                        style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)" }}>
+                        <PackageIcon size={12} style={{ color:"rgba(139,92,246,0.5)", flexShrink:0 }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            {h.packageName} — {h.lessonCount} ders
+                          </div>
+                          <div className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                            ₺{h.paidAmount.toLocaleString("tr-TR")} · {h.startDate ? format(new Date(h.startDate), "dd.MM.yyyy") : ""}
+                          </div>
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 ${h.paymentStatus === "odendi" ? "text-green-400 border-green-500/20 bg-green-500/8" : h.paymentStatus === "kismi" ? "text-gold border-gold/20 bg-gold/8" : "text-crimson border-crimson/20 bg-crimson/8"}`}
+                          style={{ fontFamily:"var(--font-barlow-condensed)", border:"1px solid" }}>
+                          {PAYMENT_LABELS[h.paymentStatus]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="h-2" />
+            </div>
+
+            {/* Footer */}
+            <div className="flex-shrink-0 flex gap-3 px-5 py-4 border-t border-white/6"
+              style={{ background:"rgba(24,24,27,0.98)" }}>
+              <button onClick={() => setRenewSt(null)}
+                className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
+                style={{ fontFamily:"var(--font-barlow-condensed)" }}>Vazgeç</button>
+              <button onClick={handleRenew} disabled={rSaving}
+                className="flex-1 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                style={{ background:"linear-gradient(135deg,#22c55e,#16a34a)", fontFamily:"var(--font-barlow-condensed)" }}>
+                {rSaving ? (
+                  <><div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" />Yenileniyor...</>
+                ) : (
+                  <><RotateCcw size={13}/>Paketi Yenile — {renewSt.remainingLessons + selPkg.lessonCount} Ders</>
+                )}
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

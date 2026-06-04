@@ -79,6 +79,22 @@ export interface Notification {
 
 export interface BlockedDate { id: string; date: string; reason: string; createdAt: string; }
 
+/** Öğrencinin satın aldığı/yenilediği paket kaydı */
+export interface PackagePurchase {
+  id:            string;
+  studentId:     string;
+  packageType:   PackageType;
+  packageName:   string;
+  lessonCount:   number;
+  listPrice:     number;
+  paidAmount:    number;
+  paymentStatus: PaymentStatus;
+  startDate:     string;
+  endDate:       string;
+  notes?:        string;
+  createdAt:     string;
+}
+
 export interface Payment {
   id: string; studentId: string; studentName: string;
   amount: number; paidAt: string; method: string; notes?: string;

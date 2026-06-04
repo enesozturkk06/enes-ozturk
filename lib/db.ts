@@ -6,6 +6,7 @@ import type {
   Student, Appointment, AppointmentStudent, LessonRecord,
   Notification, NotifType, TimeSlot, Payment, CompleteResult, LessonType,
   DuetPartner, PendingInvite, SalonOwner, SalonOwnerStudent,
+  PackagePurchase, PackageType, PaymentStatus,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
@@ -1067,4 +1068,124 @@ export async function deletePayment(id: string): Promise<void> {
       }).eq("id", pay.student_id);
     }
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PAKET GEÇMİŞİ & YENİLEME
+   ═══════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mPkg = (r: any): PackagePurchase => ({
+  id:            r.id,
+  studentId:     r.student_id,
+  packageType:   r.package_type   as PackageType,
+  packageName:   r.package_name   ?? "",
+  lessonCount:   Number(r.lesson_count  ?? 0),
+  listPrice:     Number(r.list_price    ?? 0),
+  paidAmount:    Number(r.paid_amount   ?? 0),
+  paymentStatus: r.payment_status as PaymentStatus,
+  startDate:     r.start_date     ?? "",
+  endDate:       r.end_date       ?? "",
+  notes:         r.notes          ?? undefined,
+  createdAt:     r.created_at     ?? "",
+});
+
+/** Öğrencinin paket geçmişini getir */
+export async function getStudentPackageHistory(studentId: string): Promise<PackagePurchase[]> {
+  const { data, error } = await db()
+    .from("student_packages").select("*")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    if (isSchemaError(error)) { console.warn("getStudentPackageHistory: tablo hazır değil"); return []; }
+    console.error("getStudentPackageHistory:", error.message);
+    return [];
+  }
+  return (data ?? []).map(mPkg);
+}
+
+/**
+ * Paket Yenile — öğrenciye yeni paket ekle
+ *
+ * Ders mantığı:
+ *   remaining_lessons += lessonCount   (mevcut dersleri korur)
+ *   total_lessons     += lessonCount   (toplam ders geçmişi büyür)
+ *   completed_lessons değişmez
+ */
+export async function renewStudentPackage(params: {
+  studentId:     string;
+  studentName:   string;
+  packageType:   PackageType;
+  packageName:   string;
+  lessonCount:   number;
+  listPrice:     number;
+  paidAmount:    number;
+  paymentStatus: PaymentStatus;
+  startDate:     string;
+  endDate:       string;
+  notes?:        string;
+}): Promise<{ newRemaining: number }> {
+
+  // 1. Mevcut öğrenci verisini çek
+  const { data: std, error: se } = await db()
+    .from("students").select("remaining_lessons, total_lessons, amount_paid, amount_due")
+    .eq("id", params.studentId).single();
+  if (se) fail("renewStudentPackage:fetch", se);
+
+  const prevRemaining  = Number(std!.remaining_lessons  ?? 0);
+  const prevTotal      = Number(std!.total_lessons       ?? 0);
+  const prevAmountPaid = Number(std!.amount_paid         ?? 0);
+  const prevAmountDue  = Number(std!.amount_due          ?? 0);
+  const newRemaining   = prevRemaining + params.lessonCount;
+  const newTotal       = prevTotal     + params.lessonCount;
+  const amountDue      = Math.max(0, params.listPrice - params.paidAmount);
+
+  // 2. Paket geçmişi kaydı
+  const { error: pe } = await db().from("student_packages").insert({
+    student_id:     params.studentId,
+    package_type:   params.packageType,
+    package_name:   params.packageName,
+    lesson_count:   params.lessonCount,
+    list_price:     params.listPrice,
+    paid_amount:    params.paidAmount,
+    payment_status: params.paymentStatus,
+    start_date:     params.startDate,
+    end_date:       params.endDate,
+    notes:          params.notes ?? null,
+  });
+  if (pe) {
+    if (isSchemaError(pe)) {
+      console.warn("renewStudentPackage: student_packages tablosu hazır değil → supabase-student-packages.sql çalıştırın");
+    } else {
+      fail("renewStudentPackage:pkg_insert", pe);
+    }
+  }
+
+  // 3. Öğrenci güncelle
+  const { error: ue } = await db().from("students").update({
+    remaining_lessons:  newRemaining,
+    total_lessons:      newTotal,
+    package_type:       params.packageType,
+    amount_paid:        prevAmountPaid + params.paidAmount,
+    amount_due:         prevAmountDue  + amountDue,
+    payment_status:     params.paymentStatus,
+    package_start_date: params.startDate,
+    package_end_date:   params.endDate,
+  }).eq("id", params.studentId);
+  if (ue) fail("renewStudentPackage:student_update", ue);
+
+  // 4. Ödeme kaydı oluştur (gelir paneline yansısın)
+  if (params.paidAmount > 0) {
+    const { error: paye } = await db().from("payments").insert({
+      student_id:   params.studentId,
+      student_name: params.studentName,
+      amount:       params.paidAmount,
+      paid_at:      params.startDate,
+      method:       "paket",
+      notes:        `${params.packageName} — ${params.lessonCount} ders`,
+    });
+    if (paye) console.warn("renewStudentPackage:payment:", paye.message);
+  }
+
+  return { newRemaining };
 }
