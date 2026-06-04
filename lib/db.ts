@@ -1115,7 +1115,8 @@ export async function getStudentPackageHistory(studentId: string): Promise<Packa
 export async function renewStudentPackage(params: {
   studentId:     string;
   studentName:   string;
-  packageType:   PackageType;
+  /** packages tablosundaki gerçek paket id'si — student_packages'a kaydedilir */
+  packageId:     string;
   packageName:   string;
   lessonCount:   number;
   listPrice:     number;
@@ -1140,10 +1141,10 @@ export async function renewStudentPackage(params: {
   const newTotal       = prevTotal     + params.lessonCount;
   const amountDue      = Math.max(0, params.listPrice - params.paidAmount);
 
-  // 2. Paket geçmişi kaydı
+  // 2. Paket geçmişi kaydı — package_type yerine package_name kullan (custom paket desteği)
   const { error: pe } = await db().from("student_packages").insert({
     student_id:     params.studentId,
-    package_type:   params.packageType,
+    package_type:   params.packageId,   // UUID olarak saklanır
     package_name:   params.packageName,
     lesson_count:   params.lessonCount,
     list_price:     params.listPrice,
@@ -1161,11 +1162,11 @@ export async function renewStudentPackage(params: {
     }
   }
 
-  // 3. Öğrenci güncelle
+  // 3. Öğrenci güncelle — package_type enum güncellenmez (custom paket uyumluluğu için)
   const { error: ue } = await db().from("students").update({
     remaining_lessons:  newRemaining,
     total_lessons:      newTotal,
-    package_type:       params.packageType,
+    // package_type kasıtlı güncellenmedi: enum kısıtlaması ve custom paket desteği
     amount_paid:        prevAmountPaid + params.paidAmount,
     amount_due:         prevAmountDue  + amountDue,
     payment_status:     params.paymentStatus,

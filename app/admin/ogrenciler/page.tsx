@@ -4,9 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner, renewStudentPackage, getStudentPackageHistory } from "@/lib/db";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { getPackages, type LessonPackage } from "@/lib/packages";
+import { getPackages, getActivePackages, type LessonPackage } from "@/lib/packages";
 import type { Student, PackagePurchase } from "@/lib/types";
-import { PAYMENT_LABELS, LEVEL_LABELS, PACKAGES } from "@/lib/constants";
+import { PAYMENT_LABELS, LEVEL_LABELS } from "@/lib/constants";
 import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History } from "lucide-react";
 import { useToast } from "@/app/components/shared/Toast";
 import { format } from "date-fns";
@@ -115,11 +115,12 @@ export default function OgrencilerPage() {
 
   /* Paket yenile */
   const [renewSt, setRenewSt]           = useState<Student | null>(null);
+  const [activePackages, setActivePackages] = useState<LessonPackage[]>([]);
   const [pkgHistory, setPkgHistory]     = useState<PackagePurchase[]>([]);
   const [pkgHistLoading, setPkgHistLoading] = useState(false);
   const [histOpen, setHistOpen]         = useState(false);
-  const [selPkg, setSelPkg]             = useState(PACKAGES[1]);       // Şampiyon default
-  const [rListPrice, setRListPrice]     = useState(String(PACKAGES[1].price));
+  const [selPkg, setSelPkg]             = useState<LessonPackage | null>(null);
+  const [rListPrice, setRListPrice]     = useState("");
   const [rPaidAmount, setRPaidAmount]   = useState("");
   const [rPayStatus, setRPayStatus]     = useState("beklemede");
   const [rNotes, setRNotes]             = useState("");
@@ -141,21 +142,30 @@ export default function OgrencilerPage() {
 
   const openRenewModal = async (s: Student) => {
     setRenewSt(s);
-    setSelPkg(PACKAGES[1]);
-    setRListPrice(String(PACKAGES[1].price));
+    setSelPkg(null);
+    setRListPrice("");
     setRPaidAmount("");
     setRPayStatus("beklemede");
     setRNotes("");
     setHistOpen(false);
-    // Paket geçmişini arka planda yükle
+    // Aktif paketleri ve geçmişi paralel çek
     setPkgHistLoading(true);
-    const hist = await getStudentPackageHistory(s.id);
+    const [active, hist] = await Promise.all([
+      getActivePackages(),
+      getStudentPackageHistory(s.id),
+    ]);
+    setActivePackages(active);
+    // İlk aktif paketi varsayılan seç (modal yeni açıldığı için selPkg null)
+    if (active.length > 0) {
+      setSelPkg(active[0]);
+      setRListPrice(String(active[0].price));
+    }
     setPkgHistory(hist);
     setPkgHistLoading(false);
   };
 
   const handleRenew = async () => {
-    if (!renewSt) return;
+    if (!renewSt || !selPkg) return;
     setRSaving(true);
     try {
       const today = new Date();
@@ -167,8 +177,8 @@ export default function OgrencilerPage() {
       const { newRemaining } = await renewStudentPackage({
         studentId:     renewSt.id,
         studentName:   renewSt.fullName,
-        packageType:   selPkg.type,
-        packageName:   `${selPkg.name} Paketi`,
+        packageId:     selPkg.id,
+        packageName:   selPkg.name,
         lessonCount:   selPkg.lessonCount,
         listPrice:     Number(rListPrice) || selPkg.price,
         paidAmount:    paid,
@@ -958,55 +968,76 @@ export default function OgrencilerPage() {
             <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5"
               style={{ WebkitOverflowScrolling:"touch" }}>
 
-              {/* Paket Seç */}
+              {/* Paket Seç — Supabase'deki aktif paketler */}
               <div>
                 <p className="text-xs tracking-widest uppercase mb-3"
                   style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
-                  Yeni Paket Seç
+                  Paket Seç
                 </p>
-                <div className="grid grid-cols-3 gap-2">
-                  {PACKAGES.map(pkg => {
-                    const active = selPkg.type === pkg.type;
-                    return (
-                      <button key={pkg.type}
-                        onClick={() => { setSelPkg(pkg); setRListPrice(String(pkg.price)); }}
-                        className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl transition-all"
-                        style={{
-                          background: active ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.03)",
-                          border: active ? "1px solid rgba(34,197,94,0.35)" : "1px solid rgba(255,255,255,0.08)",
-                        }}>
-                        <PackageIcon size={16} style={{ color: active ? "#22c55e" : "rgba(255,255,255,0.3)" }} />
-                        <span className="text-xs font-semibold" style={{ color: active ? "#fff" : "rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>{pkg.name}</span>
-                        <span className="text-[10px]" style={{ color: active ? "rgba(34,197,94,0.7)" : "rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
-                          {pkg.lessonCount} ders · ₺{pkg.price.toLocaleString("tr-TR")}
-                        </span>
-                        <span className="text-[9px]" style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
-                          {pkg.durationDays} gün
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {pkgHistLoading && !selPkg ? (
+                  <div className="flex justify-center py-6">
+                    <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor:"rgba(255,255,255,0.2)", borderTopColor:"transparent" }} />
+                  </div>
+                ) : activePackages.length === 0 ? (
+                  <div className="p-4 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8 }}>
+                    <p className="text-xs" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                      Aktif paket yok. /admin/paketler sayfasından paket ekleyin.
+                    </p>
+                  </div>
+                ) : (
+                  <div className={`grid gap-2 ${activePackages.length <= 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+                    {activePackages.map(pkg => {
+                      const isActive = selPkg?.id === pkg.id;
+                      return (
+                        <button key={pkg.id}
+                          onClick={() => { setSelPkg(pkg); setRListPrice(String(pkg.price)); }}
+                          className="flex flex-col items-start gap-1 py-3 px-3 rounded-xl transition-all text-left"
+                          style={{
+                            background: isActive ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.03)",
+                            border: isActive ? "1px solid rgba(34,197,94,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                          }}>
+                          <div className="flex items-center gap-1.5 w-full">
+                            <PackageIcon size={12} style={{ color: isActive ? "#22c55e" : "rgba(255,255,255,0.3)", flexShrink:0 }} />
+                            <span className="text-xs font-semibold truncate" style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.5)", fontFamily:"var(--font-barlow-condensed)" }}>{pkg.name}</span>
+                            {pkg.highlight && (
+                              <span className="ml-auto text-[9px] px-1 py-0.5 rounded" style={{ background:"rgba(217,119,6,0.15)", color:"#d97706", fontFamily:"var(--font-barlow-condensed)", flexShrink:0 }}>
+                                Popüler
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] font-bold" style={{ color: isActive ? "#22c55e" : "rgba(255,255,255,0.6)", fontFamily:"var(--font-bebas)", letterSpacing:"0.03em" }}>
+                            {pkg.lessonCount} ders
+                          </span>
+                          <span className="text-[10px]" style={{ color: isActive ? "rgba(34,197,94,0.7)" : "rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                            ₺{pkg.price.toLocaleString("tr-TR")} · {pkg.durationDays}g
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Ders özeti */}
-              <div className="p-3 rounded-xl" style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.15)" }}>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>Mevcut Kalan</span>
-                  <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{renewSt.remainingLessons} ders</span>
+              {selPkg && (
+                <div className="p-3 rounded-xl" style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.15)" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>Mevcut Kalan</span>
+                    <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{renewSt.remainingLessons} ders</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>+ {selPkg.name}</span>
+                    <span className="text-sm font-semibold" style={{ color:"#22c55e", fontFamily:"var(--font-barlow-condensed)" }}>+ {selPkg.lessonCount} ders</span>
+                  </div>
+                  <div className="h-px my-2" style={{ background:"rgba(255,255,255,0.06)" }} />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-barlow-condensed)" }}>Yeni Kalan</span>
+                    <span className="text-lg font-bold" style={{ color:"#22c55e", fontFamily:"var(--font-bebas)", letterSpacing:"0.05em" }}>
+                      {renewSt.remainingLessons + selPkg.lessonCount} ders
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>+ Yeni Paket</span>
-                  <span className="text-sm font-semibold" style={{ color:"#22c55e", fontFamily:"var(--font-barlow-condensed)" }}>+ {selPkg.lessonCount} ders</span>
-                </div>
-                <div className="h-px my-2" style={{ background:"rgba(255,255,255,0.06)" }} />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-barlow-condensed)" }}>Yeni Kalan</span>
-                  <span className="text-lg font-bold" style={{ color:"#22c55e", fontFamily:"var(--font-bebas)", letterSpacing:"0.05em" }}>
-                    {renewSt.remainingLessons + selPkg.lessonCount} ders
-                  </span>
-                </div>
-              </div>
+              )}
 
               {/* Ödeme Bilgileri */}
               <div className="p-4 space-y-3" style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8 }}>
@@ -1019,7 +1050,7 @@ export default function OgrencilerPage() {
                     <input type="number" value={rListPrice} onChange={e => setRListPrice(e.target.value)}
                       className="w-full bg-carbon border border-white/10 focus:border-gold/50 text-white px-3 py-2.5 text-sm outline-none"
                       style={{ fontFamily:"var(--font-inter)" }} />
-                    <p className="text-[10px] text-white/20 mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Katalog: ₺{selPkg.price.toLocaleString("tr-TR")}</p>
+                    <p className="text-[10px] text-white/20 mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Katalog: ₺{selPkg?.price.toLocaleString("tr-TR") ?? "—"}</p>
                   </div>
                   <div>
                     <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
@@ -1106,11 +1137,13 @@ export default function OgrencilerPage() {
               <button onClick={() => setRenewSt(null)}
                 className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
                 style={{ fontFamily:"var(--font-barlow-condensed)" }}>Vazgeç</button>
-              <button onClick={handleRenew} disabled={rSaving}
+              <button onClick={handleRenew} disabled={rSaving || !selPkg}
                 className="flex-1 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
                 style={{ background:"linear-gradient(135deg,#22c55e,#16a34a)", fontFamily:"var(--font-barlow-condensed)" }}>
                 {rSaving ? (
                   <><div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" />Yenileniyor...</>
+                ) : !selPkg ? (
+                  <>Paket Seçin</>
                 ) : (
                   <><RotateCcw size={13}/>Paketi Yenile — {renewSt.remainingLessons + selPkg.lessonCount} Ders</>
                 )}

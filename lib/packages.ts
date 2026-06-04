@@ -38,6 +38,16 @@ export async function getPackages(): Promise<LessonPackage[]> {
   return (data ?? []).map(map);
 }
 
+/** Yalnızca aktif paketler — paket yenileme modalında kullanılır */
+export async function getActivePackages(): Promise<LessonPackage[]> {
+  const { data, error } = await db()
+    .from("packages").select("*")
+    .eq("is_active", true)
+    .order("sort_order");
+  if (error) { console.error("[getActivePackages]", error.message); return []; }
+  return (data ?? []).map(map);
+}
+
 // ── CREATE ────────────────────────────────────────────────────────────────────
 export async function createPackage(pkg: Omit<LessonPackage, "id">): Promise<LessonPackage> {
   const { data, error } = await db().from("packages").insert({
