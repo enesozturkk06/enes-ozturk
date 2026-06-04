@@ -250,6 +250,7 @@ export default function OdemelerPage() {
                     <option value="havale" className="bg-carbon">Havale / EFT</option>
                     <option value="kredi" className="bg-carbon">Kredi Kartı</option>
                     <option value="papara" className="bg-carbon">Papara</option>
+                    <option value="aylik" className="bg-carbon">Aylık Üyelik</option>
                   </select>
                 </div>
                 <F label="Not (isteğe bağlı)" value={note} onChange={setNote} placeholder="Paket adı, açıklama..." />
@@ -388,8 +389,12 @@ export default function OdemelerPage() {
                               {p.studentName}
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                                {p.method}
+                              <span className="text-xs"
+                                style={{
+                                  color: p.method === "aylik" ? "rgba(139,92,246,0.8)" : "rgba(255,255,255,0.3)",
+                                  fontFamily: "var(--font-barlow-condensed)",
+                                }}>
+                                {p.method === "aylik" ? "Aylık Üyelik" : p.method}
                               </span>
                               {p.notes && (
                                 <>

@@ -1,4 +1,5 @@
 export type PackageType      = "savasci" | "sampiyon" | "efsane";
+export type SubscriptionType = "lesson_pack" | "monthly";
 export type PaymentStatus    = "odendi" | "kismi" | "beklemede";
 export type AppointmentStatus= "onaylandi" | "iptal" | "tamamlandi" | "gelmedi";
 export type LessonType       = "bireysel" | "duet" | "grup";
@@ -16,6 +17,10 @@ export interface Student {
   packageStartDate: string; packageEndDate: string;
   notes?: string; isActive: boolean; createdAt: string;
   level: "baslangic" | "orta" | "ileri"; weight?: number; age?: number;
+  /** Ders paketi mi yoksa aylık üyelik mi — default: lesson_pack */
+  subscriptionType?: SubscriptionType;
+  /** Aylık üyelik aylık tutarı */
+  monthlyFee?: number;
 }
 
 export interface TimeSlot {

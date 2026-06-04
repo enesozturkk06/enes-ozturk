@@ -52,6 +52,8 @@ const ms = (r: any): Student => ({
   packageStartDate: r.package_start_date ?? "", packageEndDate: r.package_end_date ?? "",
   notes: r.notes ?? undefined, isActive: r.is_active ?? true,
   weight: r.weight ?? undefined, age: r.age ?? undefined, createdAt: r.created_at ?? "",
+  subscriptionType: (r.subscription_type ?? "lesson_pack") as import("./types").SubscriptionType,
+  monthlyFee: r.monthly_fee != null ? Number(r.monthly_fee) : undefined,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -159,6 +161,8 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.isActive         !== undefined) r.is_active          = s.isActive;
   if (s.weight           !== undefined) r.weight             = s.weight;
   if (s.age              !== undefined) r.age                = s.age;
+  if (s.subscriptionType !== undefined) r.subscription_type  = s.subscriptionType;
+  if (s.monthlyFee       !== undefined) r.monthly_fee        = s.monthlyFee ?? null;
   return r;
 }
 
@@ -899,19 +903,27 @@ export async function completeAppointmentWithAttendance(
     if (attended && isAccepted) {
       const { data: std } = await db()
         .from("students")
-        .select("full_name, remaining_lessons, completed_lessons")
+        .select("full_name, remaining_lessons, completed_lessons, subscription_type")
         .eq("id", studentId).single();
 
       if (!std) { warnings.push(`Öğrenci bulunamadı (${studentId})`); }
       else {
-        const remaining = Number(std.remaining_lessons ?? 0);
-        if (remaining <= 0) {
-          warnings.push(`⚠️ ${std.full_name} adlı öğrencinin kalan dersi yok.`);
-        } else {
+        const isMonthly = std.subscription_type === "monthly";
+        if (isMonthly) {
+          // Aylık üyelik: remaining_lessons düşmez, sadece completed artar
           await db().from("students").update({
-            remaining_lessons: remaining - 1,
             completed_lessons: Number(std.completed_lessons ?? 0) + 1,
           }).eq("id", studentId);
+        } else {
+          const remaining = Number(std.remaining_lessons ?? 0);
+          if (remaining <= 0) {
+            warnings.push(`⚠️ ${std.full_name} adlı öğrencinin kalan dersi yok.`);
+          } else {
+            await db().from("students").update({
+              remaining_lessons: remaining - 1,
+              completed_lessons: Number(std.completed_lessons ?? 0) + 1,
+            }).eq("id", studentId);
+          }
         }
       }
     }

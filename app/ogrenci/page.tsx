@@ -184,9 +184,9 @@ export default function OgrenciDashboard() {
       {/* ── Tıklanabilir stat kartları ── */}
       <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
-          label="Kalan Ders"
-          value={student.remainingLessons}
-          sub={`${student.completedLessons} ders tamamlandı`}
+          label={student.subscriptionType === "monthly" ? "Üyelik" : "Kalan Ders"}
+          value={student.subscriptionType === "monthly" ? "∞" : student.remainingLessons}
+          sub={student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${student.completedLessons} ders tamamlandı`}
           color="red"
           icon={<BookOpen size={17}/>}
           onClick={() => document.getElementById("paket-kartı")?.scrollIntoView({ behavior:"smooth" })}
@@ -223,20 +223,37 @@ export default function OgrenciDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-display text-white tracking-wider"
-                style={{ fontFamily:"var(--font-bebas)" }}>{pkg?.name} Paketi</h3>
+                style={{ fontFamily:"var(--font-bebas)" }}>
+                {student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name} Paketi`}
+              </h3>
               <p className="text-xs text-white/30 mt-0.5"
                 style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                Bitiş: {format(parseISO(student.packageEndDate || new Date().toISOString().split("T")[0]), "dd MMMM yyyy", { locale: tr })}
+                {student.subscriptionType === "monthly"
+                  ? `${student.monthlyFee ? `₺${student.monthlyFee.toLocaleString("tr-TR")} / ay` : "Aylık ödeme"}`
+                  : `Bitiş: ${format(parseISO(student.packageEndDate || new Date().toISOString().split("T")[0]), "dd MMMM yyyy", { locale: tr })}`}
               </p>
             </div>
             <Badge color={student.paymentStatus === "odendi" ? "green" : student.paymentStatus === "kismi" ? "gold" : "red"}>
               {PAYMENT_LABELS[student.paymentStatus]}
             </Badge>
           </div>
-          <ProgressBar value={student.completedLessons} max={totalLessons} color="red"
-            label={`${student.completedLessons} / ${totalLessons} ders`} />
-          <div className="mt-2 text-right text-xs text-white/30"
-            style={{ fontFamily:"var(--font-barlow-condensed)" }}>{progressPct}% tamamlandı</div>
+          {student.subscriptionType === "monthly" ? (
+            <div className="flex items-center justify-between py-2">
+              <span className="text-sm text-white/50" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                Bu ay tamamlanan ders
+              </span>
+              <span className="text-2xl font-bold" style={{ color:"#8B5CF6", fontFamily:"var(--font-bebas)" }}>
+                {student.completedLessons}
+              </span>
+            </div>
+          ) : (
+            <>
+              <ProgressBar value={student.completedLessons} max={totalLessons} color="red"
+                label={`${student.completedLessons} / ${totalLessons} ders`} />
+              <div className="mt-2 text-right text-xs text-white/30"
+                style={{ fontFamily:"var(--font-barlow-condensed)" }}>{progressPct}% tamamlandı</div>
+            </>
+          )}
         </Card>
       </motion.div>
 

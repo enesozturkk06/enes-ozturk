@@ -91,6 +91,8 @@ export default function OgrencilerPage() {
   const [aPhone, setAPhone]       = useState("");
   const [aEmail, setAEmail]       = useState("");
   const [aLevel, setALevel]       = useState("baslangic");
+  const [aSubType, setASubType]   = useState<"lesson_pack"|"monthly">("lesson_pack");
+  const [aMonthlyFee, setAMonthlyFee] = useState("");
   const [aPackageId, setAPackageId] = useState(""); // ← Paket ID
   const [aTotalLessons, setATL]   = useState("8");
   const [aAmountPaid, setAAP]     = useState("");
@@ -105,6 +107,8 @@ export default function OgrencilerPage() {
   const [eName, setEName]         = useState("");
   const [ePhone, setEPhone]       = useState("");
   const [eLevel, setELevel]       = useState("baslangic");
+  const [eSubType, setESubType]   = useState<"lesson_pack"|"monthly">("lesson_pack");
+  const [eMonthlyFee, setEMonthlyFee] = useState("");
   const [eRL, setERL]             = useState("");
   const [eTL, setETL]             = useState("");
   const [eAP, setEAP]             = useState("");
@@ -336,6 +340,8 @@ export default function OgrencilerPage() {
   /* ── Düzenle ─────────────────────────────────────────────────────── */
   const openEdit = (s: Student) => {
     setEName(s.fullName); setEPhone(s.phone); setELevel(s.level);
+    setESubType(s.subscriptionType ?? "lesson_pack");
+    setEMonthlyFee(s.monthlyFee ? String(s.monthlyFee) : "");
     setERL(String(s.remainingLessons)); setETL(String(s.totalLessons));
     setEAP(String(s.amountPaid)); setEAD(String(s.amountDue));
     setEPS(s.paymentStatus); setENotes(s.notes ?? "");
@@ -350,6 +356,8 @@ export default function OgrencilerPage() {
         fullName:         eName.trim(),
         phone:            ePhone.trim(),
         level:            eLevel as Student["level"],
+        subscriptionType: eSubType,
+        monthlyFee:       eSubType === "monthly" && eMonthlyFee ? Number(eMonthlyFee) : undefined,
         remainingLessons: Number(eRL),
         totalLessons:     Number(eTL),
         amountPaid:       Number(eAP),
@@ -745,6 +753,32 @@ export default function OgrencilerPage() {
                 { value: "orta", label: "Orta Seviye" },
                 { value: "ileri", label: "İleri Seviye" },
               ]} />
+
+              {/* Üyelik tipi */}
+              <div className="p-3 border space-y-3" style={{ borderColor:"rgba(139,92,246,0.2)", background:"rgba(139,92,246,0.04)" }}>
+                <p className="text-xs tracking-widest uppercase" style={{ color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>Üyelik Tipi</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ v:"lesson_pack", l:"Ders Paketi", d:"Kalan ders sayılır" }, { v:"monthly", l:"Aylık Üyelik", d:"Sınırsız ders" }].map(opt => (
+                    <button key={opt.v} type="button" onClick={() => setESubType(opt.v as "lesson_pack"|"monthly")}
+                      className="flex flex-col gap-0.5 p-3 text-left transition-all"
+                      style={{
+                        background: eSubType===opt.v ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
+                        border: eSubType===opt.v ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                      }}>
+                      <span className="text-xs font-semibold" style={{ color: eSubType===opt.v ? "#fff" : "rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>{opt.l}</span>
+                      <span className="text-[10px]" style={{ color:"rgba(255,255,255,0.25)", fontFamily:"var(--font-barlow-condensed)" }}>{opt.d}</span>
+                    </button>
+                  ))}
+                </div>
+                {eSubType === "monthly" && (
+                  <div>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Aylık Tutar (₺)</label>
+                    <input type="number" value={eMonthlyFee} onChange={e => setEMonthlyFee(e.target.value)} placeholder="Örn: 1500"
+                      className="w-full bg-carbon border border-white/10 focus:border-violet/50 text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily:"var(--font-inter)" }} />
+                  </div>
+                )}
+              </div>
 
               <div className="p-4 bg-steel/30 border border-gold/15 space-y-3">
                 <div className="text-xs text-gold tracking-widest uppercase"
