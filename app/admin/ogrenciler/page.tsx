@@ -968,12 +968,21 @@ export default function OgrencilerPage() {
             <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5"
               style={{ WebkitOverflowScrolling:"touch" }}>
 
-              {/* Paket Seç — Supabase'deki aktif paketler */}
+              {/* Paket Seç — /admin/paketler sayfasındaki aktif paketler */}
               <div>
-                <p className="text-xs tracking-widest uppercase mb-3"
-                  style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
-                  Paket Seç
-                </p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs tracking-widest uppercase"
+                    style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    Paket Seç
+                  </p>
+                  <a href="/admin/paketler" target="_blank"
+                    className="text-[10px] tracking-widest uppercase transition-colors"
+                    style={{ color:"rgba(139,92,246,0.5)", fontFamily:"var(--font-barlow-condensed)" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "rgba(139,92,246,0.9)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "rgba(139,92,246,0.5)")}>
+                    Paketleri Yönet →
+                  </a>
+                </div>
                 {pkgHistLoading && !selPkg ? (
                   <div className="flex justify-center py-6">
                     <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor:"rgba(255,255,255,0.2)", borderTopColor:"transparent" }} />
