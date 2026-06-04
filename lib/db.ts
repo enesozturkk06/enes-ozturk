@@ -783,27 +783,18 @@ export async function createAppointment(apt: {
     }
   }
 
-  // Admin bildirimi oluştur
-  const dateLabel = fmtNotifDate(apt.date, apt.startTime);
-  const typeLabel = lessonType === "duet" ? "düet" : lessonType === "grup" ? "grup" : "bireysel";
-  if (lessonType === "duet" && (apt.partnerStudentIds ?? []).length > 0) {
-    // Partner adını çek
-    const partnerId = apt.partnerStudentIds![0];
-    const { data: partnerRow } = await db().from("students").select("full_name").eq("id", partnerId).maybeSingle();
-    const partnerName = (partnerRow as { full_name?: string } | null)?.full_name ?? "Partner";
-    await createAdminNotification(
-      `Düet randevu: ${apt.studentName}`,
-      `${apt.studentName}, ${dateLabel} için düet randevu oluşturdu. Partner daveti gönderildi: ${partnerName}`,
-      "info",
-      { appointmentId },   // student_id = NULL → admin bildirimi
-    );
-  } else {
-    await createAdminNotification(
-      `Yeni randevu: ${apt.studentName}`,
-      `${apt.studentName}, ${dateLabel} için ${typeLabel} randevu aldı.`,
-      "info",
-      { appointmentId },   // student_id = NULL → admin bildirimi
-    );
+  // Admin bildirimi — cancelAppointment ile aynı pattern
+  // try-catch ile sarılı: bildirim hatası randevu akışını durdurmaz
+  try {
+    const dateLabel = fmtNotifDate(apt.date, apt.startTime);
+    const lessonLabel = lessonType === "duet" ? " (Düet)" : lessonType === "grup" ? " (Grup)" : "";
+    const title   = `Yeni randevu: ${apt.studentName}`;
+    const message = `${apt.studentName}, ${dateLabel} için randevu aldı${lessonLabel}.`;
+    console.log("[createAppointment] Admin bildirimi oluşturuluyor:", title);
+    await createAdminNotification(title, message, "info", { appointmentId });
+    console.log("[createAppointment] Admin bildirimi oluşturuldu ✓");
+  } catch (notifErr) {
+    console.error("[createAppointment] Bildirim oluşturulamadı:", notifErr);
   }
 
   return ma(aptData);
