@@ -783,27 +783,38 @@ export async function createAppointment(apt: {
     }
   }
 
-  // Admin bildirimi — DOĞRUDAN INSERT (cancelAppointment ile aynı)
-  // createAdminNotification bypass edildi: fallback logic riski yok
+  // ── İKİ AYRI BİLDİRİM oluştur ───────────────────────────────
+  //   1. Öğrenci bildirimi  → student_id = apt.studentId (dolu)
+  //   2. Admin bildirimi    → student_id kolonu dahil edilmez (DB default NULL)
   try {
     const dateLabel   = fmtNotifDate(apt.date, apt.startTime);
     const lessonLabel = lessonType === "duet" ? " (Düet)" : lessonType === "grup" ? " (Grup)" : "";
-    const notifRow = {
-      title:      `Yeni randevu: ${apt.studentName}`,
-      message:    `${apt.studentName}, ${dateLabel} için randevu aldı${lessonLabel}.`,
-      type:       "info" as NotifType,
-      is_read:    false,
-      student_id: null,          // NULL = admin bildirimi
+    const title   = `Yeni randevu: ${apt.studentName}`;
+    const message = `${apt.studentName}, ${dateLabel} için randevu aldı${lessonLabel}.`;
+
+    // 1) Öğrenci bildirimi — student_id dolu
+    const { error: se } = await db().from("notifications").insert({
+      title, message, type: "reminder" as NotifType, is_read: false,
+      student_id: apt.studentId,
+    });
+    if (se) console.warn("[createAppointment] Öğrenci bildirimi:", se.message);
+    else    console.log("[createAppointment] Öğrenci bildirimi ✓");
+
+    // 2) Admin bildirimi — student_id kolonu INSERT PAYLOAD'A DAHIL EDİLMEDİ
+    //    DB default değeri NULL → getAdminNotifications (student_id IS NULL) filtresiyle görünür
+    const adminRow: Record<string, unknown> = {
+      title, message, type: "info", is_read: false,
+      // student_id: kasıtlı olarak dahil edilmedi → NULL default
     };
-    console.log("[createAppointment] Admin bildirimi insert ediliyor →", notifRow.title);
-    const { error: ne } = await db().from("notifications").insert(notifRow);
-    if (ne) {
-      console.error("[createAppointment] Admin bildirimi HATA:", ne.message, ne.code, ne.details);
+    const { error: ae, data: aData } = await db().from("notifications")
+      .insert(adminRow).select("id, student_id").single();
+    if (ae) {
+      console.error("[createAppointment] Admin bildirimi HATA:", ae.message, ae.code);
     } else {
-      console.log("[createAppointment] Admin bildirimi başarıyla oluşturuldu ✓");
+      console.log("[createAppointment] Admin bildirimi ✓ →", aData);
     }
   } catch (err) {
-    console.error("[createAppointment] Admin bildirimi exception:", err);
+    console.error("[createAppointment] Bildirim exception:", err);
   }
 
   return ma(aptData);
