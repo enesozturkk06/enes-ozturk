@@ -619,25 +619,46 @@ export default function OgrencilerPage() {
 
       {/* ── DÜZENLEME MODAL ───────────────────────────────────────── */}
       {editSt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setEditSt(null)}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          style={{ padding: "0" }}
+          onClick={() => setEditSt(null)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }}
-            className="relative z-10 w-full max-w-2xl bg-carbon border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+          <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+            className="relative z-10 w-full sm:max-w-2xl bg-carbon border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] flex flex-col"
+            style={{
+              borderRadius: "16px 16px 0 0",
+              maxHeight: "92dvh",        /* dvh = dynamic viewport, iOS Safari safe */
+            }}
             onClick={e => e.stopPropagation()}>
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 bg-crimson/10 border border-crimson/20 flex items-center justify-center text-crimson font-display text-sm" style={{ fontFamily: "var(--font-bebas)" }}>
+            {/* ── Sabit header — scroll edilince kaybolmaz ── */}
+            <div className="flex-shrink-0 relative">
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson rounded-t-2xl" />
+              <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/6">
+                <div className="w-9 h-9 bg-crimson/10 border border-crimson/20 flex-shrink-0 flex items-center justify-center text-crimson font-display text-sm"
+                  style={{ fontFamily: "var(--font-bebas)" }}>
                   {editSt.fullName.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </div>
-                <div>
-                  <div className="text-lg font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>{editSt.fullName}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-base font-display text-white tracking-wider truncate"
+                    style={{ fontFamily: "var(--font-bebas)" }}>{editSt.fullName}</div>
                   <div className="text-xs text-gold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{editSt.code}</div>
                 </div>
-                <button onClick={() => setEditSt(null)} className="ml-auto text-white/25 hover:text-white"><X size={18} /></button>
+                {/* X butonu — her zaman görünür, scroll'dan etkilenmez */}
+                <button onClick={() => setEditSt(null)}
+                  className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full transition-colors"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}>
+                  <X size={16} />
+                </button>
               </div>
+            </div>
 
-              <div className="grid sm:grid-cols-2 gap-3 mb-3">
+            {/* ── Kaydırılabilir içerik ── */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-3"
+              style={{ WebkitOverflowScrolling: "touch" }}>
+
+              <div className="grid sm:grid-cols-2 gap-3">
                 <F label="Ad Soyad" value={eName} onChange={setEName} />
                 <F label="Telefon" value={ePhone} onChange={setEPhone} />
               </div>
@@ -647,42 +668,52 @@ export default function OgrencilerPage() {
                 { value: "ileri", label: "İleri Seviye" },
               ]} />
 
-              <div className="mt-4 p-4 bg-steel/30 border border-gold/15 space-y-3">
-                <div className="text-xs text-gold tracking-widest uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ders Bilgileri</div>
-                <div className="grid sm:grid-cols-2 gap-3">
+              <div className="p-4 bg-steel/30 border border-gold/15 space-y-3">
+                <div className="text-xs text-gold tracking-widest uppercase"
+                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ders Bilgileri</div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Ders *</label>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Ders *</label>
                     <input type="number" min="0" value={eRL} onChange={e => setERL(e.target.value)}
                       className="w-full bg-carbon border-2 border-gold/40 focus:border-gold text-gold-bright px-3 py-3 text-lg outline-none font-display tracking-wider"
                       style={{ fontFamily: "var(--font-bebas)" }} />
-                    <p className="text-xs text-white/20 mt-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: {editSt.remainingLessons}</p>
+                    <p className="text-xs text-white/20 mt-1"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: {editSt.remainingLessons}</p>
                   </div>
                   <div>
-                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Toplam Ders</label>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Toplam Ders</label>
                     <input type="number" min="0" value={eTL} onChange={e => setETL(e.target.value)}
                       className="w-full bg-carbon border-2 border-white/15 focus:border-white/30 text-white px-3 py-3 text-lg outline-none font-display tracking-wider"
                       style={{ fontFamily: "var(--font-bebas)" }} />
-                    <p className="text-xs text-white/20 mt-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: {editSt.totalLessons}</p>
+                    <p className="text-xs text-white/20 mt-1"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: {editSt.totalLessons}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-3 p-4 bg-steel/30 border border-crimson/10 space-y-3">
-                <div className="text-xs text-crimson tracking-widest uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödeme Bilgileri</div>
-                <div className="grid sm:grid-cols-3 gap-3">
+              <div className="p-4 bg-steel/30 border border-crimson/10 space-y-3">
+                <div className="text-xs text-crimson tracking-widest uppercase"
+                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödeme Bilgileri</div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödenen (₺)</label>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödenen (₺)</label>
                     <input type="number" min="0" value={eAP} onChange={e => setEAP(e.target.value)}
                       className="w-full bg-carbon border-2 border-green-500/30 text-green-400 px-3 py-3 text-lg outline-none font-display tracking-wider"
                       style={{ fontFamily: "var(--font-bebas)" }} />
-                    <p className="text-xs text-white/20 mt-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: ₺{editSt.amountPaid.toLocaleString("tr-TR")}</p>
+                    <p className="text-xs text-white/20 mt-1"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: ₺{editSt.amountPaid.toLocaleString("tr-TR")}</p>
                   </div>
                   <div>
-                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Borç (₺)</label>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Borç (₺)</label>
                     <input type="number" min="0" value={eAD} onChange={e => setEAD(e.target.value)}
                       className="w-full bg-carbon border-2 border-crimson/25 text-crimson px-3 py-3 text-lg outline-none font-display tracking-wider"
                       style={{ fontFamily: "var(--font-bebas)" }} />
-                    <p className="text-xs text-white/20 mt-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: ₺{editSt.amountDue.toLocaleString("tr-TR")}</p>
+                    <p className="text-xs text-white/20 mt-1"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: ₺{editSt.amountDue.toLocaleString("tr-TR")}</p>
                   </div>
                   <Sel label="Ödeme Durumu" value={ePS} onChange={setEPS} options={[
                     { value: "beklemede", label: "Beklemede" },
@@ -692,18 +723,23 @@ export default function OgrencilerPage() {
                 </div>
               </div>
 
-              <div className="mt-3"><F label="Not (isteğe bağlı)" value={eNotes} onChange={setENotes} placeholder="Öğrenci hakkında not..." /></div>
+              <F label="Not (isteğe bağlı)" value={eNotes} onChange={setENotes} placeholder="Öğrenci hakkında not..." />
 
-              <div className="flex gap-3 mt-5">
-                <button onClick={() => setEditSt(null)}
-                  className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
-                <button onClick={handleEdit} disabled={eSaving}
-                  className="flex-1 bg-crimson hover:bg-crimson-bright disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                  {eSaving ? "Kaydediliyor..." : "Kaydet"}
-                </button>
-              </div>
+              {/* Alt boşluk — butonlar sabit olduğunda içerik onların altında kalmaz */}
+              <div className="h-2" />
+            </div>
+
+            {/* ── Sabit footer — scroll edilince kaybolmaz ── */}
+            <div className="flex-shrink-0 flex gap-3 px-5 py-4 border-t border-white/6"
+              style={{ background: "rgba(24,24,27,0.98)" }}>
+              <button onClick={() => setEditSt(null)}
+                className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
+                style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
+              <button onClick={handleEdit} disabled={eSaving}
+                className="flex-1 bg-crimson hover:bg-crimson-bright disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
+                style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                {eSaving ? "Kaydediliyor..." : "Kaydet"}
+              </button>
             </div>
           </motion.div>
         </div>
