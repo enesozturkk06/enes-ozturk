@@ -7,7 +7,7 @@ import Logo from "@/app/components/shared/Logo";
 import { useUnreadNotifCount } from "@/hooks/useUnreadNotifCount";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
-  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell,
+  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell, ShoppingBag,
 } from "lucide-react";
 
 const links = [
@@ -19,6 +19,7 @@ const links = [
   { href: "/admin/dersler",          label: "Ders Notları",     icon: BookOpen },
   { href: "/admin/salon-sahipleri",  label: "Salon Sahipleri",  icon: Shield },
   { href: "/admin/bildirimler",      label: "Bildirimler",      icon: Bell },
+  { href: "/admin/magaza",           label: "Online Mağaza",    icon: ShoppingBag },
 ];
 
 export default function AdminSidebar() {
