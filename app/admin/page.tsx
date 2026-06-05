@@ -52,9 +52,11 @@ export default function AdminDashboard() {
   /* ── Yükle ──────────────────────────────────────────────────── */
   const reloadApts = useCallback(async () => {
     const apts = await getAppointments({ date: today });
-    setTodayApts(apts);
+    // İptal edilenler "Bugünün Dersleri"nde görünmez
+    const active = apts.filter(a => a.status !== "iptal");
+    setTodayApts(active);
     // Tek bulk sorguda tüm appointment_students (N+1 yerine 2 sorgu)
-    const map = await bulkGetAppointmentStudents(apts.map(a => a.id));
+    const map = await bulkGetAppointmentStudents(active.map(a => a.id));
     setAptStudents(map);
   }, [today]);
 

@@ -81,6 +81,7 @@ export default function RandevuPage() {
   const [confirmOpen, setConfirmOpen]       = useState(false);
   const [successOpen, setSuccessOpen]       = useState(false);
   const [cancelId, setCancelId]             = useState<string | null>(null);
+  const [cancelBlocked, setCancelBlocked]   = useState<Appointment | null>(null);
   const [saving, setSaving]                 = useState(false);
   const [bookError, setBookError]           = useState("");
 
@@ -161,7 +162,10 @@ export default function RandevuPage() {
 
   const handleCancelClick = (apt: Appointment) => {
     const hoursLeft = differenceInHours(parseISO(`${apt.date}T${apt.startTime}`), new Date());
-    if (hoursLeft < CANCEL_LIMIT_HOURS) { alert(`${CANCEL_LIMIT_HOURS} saatten az kalan randevular iptal edilemez.`); return; }
+    if (hoursLeft < CANCEL_LIMIT_HOURS) {
+      setCancelBlocked(apt); // premium modal — DB'ye dokunmaz
+      return;
+    }
     setCancelId(apt.id);
   };
 
@@ -657,6 +661,59 @@ export default function RandevuPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ══ 18 SAAT ENGEL MODALI ════════════════════════════════ */}
+      {cancelBlocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background:"rgba(0,0,0,0.75)", backdropFilter:"blur(8px)" }}>
+          <div className="w-full max-w-sm rounded-2xl overflow-hidden"
+            style={{ background:"rgba(15,15,22,0.99)", border:"1px solid rgba(217,119,6,0.35)" }}>
+            <div className="h-0.5" style={{ background:"linear-gradient(90deg,transparent,#d97706,transparent)" }} />
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center"
+                  style={{ background:"rgba(217,119,6,0.12)", border:"1px solid rgba(217,119,6,0.25)" }}>
+                  <span className="text-lg">⏱</span>
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    İptal Edilemiyor
+                  </p>
+                  <p className="text-[10px] uppercase tracking-widest" style={{ color:"rgba(217,119,6,0.8)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    {CANCEL_LIMIT_HOURS} Saat Kuralı
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-4 p-3 rounded-xl" style={{ background:"rgba(217,119,6,0.06)", border:"1px solid rgba(217,119,6,0.15)" }}>
+                <p className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  {format(parseISO(cancelBlocked.date), "dd MMMM yyyy (EEEE)", { locale: tr })}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  {cancelBlocked.startTime} – {cancelBlocked.endTime}
+                </p>
+              </div>
+
+              <p className="text-sm leading-relaxed mb-4" style={{ color:"rgba(255,255,255,0.6)", fontFamily:"var(--font-barlow-condensed)" }}>
+                Dersinize <strong style={{ color:"#d97706" }}>{CANCEL_LIMIT_HOURS} saatten az</strong> süre
+                kaldığı için iptal edemezsiniz.
+              </p>
+              <div className="p-3 rounded-xl mb-4" style={{ background:"rgba(220,38,38,0.06)", border:"1px solid rgba(220,38,38,0.15)" }}>
+                <p className="text-xs leading-relaxed" style={{ color:"rgba(220,38,38,0.8)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  ⚠️ Derse katılmazsanız ders hakkınız kullanılmış sayılır.
+                  Zorunlu durumlarda antrenörünüzle iletişime geçin.
+                </p>
+              </div>
+
+              <button onClick={() => setCancelBlocked(null)}
+                className="w-full py-3 text-sm font-semibold tracking-widest uppercase transition-all"
+                style={{ background:"rgba(217,119,6,0.15)", border:"1px solid rgba(217,119,6,0.3)", color:"#d97706", fontFamily:"var(--font-barlow-condensed)" }}>
+                Anladım
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
