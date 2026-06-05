@@ -4,6 +4,7 @@ import About from "./components/About";
 import Services from "./components/Services";
 import Branches from "./components/Branches";
 import PackagesSection from "./components/PackagesSection";
+import StoreFeatured from "./components/StoreFeatured";
 import Contact from "./components/Contact";
 import Footer from "./components/Footer";
 import WhatsAppButton from "./components/shared/WhatsAppButton";
@@ -20,6 +21,7 @@ export default function Home() {
         <Services />
         <Branches />
         <PackagesSection />
+        <StoreFeatured />
         <Contact />
       </main>
       <Footer />

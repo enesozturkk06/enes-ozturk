@@ -7,11 +7,12 @@ import { Menu, X } from "lucide-react";
 import Logo from "@/app/components/shared/Logo";
 
 const navLinks = [
-  { label: "Ana Sayfa",  href: "#hero" },
-  { label: "Hakkımda",   href: "#about" },
-  { label: "Branşlar",   href: "#branslar" },
-  { label: "Özel Ders",  href: "#paketler" },
-  { label: "İletişim",   href: "#contact" },
+  { label: "Ana Sayfa",  href: "#hero",     external: false },
+  { label: "Hakkımda",   href: "#about",    external: false },
+  { label: "Branşlar",   href: "#branslar", external: false },
+  { label: "Özel Ders",  href: "#paketler", external: false },
+  { label: "Mağaza",     href: "/magaza",   external: true  },
+  { label: "İletişim",   href: "#contact",  external: false },
 ];
 
 export default function Navbar() {
@@ -64,19 +65,37 @@ export default function Navbar() {
 
         {/* Desktop links */}
         <ul className="hidden lg:flex items-center gap-7">
-          {navLinks.map(l => (
-            <li key={l.href}>
-              <a href={l.href}
-                className="text-xs tracking-widest text-white/55 uppercase relative group transition-colors duration-300"
-                style={{ fontFamily:"var(--font-barlow-condensed)" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "#A855F7")}
-                onMouseLeave={e => (e.currentTarget.style.color = "")}>
-                {l.label}
-                <span className="absolute -bottom-1 left-0 w-0 h-px transition-all duration-300 group-hover:w-full"
-                  style={{ background:"linear-gradient(to right,#8B5CF6,#D946EF)" }} />
-              </a>
-            </li>
-          ))}
+          {navLinks.map(l => {
+            const cls = "text-xs tracking-widest uppercase relative group transition-colors duration-300";
+            const style = { fontFamily:"var(--font-barlow-condensed)" };
+            const badge = l.external ? (
+              <span className="ml-1.5 text-[8px] px-1 py-0.5 rounded align-middle"
+                style={{ background:"rgba(139,92,246,0.2)", color:"#A855F7", verticalAlign:"middle" }}>
+                YENİ
+              </span>
+            ) : null;
+            const underline = (
+              <span className="absolute -bottom-1 left-0 w-0 h-px transition-all duration-300 group-hover:w-full"
+                style={{ background:"linear-gradient(to right,#8B5CF6,#D946EF)" }} />
+            );
+            return (
+              <li key={l.href}>
+                {l.external ? (
+                  <Link href={l.href} className={`${cls} text-white/55`} style={style}
+                    onMouseEnter={e=>(e.currentTarget.style.color="#A855F7")}
+                    onMouseLeave={e=>(e.currentTarget.style.color="")}>
+                    {l.label}{badge}{underline}
+                  </Link>
+                ) : (
+                  <a href={l.href} className={`${cls} text-white/55`} style={style}
+                    onMouseEnter={e=>(e.currentTarget.style.color="#A855F7")}
+                    onMouseLeave={e=>(e.currentTarget.style.color="")}>
+                    {l.label}{underline}
+                  </a>
+                )}
+              </li>
+            );
+          })}
         </ul>
 
         {/* Auth butonlar */}
@@ -131,7 +150,14 @@ export default function Navbar() {
       <div className={`lg:hidden transition-all duration-500 overflow-hidden ${menuOpen ? "max-h-screen opacity-100" : "max-h-0 opacity-0"}`}>
         <div className="px-6 py-5 space-y-3"
           style={{ background:"rgba(9,9,11,0.98)", backdropFilter:"blur(20px)", borderTop:"1px solid rgba(139,92,246,0.12)" }}>
-          {navLinks.map(l => (
+          {navLinks.map(l => l.external ? (
+            <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 text-sm tracking-widest text-white/70 uppercase py-2 border-b transition-colors hover:text-violet-bright"
+              style={{ fontFamily:"var(--font-barlow-condensed)", borderColor:"rgba(139,92,246,0.08)" }}>
+              {l.label}
+              <span className="text-[8px] px-1.5 py-0.5 rounded" style={{ background:"rgba(139,92,246,0.2)", color:"#A855F7" }}>YENİ</span>
+            </Link>
+          ) : (
             <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
               className="block text-sm tracking-widest text-white/70 uppercase py-2 border-b transition-colors hover:text-violet-bright"
               style={{ fontFamily:"var(--font-barlow-condensed)", borderColor:"rgba(139,92,246,0.08)" }}>
