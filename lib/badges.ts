@@ -259,8 +259,8 @@ const DEFS: BadgeDef[] = [
   },
   {
     id:          "shadow-fan",
-    name:        "Kara'nın Dostu",
-    description: "KARA AI ile ilk konuşmayı yaptın. Artık gölgede yalnız değilsin.",
+    name:        "KEDİ AI Dostu",
+    description: "KEDİ AI ile ilk konuşmayı yaptın. Artık yalnız değilsin.",
     icon:        "🐾",
     color:       "#6D28D9",
     bgColor:     "rgba(109,40,217,0.12)",

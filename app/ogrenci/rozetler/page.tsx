@@ -171,7 +171,7 @@ export default function RozetlerPage() {
   // localStorage'dan KARA flag'ini oku
   const extraFlags: Record<string, boolean> = {};
   if (typeof window !== "undefined") {
-    extraFlags["shadow-fan"] = localStorage.getItem("kara_ai_used") === "1";
+    extraFlags["shadow-fan"] = localStorage.getItem("kedi_ai_used") === "1" || localStorage.getItem("kara_ai_used") === "1";
   }
 
   const badges  = computeBadges(student, appointments, records, extraFlags);

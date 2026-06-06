@@ -83,7 +83,7 @@ function buildContext(ctx: StudentContext): string {
   const daysSinceApt = lastApt ? differenceInDays(new Date(), parseISO(lastApt.date)) : 999;
   const lowLessons   = ctx.subscriptionType !== "monthly" && ctx.remainingLessons <= 4;
 
-  const parts: string[] = [`Merhaba **${firstName}**! 🐾 Ben **KARA**, senin kişisel AI antrenör koçunum.`];
+  const parts: string[] = [`Merhaba **${firstName}**! 🐾 Ben **KEDİ AI**, senin kişisel AI antrenör koçunum.`];
 
   if (ctx.subscriptionType === "monthly") {
     parts.push(`Aylık üyeliğinle istediğin kadar ders alabilirsin. Randevu almanı öneriyorum!`);
@@ -197,8 +197,8 @@ function aiRespond(userMsg: string, ctx: StudentContext, history: Msg[]): string
     return `${name}, şu ana kadar **${ctx.completedLessons}** ders tamamladın.\n\nRozetlerini görmek için "Rozetlerim" sayfasını ziyaret et! 🏅`;
   }
 
-  if (/kim|ne|ne sin|ai|yapay zeka|robot|kara|shadow/.test(msg)) {
-    return `Ben **KARA** — senin kişisel AI antrenör koçunum. 🐾\n\nBir gözüm mavi, diğeri yeşil. Gölgede çalışırım, ama seni her zaman takip ederim.\n\nTeknik analiz, motivasyon, ders planlaması — ne istersen sorabilirsini!`;
+  if (/kim|ne|ne sin|ai|yapay zeka|robot|kedi|shadow/.test(msg)) {
+    return `Ben **KEDİ AI** — senin kişisel AI antrenör koçunum. 🐾\n\nBir gözüm mavi, diğeri yeşil. Her zaman seninle çalışmaya hazırım.\n\nTeknik analiz, motivasyon, ders planlaması — ne istersen sorabilirsini!`;
   }
 
   const defaults = [
@@ -334,7 +334,7 @@ export default function BlackCatAI() {
     const timer = setTimeout(() => {
       setMsgs([{ id:"init", role:"ai", text: buildContext(ctx), ts: Date.now() }]);
       setTyping(false);
-      if (typeof window !== "undefined") localStorage.setItem("kara_ai_used", "1");
+      if (typeof window !== "undefined") localStorage.setItem("kedi_ai_used", "1");
     }, 900);
     return () => clearTimeout(timer);
   }, [open, ctx, msgs.length]);
@@ -393,7 +393,7 @@ export default function BlackCatAI() {
         whileHover={{ opacity: 1, scale: 1.07 }}
         whileTap={{ scale: 0.91 }}
         transition={{ type:"spring", stiffness:280, damping:22 }}
-        aria-label="KARA AI Koç — tıkla veya sürükle"
+        aria-label="KEDİ AI Koç — tıkla veya sürükle"
         style={{
           position:     "fixed",
           bottom:       "calc(env(safe-area-inset-bottom, 0px) + 88px)",
@@ -485,12 +485,12 @@ export default function BlackCatAI() {
                   <div>
                     <div className="text-sm font-semibold tracking-wider"
                       style={{ color:"#C4B5FD", fontFamily:"var(--font-bebas)", letterSpacing:"0.12em" }}>
-                      KARA
+                      KEDİ AI
                     </div>
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                       <span className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
-                        AI Antrenör Koç
+                        Kişisel Antrenör Koçun
                       </span>
                     </div>
                   </div>
