@@ -11,7 +11,7 @@ import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components
 import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS } from "@/lib/constants";
 import {
   Calendar, Clock, TrendingUp, BookOpen, Bell,
-  CheckCircle, XCircle, ChevronRight, Users,
+  CheckCircle, XCircle, ChevronRight, Users, Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { format, parseISO, isFuture, differenceInHours } from "date-fns";
@@ -398,12 +398,13 @@ export default function OgrenciDashboard() {
 
       {/* Hızlı erişim */}
       <motion.div variants={fadeUp}>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
-            { href:"/ogrenci/randevu",   label:"Randevu Al",    icon:<Calendar size={20}/>,  color:"crimson" },
-            { href:"/ogrenci/gelisim",   label:"Gelişimim",     icon:<TrendingUp size={20}/>, color:"gold"    },
-            { href:"/ogrenci/antrenman", label:"AI Antrenman",  icon:<BookOpen size={20}/>,   color:"crimson" },
-            { href:"/ogrenci/bildirimler",label:"Bildirimler",  icon:<Bell size={20}/>,       color:"gold"    },
+            { href:"/ogrenci/randevu",   label:"Randevu Al",       icon:<Calendar size={20}/>,   color:"crimson" },
+            { href:"/ogrenci/gelisim",   label:"Gelişimim",        icon:<TrendingUp size={20}/>,  color:"gold"    },
+            { href:"/ogrenci/antrenman", label:"AI Antrenman",     icon:<BookOpen size={20}/>,    color:"crimson" },
+            { href:"/ogrenci/seviye",    label:"Seviye Merkezi",   icon:<Zap size={20}/>,         color:"violet"  },
+            { href:"/ogrenci/bildirimler",label:"Bildirimler",     icon:<Bell size={20}/>,        color:"gold"    },
           ].map(({ href, label, icon, color }) => (
             <Link key={href} href={href}>
               <motion.div
@@ -412,10 +413,10 @@ export default function OgrenciDashboard() {
                 className="p-4 text-center transition-all rounded-xl"
                 style={{
                   background: "rgba(15,15,22,0.9)",
-                  border: color === "crimson" ? "1px solid rgba(220,38,38,0.15)" : "1px solid rgba(217,119,6,0.15)",
+                  border: color === "crimson" ? "1px solid rgba(220,38,38,0.15)" : color === "violet" ? "1px solid rgba(139,92,246,0.2)" : "1px solid rgba(217,119,6,0.15)",
                 }}
               >
-                <div className={color === "crimson" ? "text-crimson mx-auto mb-2" : "text-gold mx-auto mb-2"} style={{ display:"flex", justifyContent:"center" }}>
+                <div className={color === "crimson" ? "text-crimson mx-auto mb-2" : color === "violet" ? "mx-auto mb-2" : "text-gold mx-auto mb-2"} style={{ display:"flex", justifyContent:"center", color: color === "violet" ? "#8B5CF6" : undefined }}>
                   {icon}
                 </div>
                 <div className="text-xs text-white/55 tracking-wider"
