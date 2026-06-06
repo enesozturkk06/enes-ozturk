@@ -121,8 +121,8 @@ export default function GelisimPage() {
                   transition={{ delay: i * 0.05 }}
                   className="p-4 bg-steel/30 border border-white/5"
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="min-w-0">
                       <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
                         {format(parseISO(r.date), "dd MMMM yyyy (EEEE)", { locale: tr })}
                       </div>

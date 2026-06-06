@@ -6,7 +6,7 @@ import { useAuth } from "@/app/providers";
 import Logo from "@/app/components/shared/Logo";
 import {
   LayoutDashboard, Calendar, TrendingUp, Dumbbell,
-  Bell, LogOut, Menu, X, ChevronRight, Heart,
+  Bell, LogOut, Menu, X, ChevronRight, Heart, Award,
 } from "lucide-react";
 
 const links = [
@@ -15,6 +15,7 @@ const links = [
   { href: "/ogrenci/gelisim",      label: "Gelişimim",    icon: TrendingUp },
   { href: "/ogrenci/saglik",       label: "Sağlık",       icon: Heart },
   { href: "/ogrenci/antrenman",    label: "AI Antrenman", icon: Dumbbell },
+  { href: "/ogrenci/rozetler",     label: "Rozetlerim",   icon: Award },
   { href: "/ogrenci/bildirimler",  label: "Bildirimler",  icon: Bell },
 ];
 

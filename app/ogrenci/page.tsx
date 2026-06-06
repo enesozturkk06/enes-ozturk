@@ -222,8 +222,8 @@ export default function OgrenciDashboard() {
       {/* Paket kartı */}
       <motion.div variants={fadeUp} id="paket-kartı">
         <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
+            <div className="min-w-0">
               <h3 className="text-lg font-display text-white tracking-wider"
                 style={{ fontFamily:"var(--font-bebas)" }}>
                 {student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name} Paketi`}

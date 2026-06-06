@@ -396,7 +396,7 @@ export default function OgrencilerPage() {
     <div className="max-w-6xl mx-auto space-y-5">
 
       {/* Başlık */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <span className="w-8 h-px bg-crimson" />
@@ -625,7 +625,7 @@ export default function OgrencilerPage() {
             className="w-full bg-carbon border border-white/10 text-white placeholder-white/20 pl-9 pr-4 py-2.5 text-sm outline-none focus:border-crimson/50 transition-all"
             style={{ fontFamily: "var(--font-inter)" }} />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {[["all","Tümü"],["active","Aktif"],["payment","Ödeme Bekl."],["low","Ders Az"]].map(([v,l]) => (
             <button key={v} onClick={() => setFilter(v)}
               className={`px-3 py-2 text-xs tracking-wider transition-all border ${filter === v ? "bg-crimson border-crimson text-white" : "border-white/10 text-white/35 hover:border-white/20"}`}
@@ -636,8 +636,8 @@ export default function OgrencilerPage() {
 
       {/* Tablo */}
       <div className="bg-carbon border border-white/6 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="overflow-x-auto overscroll-x-contain" style={{ WebkitOverflowScrolling: "touch" }}>
+          <table className="w-full" style={{ minWidth: 640 }}>
             <thead>
               <tr className="border-b border-white/5 bg-steel/30">
                 {["Öğrenci","Kod","Kalan / Toplam","Ödenen","Borç","Ödeme","İşlem"].map(h => (
@@ -705,8 +705,7 @@ export default function OgrencilerPage() {
 
       {/* ── DÜZENLEME MODAL ───────────────────────────────────────── */}
       {editSt && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-          style={{ padding: "0" }}
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
           onClick={() => setEditSt(null)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}

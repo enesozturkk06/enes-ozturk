@@ -511,18 +511,23 @@ export default function RandevuPage() {
                 <p className="text-xs text-center py-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
                   Kayıt yok
                 </p>
-              ) : past.map(apt => (
-                <div key={apt.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
-                  style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                  <span className="text-xs text-white min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                    {format(parseISO(apt.date), "dd MMM", { locale: tr })} · {apt.startTime}
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0"
-                    style={{ background: `${STATUS_COLOR[apt.status]}18`, color: STATUS_COLOR[apt.status], fontFamily: "var(--font-barlow-condensed)" }}>
-                    {STATUS_TR[apt.status]}
-                  </span>
-                </div>
-              ))}
+              ) : past.map(apt => {
+                const isAdminCancel = apt.status === "iptal" && apt.notes?.startsWith("ADMIN_CANCEL:");
+                const statusLabel = isAdminCancel ? "Admin İptali" : STATUS_TR[apt.status];
+                const statusColor = isAdminCancel ? "#f97316" : STATUS_COLOR[apt.status];
+                return (
+                  <div key={apt.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
+                    style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                    <span className="text-xs text-white min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      {format(parseISO(apt.date), "dd MMM", { locale: tr })} · {apt.startTime}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: `${statusColor}18`, color: statusColor, fontFamily: "var(--font-barlow-condensed)" }}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </Card>
         </div>

@@ -853,6 +853,102 @@ export async function cancelAppointment(id: string, cancelledByStudentName?: str
 }
 
 /**
+ * Admin/Antrenör tarafından randevu iptali.
+ * - 18 saat kısıtı uygulanmaz.
+ * - lesson_deducted=true olan öğrencilerin ders hakkı geri yüklenir.
+ * - Öğrenciye bildirim gönderilir.
+ * - Admin bildirim geçmişine kaydedilir.
+ * - notes alanına "ADMIN_CANCEL:" prefixi eklenir (öğrenci geçmişinde ayrı gösterim için).
+ */
+export async function adminCancelAppointment(
+  appointmentId: string,
+  reason?: string,
+): Promise<void> {
+  // 1. Randevu bilgilerini al
+  const { data: apt } = await db()
+    .from("appointments")
+    .select("date, start_time, student_id, student_name")
+    .eq("id", appointmentId)
+    .maybeSingle();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const aptRow = apt as any;
+
+  // 2. Katılımcı öğrencileri al (ders geri yükleme için)
+  const { data: apStudents } = await db()
+    .from("appointment_students")
+    .select("id, student_id, lesson_deducted, invite_status")
+    .eq("appointment_id", appointmentId);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows: any[] = apStudents ?? [];
+
+  // Fallback: appointment_students boşsa ana student kullan
+  if (rows.length === 0 && aptRow?.student_id) {
+    rows.push({ id: null, student_id: aptRow.student_id, lesson_deducted: false, invite_status: "accepted" });
+  }
+
+  // 3. lesson_deducted=true olan öğrencilerin dersini geri yükle
+  for (const row of rows) {
+    if (!row.lesson_deducted) continue;
+    const { data: std } = await db()
+      .from("students")
+      .select("remaining_lessons, completed_lessons, subscription_type")
+      .eq("id", row.student_id)
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stdRow = std as any;
+    if (stdRow && stdRow.subscription_type !== "monthly") {
+      await db().from("students").update({
+        remaining_lessons: Number(stdRow.remaining_lessons ?? 0) + 1,
+        completed_lessons: Math.max(0, Number(stdRow.completed_lessons ?? 0) - 1),
+      }).eq("id", row.student_id);
+    }
+    // lesson_deducted flag'ini sıfırla
+    if (row.id) {
+      await db().from("appointment_students")
+        .update({ lesson_deducted: false })
+        .eq("id", row.id);
+    }
+  }
+
+  // 4. Randevuyu iptal et — notes alanı geçmiş görünümü için işaretlenir
+  const notesValue = reason
+    ? `ADMIN_CANCEL: ${reason}`
+    : "ADMIN_CANCEL:";
+  await db().from("appointments").update({
+    status:       "iptal",
+    cancelled_at: new Date().toISOString().split("T")[0],
+    notes:        notesValue,
+  }).eq("id", appointmentId);
+
+  // 5. Etkilenen öğrencilere bildirim gönder
+  const dateLabel   = aptRow ? fmtNotifDate(aptRow.date, aptRow.start_time) : "?";
+  const reasonText  = reason ? ` Sebep: ${reason}` : "";
+  const studentIds  = [...new Set(rows.map((r: { student_id: string }) => r.student_id).filter(Boolean))];
+
+  for (const studentId of studentIds) {
+    await db().from("notifications").insert({
+      student_id:   studentId,
+      title:        "Randevunuz İptal Edildi",
+      message:      `${dateLabel} tarihli randevunuz antrenör tarafından iptal edilmiştir.${reasonText}`,
+      type:         "warning" as NotifType,
+      is_read:      false,
+    });
+  }
+
+  // 6. Admin bildirim geçmişine kaydet
+  const adminMsg = reason
+    ? `${dateLabel} tarihli randevu admin tarafından iptal edildi. Sebep: ${reason}`
+    : `${dateLabel} tarihli randevu admin tarafından iptal edildi.`;
+  await createAdminNotification(
+    "Admin İptali",
+    adminMsg,
+    "info",
+    { appointmentId },
+  );
+}
+
+/**
  * Randevuyu katılım bilgisiyle tamamla.
  * Ders düşme kuralı:
  *   invite_status = 'accepted' VE attendance = 'attended' ise düş

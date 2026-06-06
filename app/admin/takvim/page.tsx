@@ -144,7 +144,7 @@ export default function TakvimPage() {
     <div className="max-w-6xl mx-auto space-y-5">
 
       {/* Başlık */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <span className="w-8 h-px bg-crimson" />
@@ -178,36 +178,39 @@ export default function TakvimPage() {
           <button onClick={() => { setWeekBase(new Date()); setSelectedDate(todayStr); }} className="text-xs text-crimson/60 hover:text-crimson tracking-wider transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Bugün</button>
         </div>
 
-        <div className="grid grid-cols-7">
-          {weekDays.map(date => {
-            const s = summary[date] || { total: 0, open: 0 };
-            const isSelected = date === selectedDate;
-            const isToday    = date === todayStr;
-            return (
-              <button key={date} onClick={() => setSelectedDate(date)}
-                className={`flex flex-col items-center py-3 px-1 border-r last:border-0 border-white/5 transition-all duration-200 ${isSelected ? "bg-crimson/10 border-b-2 border-b-crimson" : "hover:bg-steel/20"}`}>
-                <span className="text-xs text-white/35 mb-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                  {format(parseISO(date), "EEE", { locale: tr }).toUpperCase()}
-                </span>
-                <span className={`text-xl font-display mb-1 ${isSelected ? "text-crimson" : isToday ? "text-gold-bright" : "text-white"}`} style={{ fontFamily: "var(--font-bebas)" }}>
-                  {format(parseISO(date), "d")}
-                </span>
-                {s.total > 0 ? (
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-xs text-green-400" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.open} açık</span>
-                    <span className="text-xs text-white/25" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.total} toplam</span>
-                  </div>
-                ) : <span className="text-xs text-white/15" style={{ fontFamily: "var(--font-barlow-condensed)" }}>—</span>}
-              </button>
-            );
-          })}
+        {/* 7 sütun küçük ekranda taşar — yatay kaydırılabilir wrapper */}
+        <div className="overflow-x-auto overscroll-x-contain" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className="grid grid-cols-7" style={{ minWidth: 360 }}>
+            {weekDays.map(date => {
+              const s = summary[date] || { total: 0, open: 0 };
+              const isSelected = date === selectedDate;
+              const isToday    = date === todayStr;
+              return (
+                <button key={date} onClick={() => setSelectedDate(date)}
+                  className={`flex flex-col items-center py-3 px-1 border-r last:border-0 border-white/5 transition-all duration-200 ${isSelected ? "bg-crimson/10 border-b-2 border-b-crimson" : "hover:bg-steel/20"}`}>
+                  <span className="text-xs text-white/35 mb-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    {format(parseISO(date), "EEE", { locale: tr }).toUpperCase()}
+                  </span>
+                  <span className={`text-xl font-display mb-1 ${isSelected ? "text-crimson" : isToday ? "text-gold-bright" : "text-white"}`} style={{ fontFamily: "var(--font-bebas)" }}>
+                    {format(parseISO(date), "d")}
+                  </span>
+                  {s.total > 0 ? (
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-xs text-green-400" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.open} açık</span>
+                      <span className="text-xs text-white/25" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.total} tpl</span>
+                    </div>
+                  ) : <span className="text-xs text-white/15" style={{ fontFamily: "var(--font-barlow-condensed)" }}>—</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {/* Seçili gün başlığı */}
-      <div className="flex items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl sm:text-2xl font-display text-white tracking-wider leading-tight" style={{ fontFamily: "var(--font-bebas)" }}>
             {format(parseISO(selectedDate), "EEEE", { locale: tr }).toUpperCase()} — {format(parseISO(selectedDate), "dd MMMM yyyy", { locale: tr })}
           </h2>
           <p className="text-xs text-white/35 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
@@ -217,7 +220,7 @@ export default function TakvimPage() {
         </div>
         <input type="date" value={selectedDate}
           onChange={e => { setSelectedDate(e.target.value); setWeekBase(parseISO(e.target.value)); }}
-          className="ml-auto bg-carbon border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-crimson/50 transition-colors"
+          className="bg-carbon border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-crimson/50 transition-colors flex-shrink-0"
           style={{ fontFamily: "var(--font-inter)" }}
         />
       </div>

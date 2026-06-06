@@ -92,12 +92,12 @@ export default function DerslerPage() {
           return (
             <motion.div key={r.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
               <Card className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-crimson/10 border border-crimson/20 flex items-center justify-center text-xs text-crimson font-display" style={{ fontFamily: "var(--font-bebas)" }}>
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 bg-crimson/10 border border-crimson/20 flex items-center justify-center text-xs text-crimson font-display flex-shrink-0" style={{ fontFamily: "var(--font-bebas)" }}>
                       {student?.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{student?.fullName}</div>
                       <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
                         {format(parseISO(r.date), "dd MMMM yyyy (EEEE)", { locale: tr })} · {r.durationMinutes} dk

@@ -6,6 +6,7 @@ import {
   completeAppointmentWithAttendance, getAppointmentStudents,
   bulkGetAppointmentStudents, createLessonRecord,
   markNotificationRead, markAllAdminNotificationsRead,
+  adminCancelAppointment,
 } from "@/lib/db";
 import type { Appointment, Student, Notification, AppointmentStudent } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
@@ -40,6 +41,11 @@ export default function AdminDashboard() {
   /* Bildirim paneli */
   const [notifOpen, setNotifOpen]     = useState(false);
   const [loginToast, setLoginToast]   = useState<Notification | null>(null);
+
+  /* Admin iptal modalı */
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusy, setCancelBusy]     = useState(false);
 
   /* Ders notu modalı (tamamlama sonrası) */
   const [noteModal, setNoteModal] = useState<Appointment | null>(null);
@@ -148,6 +154,22 @@ export default function AdminDashboard() {
     setScores({ conditioning:7,punch:7,kick:7,defense:7,combination:7,sparring:7,overall:7 });
   };
 
+  /* ── Admin iptal ─────────────────────────────────────────── */
+  const handleAdminCancel = async () => {
+    if (!cancelTarget) return;
+    setCancelBusy(true);
+    try {
+      await adminCancelAppointment(cancelTarget.id, cancelReason.trim() || undefined);
+      await reloadApts();
+      setCancelTarget(null);
+      setCancelReason("");
+    } catch (err) {
+      alert("Hata: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setCancelBusy(false);
+    }
+  };
+
   /* ── Yardımcı: randevu öğrenci ismi ──────────────────────── */
   const aptDisplayName = (apt: Appointment): string => {
     const apSt = aptStudents[apt.id];
@@ -165,7 +187,9 @@ export default function AdminDashboard() {
   /* ── İstatistikler ────────────────────────────────────────── */
   const active         = students.filter(s => s.isActive);
   const pendingPayment = students.filter(s => s.paymentStatus !== "odendi" && s.amountDue > 0);
-  const lowLessons     = students.filter(s => s.remainingLessons <= 2 && s.remainingLessons > 0);
+  const lowLessons     = students
+    .filter(s => s.isActive && s.subscriptionType !== "monthly" && s.remainingLessons <= 2)
+    .sort((a, b) => a.remainingLessons - b.remainingLessons);
   const unreadNotifs   = notifs.filter(n => !n.isRead).length;
 
   /* ── Render ───────────────────────────────────────────────── */
@@ -221,11 +245,11 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {todayApts.sort((a,b)=>a.startTime.localeCompare(b.startTime)).map(apt => (
-                  <div key={apt.id} className="flex items-center gap-4 p-4 bg-steel/30 border border-white/5 hover:border-white/10 transition-colors">
+                  <div key={apt.id} className="flex flex-wrap items-center gap-3 p-4 bg-steel/30 border border-white/5 hover:border-white/10 transition-colors">
                     <div className="w-12 h-12 bg-crimson/10 border border-crimson/20 flex flex-col items-center justify-center flex-shrink-0">
                       <span className="text-crimson text-sm font-display" style={{ fontFamily:"var(--font-bebas)" }}>{apt.startTime}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0" style={{ minWidth: 120 }}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                           {aptDisplayName(apt)}
@@ -239,7 +263,6 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex items-center gap-2 flex-wrap text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                         <span>{apt.studentCode} · {apt.startTime}–{apt.endTime}</span>
-                        {/* Düet öğrenci davet durumları */}
                         {apt.lessonType === "duet" && (aptStudents[apt.id] ?? []).map(s => {
                           const color = s.inviteStatus === "accepted" ? "#22c55e" : s.inviteStatus === "declined" ? "#ef4444" : "#d97706";
                           const label = s.inviteStatus === "accepted" ? "Onayladı" : s.inviteStatus === "declined" ? "Reddetti" : "Bekliyor";
@@ -251,14 +274,22 @@ export default function AdminDashboard() {
                         })}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
                       <Badge color={apt.status==="tamamlandi"?"green":apt.status==="iptal"?"red":"gold"}>
                         {STATUS_LABELS[apt.status]}
                       </Badge>
                       {apt.status === "onaylandi" && (
-                        <Button size="sm" onClick={() => handleCompleteClick(apt)}>
-                          <CheckCircle size={14}/>Tamamla
-                        </Button>
+                        <>
+                          <Button size="sm" onClick={() => handleCompleteClick(apt)}>
+                            <CheckCircle size={14}/>Tamamla
+                          </Button>
+                          <button
+                            onClick={() => { setCancelTarget(apt); setCancelReason(""); }}
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-all"
+                            style={{ border:"1px solid rgba(239,68,68,0.4)", color:"#ef4444", fontFamily:"var(--font-barlow-condensed)", borderRadius:"4px" }}>
+                            <XCircle size={13}/>İptal
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -306,14 +337,37 @@ export default function AdminDashboard() {
               <Card className="p-4 border border-gold/20">
                 <div className="flex items-center gap-2 mb-3">
                   <Bell size={16} className="text-gold"/>
-                  <h3 className="text-sm font-display text-gold tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>Paket Bitiyor</h3>
+                  <h3 className="text-sm font-display text-gold tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>Paket Bitiyor / Bitenler</h3>
                 </div>
-                {lowLessons.map(s => (
-                  <div key={s.id} className="flex justify-between py-1.5 border-b border-white/5 last:border-0">
-                    <span className="text-xs text-white/60" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.fullName}</span>
-                    <span className="text-xs text-gold font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.remainingLessons} ders</span>
-                  </div>
-                ))}
+                <div className="space-y-2">
+                  {lowLessons.map(s => {
+                    const isFinished = s.remainingLessons === 0;
+                    return (
+                      <div key={s.id} className={`p-2 border-l-2 ${isFinished ? "border-red-500 bg-red-500/5" : "border-gold bg-gold/5"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-white/80 font-semibold min-w-0 truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.fullName}</span>
+                          <span className={`text-xs font-semibold flex-shrink-0 ${isFinished ? "text-red-400" : "text-gold"}`} style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            {isFinished ? "Paket bitti" : `${s.remainingLessons} ders`}
+                          </span>
+                        </div>
+                        {isFinished && (
+                          <div className="flex gap-1.5 mt-1.5">
+                            <Link href="/admin/ogrenciler"
+                              className="flex-1 text-center text-[10px] py-1 transition-colors"
+                              style={{ border:"1px solid rgba(139,92,246,0.35)", color:"#A855F7", fontFamily:"var(--font-barlow-condensed)", borderRadius:"3px" }}>
+                              Paketi Yenile
+                            </Link>
+                            <Link href={`/admin/ogrenciler?id=${s.id}`}
+                              className="flex-1 text-center text-[10px] py-1 transition-colors"
+                              style={{ border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)", borderRadius:"3px" }}>
+                              Detaya Git
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </Card>
             </motion.div>
           )}
@@ -468,6 +522,48 @@ export default function AdminDashboard() {
             <div className="flex gap-3">
               <Button onClick={() => setNoteModal(null)} variant="secondary" className="flex-1">Atla</Button>
               <Button onClick={handleSaveNote} loading={saving} className="flex-1">Notu Kaydet</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+      {/* ══ Admin İptal Modalı ══ */}
+      <Modal open={!!cancelTarget} onClose={() => setCancelTarget(null)} title="Randevuyu İptal Et" maxWidth="max-w-md">
+        {cancelTarget && (
+          <div className="space-y-4">
+            <div className="p-3 bg-red-500/5 border border-red-500/20 space-y-0.5">
+              <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {aptDisplayName(cancelTarget)}
+              </div>
+              <div className="text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {format(new Date(cancelTarget.date), "dd MMMM yyyy", { locale: tr })} · {cancelTarget.startTime}–{cancelTarget.endTime}
+              </div>
+            </div>
+            <div className="p-3 bg-steel/20 border border-white/5 space-y-1">
+              {["Ders hakkı otomatik olarak öğrenciye geri yüklenecek", "Öğrenciye bildirim gönderilecek", "Bu işlem geri alınamaz"].map(line => (
+                <p key={line} className="text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>• {line}</p>
+              ))}
+            </div>
+            <Textarea
+              label="İptal Sebebi (isteğe bağlı)"
+              value={cancelReason}
+              onChange={setCancelReason}
+              rows={2}
+              placeholder="Öğrenciye iletilecek sebep..."
+            />
+            <div className="flex gap-3">
+              <Button onClick={() => setCancelTarget(null)} variant="secondary" className="flex-1">Vazgeç</Button>
+              <button
+                onClick={handleAdminCancel}
+                disabled={cancelBusy}
+                className="flex-1 py-2 text-sm font-semibold tracking-wider uppercase transition-all"
+                style={{
+                  background: cancelBusy ? "rgba(239,68,68,0.5)" : "rgba(239,68,68,0.85)",
+                  color: "#fff",
+                  fontFamily: "var(--font-barlow-condensed)",
+                  opacity: cancelBusy ? 0.7 : 1,
+                }}>
+                {cancelBusy ? "İptal ediliyor..." : "Randevuyu İptal Et"}
+              </button>
             </div>
           </div>
         )}
