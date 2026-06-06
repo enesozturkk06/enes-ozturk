@@ -1298,3 +1298,104 @@ export async function renewStudentPackage(params: {
 
   return { newRemaining };
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   HEDİYE DERS (Gift Lesson) — 5000 XP eşiğinde tetiklenir
+   ═══════════════════════════════════════════════════════════════ */
+
+import type { GiftLessonRequest } from "./types";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapGiftReq(r: any): GiftLessonRequest {
+  return {
+    id:          r.id,
+    studentId:   r.student_id,
+    studentName: r.student_name ?? "",
+    xpAtRequest: r.xp_at_request ?? 0,
+    status:      r.status ?? "pending",
+    approvedAt:  r.approved_at ?? undefined,
+    createdAt:   r.created_at ?? "",
+  };
+}
+
+/** Öğrenci 5000 XP'ye ulaşınca hediye ders talebi oluştur (duplicate önleme var) */
+export async function createGiftLessonRequest(
+  studentId: string,
+  studentName: string,
+  xpAtRequest: number,
+): Promise<void> {
+  // Zaten pending/approved talep var mı?
+  const { data: existing } = await db()
+    .from("gift_lesson_requests")
+    .select("id, status")
+    .eq("student_id", studentId)
+    .in("status", ["pending", "approved"])
+    .maybeSingle();
+
+  if (existing) return; // Tekrar talep oluşturma
+
+  const { error } = await db().from("gift_lesson_requests").insert({
+    student_id:   studentId,
+    student_name: studentName,
+    xp_at_request: xpAtRequest,
+    status:       "pending",
+  });
+  if (error) console.error("[createGiftLessonRequest]", error.message);
+
+  // Admin bildirimi
+  try {
+    await createAdminNotification(
+      `🎁 Hediye Ders Talebi`,
+      `${studentName} 5000 XP'ye ulaştı! Hediye ders onayı bekliyor.`,
+      "success",
+    );
+  } catch { /* sessizce geç */ }
+}
+
+/** Admin: bekleyen hediye ders taleplerini getir */
+export async function getPendingGiftLessonRequests(): Promise<GiftLessonRequest[]> {
+  const { data, error } = await db()
+    .from("gift_lesson_requests")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getPendingGiftLessonRequests]", error.message); return []; }
+  return (data ?? []).map(mapGiftReq);
+}
+
+/** Admin: hediye ders onayla — öğrenciye +1 ders ekle */
+export async function approveGiftLessonRequest(
+  requestId: string,
+  studentId: string,
+): Promise<void> {
+  // 1. Talebi onayla
+  const { error: re } = await db()
+    .from("gift_lesson_requests")
+    .update({ status: "approved", approved_at: new Date().toISOString() })
+    .eq("id", requestId);
+  if (re) fail("approveGiftLessonRequest:update", re);
+
+  // 2. Öğrenciye +1 ders ekle
+  const { data: student } = await db()
+    .from("students")
+    .select("remaining_lessons, total_lessons, full_name")
+    .eq("id", studentId)
+    .single();
+  if (!student) return;
+
+  await db().from("students").update({
+    remaining_lessons: (student.remaining_lessons ?? 0) + 1,
+    total_lessons:     (student.total_lessons ?? 0) + 1,
+  }).eq("id", studentId);
+
+  // 3. Öğrenci bildirimi
+  try {
+    await db().from("notifications").insert({
+      student_id: studentId,
+      title:      "🎁 Hediye Ders Kazandın!",
+      message:    "Tebrikler! Disiplinin sayesinde 5000 XP'ye ulaştın ve 1 hediye ders kazandın. Ders hakkın hesabına eklendi!",
+      type:       "success",
+      is_read:    false,
+    });
+  } catch { /* sessizce geç */ }
+}

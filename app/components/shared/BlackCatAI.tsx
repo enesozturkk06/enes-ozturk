@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
-import { getStudentAppointments, getLessonRecords } from "@/lib/db";
-import { getWaterLog, todayDate } from "@/lib/health";
+import { getStudentAppointments, getLessonRecords, createGiftLessonRequest } from "@/lib/db";
+import { getWaterLog, getHealthProfile, todayDate } from "@/lib/health";
 import type { Appointment, LessonRecord } from "@/lib/types";
+import { computeXPFromData, type XPResult } from "@/lib/xp";
 import { X, Send, ChevronDown } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -64,6 +65,7 @@ function CatIcon({ size = 32 }: { size?: number }) {
 
 interface StudentContext {
   name:             string;
+  studentId:        string;
   remainingLessons: number;
   completedLessons: number;
   totalLessons:     number;
@@ -73,31 +75,60 @@ interface StudentContext {
   waterGlasses:     number;
   waterTarget:      number;
   subscriptionType?: string;
+  /* Sağlık profili */
+  weight?:          number;
+  age?:             number;
+  height?:          number;
+  gender?:          "male" | "female";
+  /* Hedef (localStorage'dan) */
+  goal?:            string;
+  /* XP */
+  xp:               XPResult;
 }
 
-/* ── Yardımcı: rastgele seçim ────────────────────────────────────── */
+/* ── Yardımcılar ─────────────────────────────────────────────────── */
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function todayStr(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+/** Randevu gelecekte mi? (tarih + saat bazlı, sadece tarih karşılaştırması değil) */
+function isUpcomingApt(apt: Appointment): boolean {
+  try {
+    const dt = parseISO(`${apt.date}T${apt.startTime}`);
+    return dt > new Date();
+  } catch {
+    const d = parseISO(apt.date);
+    d.setHours(23, 59, 59);
+    return d > new Date();
+  }
 }
 
 /* ── Intent tipleri ──────────────────────────────────────────────── */
 type Intent =
   | "training" | "technical" | "lesson" | "appointment"
   | "progress"  | "motivation" | "nutrition" | "water"
-  | "greeting"  | "badge"      | "identity"  | "default";
+  | "greeting"  | "badge"      | "identity"  | "appinfo"
+  | "xp"        | "goal"       | "default";
 
 function detectIntent(msg: string): Intent {
   if (/antrenman yap|bugün ne|program|egzersiz|hazırla|çalışma|ısın|kondisyon plan|idman/.test(msg)) return "training";
-  if (/teknik|yumruk|tekme|savunma|gard|kombinasyon|kip|spar|punch|kick/.test(msg))              return "technical";
-  if (/paket|ders hakkı|kalan ders|yenile|satın|ders bit|paket bit|kaç dersim/.test(msg))        return "lesson";
-  if (/randevu|yer|saat|zaman|gün|ne zaman|booking|ayarla|takvim/.test(msg))                     return "appointment";
-  if (/ilerleme|gelişim|skor|puan|performans|nasıl gidiy|grafik|trend|istatistik/.test(msg))      return "progress";
-  if (/motivasyon|vazgeç|bırak|yorgun|zor|üzgün|kötü|sinir|pes|olmaz|duy|hisse/.test(msg))       return "motivation";
-  if (/beslenme|diyet|kalori|protein|karbonhidrat|yemek|ne yemeli|gıda|öğün/.test(msg))          return "nutrition";
-  if (/su iç|su miktarı|hidrasyon|kaç bardak|su takip/.test(msg))                                 return "water";
-  if (/merhaba|selam|hey|nasılsın|iyi misin|naber|günaydın|iyi gece|iyi akşam/.test(msg))        return "greeting";
-  if (/rozet|ödül|başarı|koleksiyon|rozet/.test(msg))                                             return "badge";
-  if (/kim|ne sin|yapay zeka|robot|kedi ai|kendin|tanıt|seni/.test(msg))                          return "identity";
+  if (/teknik|yumruk|tekme|savunma|gard|kombinasyon|spar|punch|kick/.test(msg))                       return "technical";
+  if (/paket|ders hakkı|kalan ders|yenile|satın|ders bit|paket bit|kaç dersim/.test(msg))             return "lesson";
+  if (/randevu|ne zaman geli|randevum|booking|takvim/.test(msg))                                       return "appointment";
+  if (/ilerleme|gelişim|skor|puan|performans|nasıl gidiy|grafik|trend|istatistik/.test(msg))           return "progress";
+  if (/motivasyon|vazgeç|bırak|yorgun|zor|üzgün|kötü|sinir|pes|olmaz|duy|hisse/.test(msg))            return "motivation";
+  if (/beslenme|diyet|kalori|protein|karbonhidrat|yemek|ne yemeli|gıda|öğün|ne yesem/.test(msg))      return "nutrition";
+  if (/bugün ne kadar su|su iç|su miktarı|hidrasyon|kaç bardak/.test(msg))                            return "water";
+  if (/merhaba|selam|hey|nasılsın|iyi misin|naber|günaydın|iyi gece|iyi akşam/.test(msg))             return "greeting";
+  if (/rozet|ödül|başarı koleksiyon/.test(msg))                                                        return "badge";
+  if (/kim|ne sin|yapay zeka|robot|kedi ai|kendin|tanıt/.test(msg))                                   return "identity";
+  if (/xp|enerji puan|puan durumum|hediye ders|5000 xp/.test(msg))                                   return "xp";
+  if (/hedef|amacım|neden geli|antrenman amac|ne için/.test(msg))                                     return "goal";
+  if (/nasıl randevu|nereden randevu|iptal kural|18 saat|paket nasıl|rozet nasıl|uygulama|ne yapabil|ai antrenman|ai diyet|nasıl kullan|ne işe yar/.test(msg)) return "appinfo";
   return "default";
 }
 
@@ -199,56 +230,103 @@ function handleLesson(name: string, ctx: StudentContext): string {
   ]);
 }
 
-function handleAppointment(name: string, upcoming: Appointment[]): string {
+/* ── Randevu intent handler ──────────────────────────────────────── */
+
+function handleAppointment(name: string, ctx: StudentContext): string {
+  // Sadece onaylı + gelecek randevular (tarih+saat bazlı)
+  const upcoming = ctx.appointments
+    .filter(a => a.status === "onaylandi" && isUpcomingApt(a))
+    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+
+  // Bugünkü dersi ayrıca belirt
+  const today = todayStr();
+  const todayApt = upcoming.find(a => a.date === today);
+  const futureApts = upcoming.filter(a => a.date !== today);
+
+  if (todayApt) {
+    const rest = futureApts.length > 0
+      ? `\n\nSonraki: **${format(parseISO(futureApts[0].date), "d MMMM", { locale: tr })}** saat **${futureApts[0].startTime}**`
+      : "";
+    return `${name}, **bugün** dersin var! 🥊\n\n📅 **${format(parseISO(todayApt.date), "d MMMM EEEE", { locale: tr })}** saat **${todayApt.startTime}**\n\nHazır mısın? Antrenman öncesi hafif ye, bol su iç!${rest}`;
+  }
+
   if (upcoming.length >= 2) {
     const n1 = upcoming[0];
     const n2 = upcoming[1];
     return pick([
-      `${name}, önümüzdeki 2 randevun:\n\n📅 **${format(parseISO(n1.date), "d MMMM EEEE", { locale: tr })}** → ${n1.startTime}\n📅 **${format(parseISO(n2.date), "d MMMM EEEE", { locale: tr })}** → ${n2.startTime}\n\nHazır ol! 🥊`,
-      `Takviminde **${upcoming.length}** randevu var ${name}. En yakını: **${format(parseISO(n1.date), "d MMMM", { locale: tr })}** saat **${n1.startTime}**. O güne kadar bol su, iyi uyku!`,
+      `${name}, önümüzdeki randevuların:\n\n📅 **${format(parseISO(n1.date), "d MMMM EEEE", { locale: tr })}** → ${n1.startTime}\n📅 **${format(parseISO(n2.date), "d MMMM EEEE", { locale: tr })}** → ${n2.startTime}\n\nO güne kadar bol su, iyi uyku! 🥊`,
+      `Takviminde **${upcoming.length}** randevu var ${name}. En yakını: **${format(parseISO(n1.date), "d MMMM", { locale: tr })}** saat **${n1.startTime}**. Hazırlıklı gel!`,
     ]);
   }
+
   if (upcoming.length === 1) {
     const next    = upcoming[0];
     const dateStr = format(parseISO(next.date), "d MMMM EEEE", { locale: tr });
     return pick([
-      `${name}, yaklaşan randevun: **${dateStr}** saat **${next.startTime}**. Bir gün önce iyi uyu, antrenman günü hafif ye! 🥊`,
-      `Takvimde görüyorum ${name} — **${dateStr}** antrenman günün. Hazırlıklı gel, her zamanki gibi harika olacak!`,
+      `${name}, yaklaşan randevun: **${dateStr}** saat **${next.startTime}**.\n\nO günden önce iyi uyu, hafif ye. Hazır gelince ring senin olur! 🥊`,
+      `Takvimde görüyorum ${name} — **${dateStr}** antrenman günün. Hazırlıklı gel, Enes Hoca hazır olacak!`,
     ]);
   }
+
+  // Geçmiş randevuları kontrol et — "var ama geçmiş" hatasını önle
+  const passedToday = ctx.appointments.filter(a =>
+    a.status === "onaylandi" && a.date === today && !isUpcomingApt(a)
+  );
+  if (passedToday.length > 0) {
+    return `${name}, bugünkü dersin az önce tamamlandı veya başlamıştı. Yeni randevu için "Randevu" sayfasından müsait slot seçebilirsin! 📅`;
+  }
+
   return pick([
-    `${name}, aktif randevun görünmüyor. "Randevu" sayfasından yeni bir saat seç — antrenör Enes'in müsait slotları orada! 📅`,
-    `Takvimde randevun yok ${name}. Hemen "Randevu" sayfasına git ve bir slot ayır. Beklemek yerine aksiyon al! 🥊`,
+    `${name}, şu an aktif onaylı randevun görünmüyor. "Randevu" sayfasından antrenör Enes'in müsait slotlarına bakabilirsin! 📅`,
+    `Takvimde yaklaşan randevun yok ${name}. Hemen "Randevu" sayfasına git ve bir slot ayır — devam etmek için kritik! 🥊`,
   ]);
 }
+
+/* ── İlerleme handler ────────────────────────────────────────────── */
 
 function handleProgress(name: string, ctx: StudentContext): string {
   const last = ctx.records[0];
   if (ctx.records.length === 0)
     return pick([
-      `${name}, henüz ders kaydın yok. İlk dersten sonra sana detaylı ilerleme analizi yapacağım! Her ders kaydedilir ve trend görünür hale gelir.`,
-      `İlerleme takibi için ders kaydına ihtiyacım var ${name}. İlk ders sonrası hemen analizi yapabiliriz — başlamak en büyük adım!`,
+      `${name}, henüz ders kaydın yok. İlk dersten sonra sana detaylı ilerleme analizi yapacağım! Her ders kaydedilir, trend zamanla görünür hale gelir.`,
+      `İlerleme takibi için ders kaydına ihtiyacım var ${name}. İlk ders sonrası analiz hazır — başlamak en büyük adım!`,
     ]);
 
   if (ctx.records.length === 1)
     return pick([
       `${name}, ilk ders notun **${last.overall}/10** — güçlü bir başlangıç! 2-3 ders sonra gerçek trend görünür hale gelecek.`,
-      `Başlangıç notun **${last.overall}/10** ${name}. Harika! Karşılaştırma yapabilmem için birkaç ders daha gerekiyor — devam et!`,
+      `Başlangıç notun **${last.overall}/10** ${name}. Harika! Birkaç ders sonra karşılaştırmalı analiz yapabileceğim.`,
     ]);
 
-  const older    = ctx.records[ctx.records.length - 1];
-  const diff     = last.overall - older.overall;
+  const older     = ctx.records[ctx.records.length - 1];
+  const diff      = last.overall - older.overall;
   const allScores = ctx.records.map(r => r.overall);
-  const avg      = (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1);
-  const trend    = diff > 0 ? `📈 **+${diff.toFixed(1)} puan** artış` : diff < 0 ? `📉 **${Math.abs(diff).toFixed(1)} puan** dalgalanma` : `➡️ Stabil seyir`;
+  const avg       = (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1);
+  const trend     = diff > 0 ? `📈 **+${diff.toFixed(1)} puan** artış` : diff < 0 ? `📉 **${Math.abs(diff).toFixed(1)} puan** dalgalanma` : `➡️ Stabil seyir`;
+
+  const scores: [string, number][] = [
+    ["Yumruk", last.punch], ["Tekme", last.kick], ["Savunma", last.defense],
+    ["Kombinasyon", last.combination], ["Serbest Çalışma", last.sparring],
+  ];
+  const weakest = [...scores].sort((a, b) => a[1] - b[1])[0];
+  const strongest = [...scores].sort((a, b) => b[1] - a[1])[0];
 
   return pick([
-    `${name}, **${ctx.records.length}** ders analizi:\n\n${trend}\nİlk: **${older.overall}/10** → Son: **${last.overall}/10**\nOrtalama: **${avg}/10**\n\n${diff > 0 ? "Harika yükseliş! 🌟 Devam et!" : diff < 0 ? "Dalgalanmalar normaldir, uzun vadeli trend önemli." : "İstikrarlı performans!"}`,
-    `İlerleme raporu ${name}:\n\n🎯 Son not: **${last.overall}/10**\n📊 ${ctx.records.length} ders ortalaması: **${avg}/10**\n${trend}\n\n${diff >= 0 ? "Her ders bir kazanım!" : "Antrenörünle zayıf noktaları konuş, hızla toparlarsın!"}`,
+    `${name}, **${ctx.records.length}** ders analizi:\n\n${trend}\nİlk: **${older.overall}/10** → Son: **${last.overall}/10**\nOrtalama: **${avg}/10**\n\n💪 En güçlü: **${strongest[0]}** (${strongest[1]}/10)\n🎯 Geliştir: **${weakest[0]}** (${weakest[1]}/10)\n\n${diff > 0 ? "Harika yükseliş! 🌟" : diff < 0 ? "Dalgalanmalar normaldir — devam et." : "İstikrarlı performans!"}`,
+    `İlerleme raporu ${name}:\n\n🎯 Son not: **${last.overall}/10**\n📊 ${ctx.records.length} ders ortalaması: **${avg}/10**\n${trend}\n\n💡 Bu hafta **${weakest[0]}** üzerine odaklan — burada en büyük kazanım var.`,
   ]);
 }
 
+/* ── Motivasyon handler ──────────────────────────────────────────── */
+
 function handleMotivation(name: string, ctx: StudentContext): string {
+  const streak = ctx.xp.currentStreak;
+  if (streak >= 5) {
+    return pick([
+      `${name}, **${streak} ders** üst üste bırakmadan geldin — bu şampiyonluk! 🏆 Zorlanıyorsun ama vazgeçmiyorsun. Bu fark her şey.`,
+      `${streak} derslik serin var ${name}. Çoğu insan böyle bir seriye sahip olamaz bile. Devam et, ringde seni görmek harika!`,
+    ]);
+  }
   return pick([
     `${name}, **${ctx.completedLessons}** ders tamamladın — bu tesadüf değil, bu karar! Her geldiğinde bir adım daha ilerliyorsun. Durmak yok! 🐾`,
     `Yorgunluk geçer, güç kalır ${name}. Ring seni her seferinde biraz daha güçlü yapıyor. Vazgeçme!`,
@@ -259,13 +337,109 @@ function handleMotivation(name: string, ctx: StudentContext): string {
   ]);
 }
 
-function handleNutrition(name: string, ctx: StudentContext): string {
-  return pick([
-    `${name}, kickboks için temel beslenme:\n\n🥩 **Protein**: Kg başı 1.6-2g (tavuk, yumurta, balık, baklagil)\n🍚 **Karbonhidrat**: Antrenman öncesi 1-2 saat — pirinç, yulaf, muz\n🥑 **Yağ**: Avokado, zeytinyağı, ceviz — Omega-3 önemli!\n⏰ **Timing**: Antrenman sonrası 30 dk içinde protein + karbonhidrat al\n💧 Günde 2.5-3L su şart!`,
-    `Antrenman günü beslenme planı ${name}:\n\n🌅 **Sabah** (antrenman 2 saat öncesi): Yulaf + muz + yumurta\n💪 **Hemen sonra**: Protein shake veya yoğurt + meyve\n🌙 **Gece**: Yavaş sindirilen protein — süzme peynir, yoğurt\n\n❌ Kaç: şeker, işlenmiş yiyecek, trans yağ\n✅ Ekle: renkli sebzeler, tam tahıl`,
-    `${name}, kickbokscular için beslenme kuralları:\n\n✅ Günde 4-5 küçük öğün ye\n✅ Her öğünde protein kaynağı olsun\n✅ Karbonhidratı antrenman saatine göre ayarla\n✅ Egzersiz öncesi ağır yemek yeme — hafif kal\n✅ Kreatin + magnezyum performansı artırır (doktora danış)\n\nKilo kontrolü gerekiyorsa antrenörünle konuş!`,
-  ]);
+/* ── Beslenme plan oluşturucu ────────────────────────────────────── */
+
+function buildNutritionPlan(
+  name: string,
+  weight: number,
+  goalType: string,
+  ctx: StudentContext,
+): string {
+  const isTrainingDay = ctx.appointments.some(
+    a => a.date === todayStr() && (a.status === "onaylandi" || a.status === "tamamlandi")
+  );
+  const dayLabel = isTrainingDay ? "antrenman günü" : "dinlenme günü";
+  const protein  = Math.round(weight * (goalType === "kilo-alma" ? 2.2 : goalType === "musabaka" ? 2.0 : 1.8));
+  const carbs    = isTrainingDay
+    ? Math.round(weight * (goalType === "kilo-verme" ? 2.5 : 4))
+    : Math.round(weight * (goalType === "kilo-verme" ? 1.5 : 3));
+  const calories = goalType === "kilo-verme"
+    ? Math.round(weight * 27)
+    : goalType === "kilo-alma"
+    ? Math.round(weight * 36)
+    : Math.round(weight * 32);
+
+  let plan = `${name}, **${weight} kg** için **${dayLabel}** beslenme planın:\n\n`;
+  plan += `🎯 **Hedef**: ${goalType === "kilo-verme" ? "Kilo Verme" : goalType === "kilo-alma" ? "Kas/Kilo Alma" : goalType === "musabaka" ? "Maç Hazırlığı" : "Kondisyon"}\n\n`;
+  plan += `📊 **Günlük Hedefler:**\n`;
+  plan += `• Kalori: **~${calories} kcal**\n`;
+  plan += `• Protein: **${protein}g**\n`;
+  plan += `• Karbonhidrat: **${carbs}g**\n`;
+  plan += `• Su: **${(Math.round(weight * 35 + (isTrainingDay ? 500 : 0)) / 1000).toFixed(1)}L**\n\n`;
+
+  if (isTrainingDay) {
+    plan += `🥊 **Antrenman Günü Öğünleri:**\n`;
+    plan += `• **2 saat önce**: Yulaf + muz + yumurta\n`;
+    plan += `• **Hemen sonra**: 30g protein + basit karbonhidrat (muz, pirinç)\n`;
+    plan += `• **Gece**: Yavaş protein — süzme peynir veya yoğurt\n\n`;
+  } else {
+    plan += `💤 **Dinlenme Günü:**\n`;
+    plan += `• Karbonhidratı azalt, protein koru\n`;
+    plan += `• Sebze ağırlıklı öğünler tercih et\n`;
+    plan += `• ${goalType === "kilo-verme" ? "Kalori açığı için iyi gün — kısıtlamayı uygula!" : "Toparlanma için protein önemli."}\n\n`;
+  }
+
+  if (goalType === "kilo-verme")
+    plan += `⚠️ Şeker ve işlenmiş gıdadan kaç. Haftada 0.5-1 kg hedefle — daha hızlı kas yitirir.`;
+  else if (goalType === "kilo-alma")
+    plan += `💪 Kalori fazlasını 300-500 kcal arasında tut. Her öğünde protein kaynağı olsun.`;
+  else
+    plan += `⚡ Karbonhidratı antrenman saatine göre ayarla. Magnezyum + B vitamini kombinasyonu için ceviz ve muz ekle.`;
+
+  return plan;
 }
+
+/* ── Beslenme handler (multi-turn destekli) ──────────────────────── */
+
+function handleNutrition(
+  name: string,
+  ctx: StudentContext,
+  pendingIntent: string | null,
+  userMsg: string,
+): { reply: string; nextPending?: string } {
+  const m = userMsg.toLowerCase();
+
+  // Önceki soruya cevap alınıyor
+  if (pendingIntent === "nutrition_profile") {
+    const weightMatch = m.match(/(\d{2,3})\s*(?:kg|kilo)?/);
+    const weight = weightMatch ? parseInt(weightMatch[1]) : (ctx.weight ?? 0);
+
+    const goalMap: Record<string, string> = {
+      "kilo ver": "kilo-verme", "zayıfla": "kilo-verme", "yağ": "kilo-verme",
+      "kondisyon": "kondisyon", "kilo al": "kilo-alma",
+      "kas": "kilo-alma", "güç": "kondisyon",
+      "maç": "musabaka", "müsabaka": "musabaka", "teknik": "teknik",
+    };
+    let detectedGoal: string | null = ctx.goal ?? null;
+    for (const [kw, g] of Object.entries(goalMap)) {
+      if (m.includes(kw)) { detectedGoal = g; break; }
+    }
+
+    if (weight < 30) {
+      return {
+        reply: `${name}, kilonu anlayamadım. Örnek: "70 kg, kilo vermek istiyorum" şeklinde yaz, sana özel plan hazırlayayım!`,
+        nextPending: "nutrition_profile",
+      };
+    }
+
+    return { reply: buildNutritionPlan(name, weight, detectedGoal ?? "kondisyon", ctx) };
+  }
+
+  // Profil bilgisi var mı?
+  const hasWeight = (ctx.weight ?? 0) > 30;
+  const hasGoal   = Boolean(ctx.goal);
+
+  if (!hasWeight) {
+    return {
+      reply: `${name}, sana **kişisel** beslenme planı yapabilmem için birkaç bilgiye ihtiyacım var:\n\n📝 Şunu yaz: **"70 kg, kilo vermek istiyorum"** (kilonu ve hedefini)\n\nYa da: **"75 kg, maça hazırlanıyorum"**\n\nBilgilerinle birlikte kalori, protein ve karbonhidrat hedefini hesaplayacağım!`,
+      nextPending: "nutrition_profile",
+    };
+  }
+
+  return { reply: buildNutritionPlan(name, ctx.weight!, hasGoal ? ctx.goal! : "kondisyon", ctx) };
+}
+
+/* ── Su handler ──────────────────────────────────────────────────── */
 
 function handleWater(name: string, ctx: StudentContext): string {
   const pct       = ctx.waterTarget > 0 ? Math.round((ctx.waterGlasses / ctx.waterTarget) * 100) : 0;
@@ -276,53 +450,175 @@ function handleWater(name: string, ctx: StudentContext): string {
       `${name}, **${ctx.waterGlasses}** bardak — günlük hedefe ulaştın! Bu düzeyi koru, performansın buna bağlı. 💧`,
     ]);
   }
-  return pick([
-    `${name}, bugün **${ctx.waterGlasses}/${ctx.waterTarget}** bardak su içtin (${pct}%). **${remaining}** bardak daha kaldı. Antrenman günlerinde özellikle önemli! 💧`,
-    `Su takibine baktım ${name}: **${ctx.waterGlasses}/${ctx.waterTarget}** bardak, ${pct}% tamamlandı. Masanda bir bardak var mı? Hemen iç! 💧`,
-  ]);
+  const msg = `${name}, bugün **${ctx.waterGlasses}/${ctx.waterTarget}** bardak su içtin (${pct}%). **${remaining}** bardak daha var.`;
+  const tip  = ctx.appointments.some(a => a.date === todayStr() && a.status === "onaylandi")
+    ? " Bugün antrenman günü — su kritik, şimdi bir bardak iç!" : "";
+  return `${msg}${tip} 💧`;
 }
 
-function handleGreeting(name: string): string {
+/* ── Selam handler ───────────────────────────────────────────────── */
+
+function handleGreeting(name: string, ctx: StudentContext): string {
   const hour  = new Date().getHours();
   const greet = hour < 6 ? "Gece geç saatte çalışıyorsun" : hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : hour < 22 ? "İyi akşamlar" : "Gece geç saatte";
+  const hasToday = ctx.appointments.some(a => a.date === todayStr() && isUpcomingApt(a));
+  const lowL = ctx.subscriptionType !== "monthly" && ctx.remainingLessons <= 2;
+
+  let extra = "";
+  if (hasToday) extra = " Bugün dersin var — hazır ol!";
+  else if (lowL) extra = ` ⚠️ Sadece **${ctx.remainingLessons}** ders hakkın kaldı, dikkat!`;
+
   return pick([
-    `${greet} ${name}! 🐾 Bugün sana nasıl yardımcı olabilirim? Antrenman programı, teknik analiz, motivasyon veya beslenme hakkında konuşabiliriz.`,
-    `${greet} ${name}! Seninle çalışmaya her zaman hazırım. Antrenman mı, teknik mi, beslenme mi? 🥊`,
-    `${greet} ${name}! 🐾 Bugün antrenman var mı? Sana özel program hazırlayabilirim!`,
+    `${greet} ${name}! 🐾${extra} Antrenman programı, teknik analiz, beslenme veya randevu hakkında konuşabiliriz.`,
+    `${greet} ${name}! Seninle çalışmaya her zaman hazırım.${extra} Antrenman mı, teknik mi, beslenme mi? 🥊`,
   ]);
 }
 
+/* ── Rozet handler ───────────────────────────────────────────────── */
+
 function handleBadge(name: string, ctx: StudentContext): string {
+  const xp    = ctx.xp;
+  const toGift = xp.toGift;
+  const pct    = Math.min(100, Math.round(((5000 - toGift) / 5000) * 100));
   return pick([
-    `${name}, **${ctx.completedLessons}** ders tamamladın — bir sürü rozet kazanmış olmalısın! "Rozetlerim" sayfasında kazandıklarını ve yaklaşanları görebilirsin. 🏅`,
-    `Rozet koleksiyonunu merak ediyorsun ${name}? "Rozetlerim" sayfasına bak — ${ctx.completedLessons} ders çok şey ifade ediyor! 🏆`,
+    `${name}, **${ctx.completedLessons}** ders tamamladın — birçok rozet kazanmış olmalısın!\n\n⚡ XP Durumu: **${xp.breakdown.total.toLocaleString()} XP** (Hediye Ders için ${toGift > 0 ? `${toGift.toLocaleString()} daha` : "ulaştın! 🎁"})\n\n"Rozetlerim" sayfasında koleksiyonunu görebilirsin. 🏅`,
+    `Rozet koleksiyonunu merak ediyorsun ${name}? "Rozetlerim" sayfasına bak!\n\n🏆 **${ctx.completedLessons}** ders + **${xp.breakdown.total.toLocaleString()} XP** → ${pct}% hediye ders ilerleme.`,
   ]);
 }
+
+/* ── Kimlik handler ──────────────────────────────────────────────── */
 
 function handleIdentity(): string {
   return pick([
-    `Ben **KEDİ AI** — antrenör Enes'in dijital asistanıyım. 🐾\n\nBir gözüm mavi, diğeri yeşil. Teknik analiz, antrenman programı, beslenme, motivasyon — her konuda buradayım!\n\nNe sormak istiyorsun?`,
-    `**KEDİ AI** olarak görevim seni en iyi halinde antrenmanına hazırlamak! 🥊\n\nVerilerini analiz eder, güçlü ve zayıf alanlarını tespit ederim. Antrenörünle çalışmana destek olmak için buradayım.`,
+    `Ben **KEDİ AI** — antrenör Enes'in dijital koçuyum. 🐾\n\nBir gözüm mavi, diğeri yeşil. Verilerine bakarak gerçek analiz yaparım — uydurma yok.\n\nNe sormak istiyorsun?`,
+    `**KEDİ AI** olarak görevim seni en iyi halinde antrenmanına hazırlamak! 🥊\n\nTeknik analiz, öğrenciye özel beslenme, motivasyon, randevu takibi — buradayım.`,
   ]);
 }
 
+/* ── XP handler ──────────────────────────────────────────────────── */
+
+function handleXP(name: string, ctx: StudentContext): string {
+  const xp      = ctx.xp;
+  const GIFT    = 5000;
+  const total   = xp.breakdown.total;
+  const toGift  = xp.toGift;
+  const pct     = Math.min(100, Math.round((total / GIFT) * 100));
+  const filled  = Math.round(pct / 10);
+  const bar     = "█".repeat(filled) + "░".repeat(10 - filled);
+
+  let msg = `${name}, XP durumun:\n\n`;
+  msg += `⚡ **Toplam XP**: ${total.toLocaleString()}\n`;
+  msg += `${bar} ${pct}%\n\n`;
+  msg += `📊 **Nasıl kazandın:**\n`;
+  msg += `• Ders tamamlama: +${xp.breakdown.lessonsXP} XP\n`;
+  if (xp.breakdown.streakXP > 0)
+    msg += `• Seri bonusu (${xp.maxStreak} derslik seri): +${xp.breakdown.streakXP} XP\n`;
+  if (xp.breakdown.improvementXP > 0)
+    msg += `• Puan artışı: +${xp.breakdown.improvementXP} XP\n`;
+  if (xp.breakdown.absenceDeduction < 0)
+    msg += `• Devamsızlık: ${xp.breakdown.absenceDeduction} XP\n`;
+
+  if (toGift === 0) {
+    msg += `\n🎁 **5000 XP'ye ulaştın!** Antrenörün Enes onaylamasını bekle — 1 ders hediye gelecek!`;
+  } else {
+    msg += `\n🎁 **Hediye Ders için**: ${toGift.toLocaleString()} XP daha gerekiyor\n`;
+    msg += `💡 Her ders +100 XP, her 5 ders üst üste +250 XP bonus!`;
+  }
+
+  return msg;
+}
+
+/* ── Hedef handler ───────────────────────────────────────────────── */
+
+function handleGoal(name: string, ctx: StudentContext, userMsg: string): string {
+  const m = userMsg.toLowerCase();
+  const goalMap: Record<string, string> = {
+    "kilo ver": "kilo-verme", "zayıfla": "kilo-verme", "yağ yak": "kilo-verme",
+    "kondisyon": "kondisyon", "kilo al": "kilo-alma", "kas yap": "kilo-alma",
+    "güç": "kondisyon", "maç": "musabaka", "müsabaka": "musabaka",
+    "teknik": "teknik", "esneklik": "esneklik", "düzenli": "duzensiz-katilim",
+  };
+
+  let detected: string | null = null;
+  for (const [kw, g] of Object.entries(goalMap)) {
+    if (m.includes(kw)) { detected = g; break; }
+  }
+
+  if (detected) {
+    if (typeof window !== "undefined") localStorage.setItem("kedi_ai_goal", detected);
+
+    const advice: Record<string, string> = {
+      "kilo-verme":  `${name}, **Kilo Verme** hedefi kaydedildi! 🎯\n\nStrateji:\n• Haftada en az 3 ders — kalori yakımı için\n• Antrenman günü karbonhidrat zamanla\n• Günlük kalori açığı: 300-400 kcal\n• Şeker + işlenmiş gıda: sıfır\n\n📝 **Bu Hafta Görev**: Sağlık sekmesinden kalori takibini başlat. Verilerini görünce daha net öneri veririm!`,
+      "kondisyon":   `${name}, **Kondisyon** hedefi harika! 💪\n\nProgram:\n• Haftada 3-4 ders\n• Ders arası HIIT + ip atlama\n• Protein: Kg × 1.8g\n\n📊 Teknik puanlarına bakarak zayıf alanı önce çalışacağız. ${ctx.records[0] ? `Son ders ortalaması **${ctx.records[0].overall}/10** — bu alanı büyütme fırsatımız var.` : "İlk ders sonrası kişisel plan yapayım."}`,
+      "musabaka":    `${name}, ciddi hedef — **Müsabaka Hazırlığı**! 🥊\n\nKritikler:\n• Haftada 4-5 ders zorunlu\n• Spar çalışması önce savunma geliştir\n• Kilo yönetimi başlat (beslenme sorusu sor)\n\n⚠️ **Önemli**: Enes Hoca ile özel maç planı konuş — hemen mesaj at!`,
+      "teknik":      `${name}, **Teknik Geliştirme** için:\n\n${ctx.records[0] ? `Son ders analizin:\n🎯 Önce **${([["Yumruk", ctx.records[0].punch], ["Tekme", ctx.records[0].kick], ["Savunma", ctx.records[0].defense], ["Kombinasyon", ctx.records[0].combination], ["Serbest Çalışma", ctx.records[0].sparring]] as [string,number][]).sort((a,b) => a[1]-b[1])[0][0]}** alanında odaklan (en düşük puan)\n• Her derste 1 alan hedefle\n• Ev pratiği: gölge boks + ayna` : "İlk ders sonrası zayıf alan tespiti yapayım."}`,
+      "esneklik":    `${name}, **Esneklik** hedefi:\n\n• Her antrenman sonrası 15 dk esneme zorunlu\n• Sabah 10 dk bel + kalça açıcı\n• Foam roller — bacak + sırt\n\nEsneklik tekme yüksekliğini direk etkiler — ihmal etme!`,
+      "kilo-alma":   `${name}, **Kas/Kilo Alma** hedefi:\n\n• Kalori fazlası: +300-500 kcal/gün\n• Protein: Kg × 2.2g\n• Uyku: minimum 8 saat — kas orada büyür\n• Antrenman sonrası 30 dk içinde yemek şart`,
+      "duzensiz-katilim": `${name}, **Düzenli Katılım** hedefi:\n\n${ctx.xp.currentStreak > 0 ? `Şu an **${ctx.xp.currentStreak} derslik** serin var — devam et!` : "Şu an serisiz — yeni seri başlatma zamanı!"}\n\n🎯 Hedef: Üst üste 5 ders → +250 XP bonus\n• Randevuyu haftanın aynı günlerine koy\n• 18 saatten önce iptal et — XP kaybetme`,
+    };
+
+    return advice[detected] ?? `${name}, hedefin kaydedildi! Artık buna göre öneri vereceğim. 🐾`;
+  }
+
+  const current = ctx.goal
+    ? `Şu anki hedefin: **${ctx.goal}**\n\n`
+    : "";
+
+  return `${name}, ${current}Hedef belirle ve sana özel plan yapayım:\n\n🏃 **"kilo vermek istiyorum"**\n💪 **"kondisyon artırmak istiyorum"**\n🥊 **"maça hazırlanıyorum"**\n🎯 **"tekniğimi geliştirmek istiyorum"**\n🧘 **"esnekliğimi artırmak istiyorum"**\n💪 **"kas yapmak istiyorum"**\n📅 **"düzenli katılmak istiyorum"**`;
+}
+
+/* ── Uygulama kılavuzu handler ───────────────────────────────────── */
+
+function handleAppInfo(msg: string, name: string): string {
+  if (/randevu.*nasıl|nasıl.*randevu|nereden randevu|randevu al/.test(msg))
+    return `${name}, randevu almak basit!\n\n📅 **Adımlar:**\n1. Alt menüden **"Randevu"** sekmesine git\n2. Takvimden müsait sloту seç\n3. Onay bekleme — uygun slot varsa hemen kaydolur\n\n⚠️ **18 Saat Kuralı:** Randevunu en az **18 saat önceden** iptal etmezsen ders hakkın düşer!`;
+
+  if (/iptal.*kural|18 saat|son dakika iptal|iptal neden/.test(msg))
+    return `${name}, iptal kuralı:\n\n⚠️ **18 Saat Kuralı:**\nRandevunu en az **18 saat önce** iptal etmezsen ders hakkın otomatik düşer.\n\nÖrnek: Yarın saat 10:00 dersin varsa → bu gece **saat 16:00'ya** kadar iptal edebilirsin.\n\nAdmin iptal ederse ders hakkın iade edilir. Öğrenci iptali geç olursa iade yok.`;
+
+  if (/rozet.*nasıl|rozetler.*çalış|badge/.test(msg))
+    return `${name}, rozet sistemi:\n\n🏅 **Nasıl Kazanılır:**\n• İlk ders tamamlandığında\n• 5, 10, 25, 50 ders milestone\n• Üst üste devamsızlık yoksa (5/10 ders)\n• Teknik puanın 8+ veya 9+\n• 30 gün aktif\n• KEDİ AI ile ilk konuşma\n\n"Rozetlerim" sayfasında kilidi açılanlara ve ilerlemene bakabilirsin! 🐾`;
+
+  if (/xp.*nasıl|puan nasıl|enerji puan.*çalış/.test(msg))
+    return `${name}, XP sistemi:\n\n⚡ **Kazanma:**\n• Ders tamamlama: +100 XP\n• Üst üste 5 ders: +250 XP bonus\n• Teknik puan artışı: +100 XP\n\n⚠️ **Kaybetme:**\n• Gelmedi: -100 XP\n\n🎁 **5000 XP** → Antrenör onayıyla 1 hediye ders!\n\nXP durumun için "xp durumum" yaz.`;
+
+  if (/hedef.*nasıl|hedef sistem/.test(msg))
+    return `${name}, hedef sistemi:\n\nKEDİ AI'a hedefini söyle — örn: "hedefim kilo vermek"\n\nBuna göre sana özel antrenman ve beslenme önerileri vereceğim.\n\n🎯 Hedefler: kilo verme, kondisyon, teknik, esneklik, maç hazırlığı, kas yapma, düzenli katılım.`;
+
+  if (/ai antrenman|antrenman.*yapay zeka/.test(msg))
+    return `${name}, **AI Antrenman** özelliği:\n\n💪 Alt menüden **"Antrenman"** sekmesine git\n• Seviyeni, hedefini, haftada kaç gün antrenman yaptığını seç\n• Ekipmana göre özelleştirilmiş program oluşturulur\n• Her gün farklı odak: yumruk, tekme, kondisyon, güç`;
+
+  if (/ai diyet|beslenme.*yapay zeka|diyet.*plan/.test(msg))
+    return `${name}, beslenme planı için bana doğrudan sor!\n\n🥗 "Beslenme öner" veya "ne yesem" de — kilonu ve hedefini sorarsam yaz, kişisel plan yapayım!`;
+
+  if (/paket.*nereden|paket nasıl|kalan ders.*nerede/.test(msg))
+    return `${name}, paket bilgilerini birkaç yerden görebilirsin:\n\n📱 **Ana ekran**: Kalan ders sayısı\n👤 **Profil**: Paket detayları ve bitiş tarihi\n💬 **KEDİ AI**: "kalan dersim kaç?" de\n\nYeni paket için WhatsApp butonuna bas, Enes Hoca seçenekleri anlatır!`;
+
+  return `${name}, uygulamada yapabileceklerin:\n\n📅 **Randevu** — müsait slottan ders al (18 saat kuralı)\n📊 **Gelişim** — teknik puanlarını ve trend\n🏋️ **Antrenman** — AI destekli program\n💧 **Sağlık** — su, kalori, kilo takibi\n🏅 **Rozetler** — başarı koleksiyonu + XP\n💬 **KEDİ AI** — her şeyi sor!\n\nNe hakkında yardım istersin?`;
+}
+
+/* ── Varsayılan handler ──────────────────────────────────────────── */
+
 function handleDefault(name: string, ctx: StudentContext): string {
   return pick([
-    `${name}, şu konularda yardımcı olabilirim:\n\n🏋️ **Antrenman programı** — bugün ne yapayım?\n📊 **Teknik analiz** — yumruk, tekme, savunma\n💪 **Motivasyon** — zor günler için\n🥗 **Beslenme** — kickboks diyeti\n📅 **Randevu** — ne zaman?`,
-    `Bunu tam anlayamadım ${name}, ama buradayım! Dene: "Bugün ne antrenman yapayım?" veya "Teknik analizim nasıl?" veya "Motivasyon ver!" 🐾`,
-    `${name}, ${ctx.completedLessons} derslik bir geçmişin var. Hangi alanda ilerlemek istiyorsun? Antrenman programı, teknik veya beslenme söyle! 🥊`,
+    `${name}, şu konularda yardımcı olabilirim:\n\n🏋️ **"Antrenman programı"** — bugünkü özel plan\n📊 **"Teknik analizim"** — yumruk, tekme, savunma\n🥗 **"Beslenme öner"** — kişisel plan\n📅 **"Randevum ne zaman?"** — takvim kontrolü\n⚡ **"XP durumum"** — puan ve hediye ders\n🎯 **"Hedefim kilo vermek"** — hedefe özel plan`,
+    `Bunu tam anlayamadım ${name}, ama buradayım! Dene: "Bugün ne antrenman yapayım?" veya "Teknik analizim nasıl?" 🐾`,
+    `${name}, ${ctx.completedLessons} derslik bir geçmişin var. Hangi alanda ilerlemek istiyorsun? Antrenman, beslenme, teknik, randevu — söyle! 🥊`,
   ]);
 }
 
 /* ── buildContext — açılış mesajı ────────────────────────────────── */
 
 function buildContext(ctx: StudentContext): string {
-  const firstName    = ctx.name.split(" ")[0];
-  const last         = ctx.records[0];
-  const upcoming     = ctx.appointments.filter(a => a.status === "onaylandi" && isFuture(a.date));
-  const lastApt      = ctx.appointments.filter(a => a.status === "tamamlandi")[0];
-  const daysSinceApt = lastApt ? differenceInDays(new Date(), parseISO(lastApt.date)) : 999;
-  const lowLessons   = ctx.subscriptionType !== "monthly" && ctx.remainingLessons <= 4;
+  const firstName  = ctx.name.split(" ")[0];
+  const last       = ctx.records[0];
+  const upcoming   = ctx.appointments
+    .filter(a => a.status === "onaylandi" && isUpcomingApt(a))
+    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+  const lastApt    = ctx.appointments.filter(a => a.status === "tamamlandi")[0];
+  const daysSince  = lastApt ? differenceInDays(new Date(), parseISO(lastApt.date)) : 999;
+  const lowLessons = ctx.subscriptionType !== "monthly" && ctx.remainingLessons <= 4;
+  const xp         = ctx.xp;
 
   const lines: string[] = [`Merhaba **${firstName}**! 🐾 Ben **KEDİ AI**, senin kişisel AI antrenör koçunum.`];
 
@@ -330,21 +626,25 @@ function buildContext(ctx: StudentContext): string {
   if (ctx.subscriptionType === "monthly") {
     lines.push(`Aylık üyeliğinle sınırsız ders alabilirsin. Randevu almanı öneriyorum!`);
   } else if (ctx.remainingLessons === 0) {
-    lines.push(`⚠️ Ders hakkın tükendi. Yeni paket için antrenörünle iletişime geç!`);
+    lines.push(`⚠️ **Ders hakkın tükendi.** Yeni paket için antrenörünle iletişime geç — WhatsApp butonu hazır!`);
   } else {
     lines.push(`Şu an **${ctx.remainingLessons}** ders hakkın var, toplamda **${ctx.completedLessons}** ders tamamladın.`);
-    if (lowLessons) lines.push(`⚠️ Ders hakkın azalıyor — yeni paket almayı düşün!`);
+    if (lowLessons) lines.push(`⚠️ Ders hakkın azalıyor — yeni paket almayı planla!`);
   }
 
   // Randevu durumu
   if (upcoming.length > 0) {
     const next = upcoming[0];
-    lines.push(`📅 Yaklaşan ders: **${format(parseISO(next.date), "d MMMM EEEE", { locale: tr })}** saat **${next.startTime}**.`);
-  } else if (daysSinceApt > 14) {
-    lines.push(`⏰ **${daysSinceApt} gündür** ders almamışsın. Randevu almayı düşün!`);
+    const isToday = next.date === todayStr();
+    lines.push(isToday
+      ? `🥊 **Bugün dersin var!** Saat **${next.startTime}** — hazır ol!`
+      : `📅 Yaklaşan ders: **${format(parseISO(next.date), "d MMMM EEEE", { locale: tr })}** saat **${next.startTime}**.`
+    );
+  } else if (daysSince > 14) {
+    lines.push(`⏰ **${daysSince} gündür** ders almamışsın. Randevu almayı düşün!`);
   }
 
-  // Son ders notu
+  // Teknik özet
   if (last) {
     const scores: [string, number][] = [
       ["Yumruk", last.punch], ["Tekme", last.kick], ["Savunma", last.defense],
@@ -353,40 +653,60 @@ function buildContext(ctx: StudentContext): string {
     const weak = [...scores].sort((a, b) => a[1] - b[1])[0];
     if (last.overall >= 9)      lines.push(`🌟 Son dersinde **${last.overall}/10** — olağanüstü!`);
     else if (last.overall >= 8) lines.push(`⭐ Son dersinde **${last.overall}/10**. Harika gidiyorsun!`);
-    else                        lines.push(`📊 Son dersinde **${last.overall}/10** — **${weak[0]}** alanında gelişim potansiyelin var.`);
+    else                        lines.push(`📊 Son dersinde **${last.overall}/10** — **${weak[0]}** geliştirilebilir.`);
   } else {
     lines.push(`Henüz ders kaydın yok. İlk ders sonrası sana özel analiz yapacağım!`);
   }
+
+  // XP özeti
+  lines.push(`⚡ **XP**: ${xp.breakdown.total.toLocaleString()} puan${xp.giftEarned ? " | 🎁 Hediye ders bekliyor!" : ` | Hediye ders için ${xp.toGift.toLocaleString()} XP kaldı`}`);
 
   lines.push(`\nNe hakkında konuşmak istersin?`);
   return lines.join(" \n");
 }
 
-function isFuture(dateStr: string): boolean {
-  return parseISO(dateStr) > new Date();
-}
+/* ── Ana yanıt motoru ────────────────────────────────────────────── */
 
-/* ── Ana yanıt motoru (ileride API ile değiştirilebilir) ─────────── */
+function aiRespond(
+  userMsg: string,
+  ctx: StudentContext,
+  _history: Msg[],
+  pendingIntent: string | null,
+): { reply: string; nextPending?: string } {
+  const msg    = userMsg.toLowerCase();
+  const name   = ctx.name.split(" ")[0];
 
-function aiRespond(userMsg: string, ctx: StudentContext, _history: Msg[]): string {
-  const intent  = detectIntent(userMsg.toLowerCase());
-  const upcoming = ctx.appointments.filter(a => a.status === "onaylandi" && isFuture(a.date));
-  const name    = ctx.name.split(" ")[0];
-
-  switch (intent) {
-    case "training":    return handleTraining(name, ctx);
-    case "technical":   return handleTechnical(name, ctx);
-    case "lesson":      return handleLesson(name, ctx);
-    case "appointment": return handleAppointment(name, upcoming);
-    case "progress":    return handleProgress(name, ctx);
-    case "motivation":  return handleMotivation(name, ctx);
-    case "nutrition":   return handleNutrition(name, ctx);
-    case "water":       return handleWater(name, ctx);
-    case "greeting":    return handleGreeting(name);
-    case "badge":       return handleBadge(name, ctx);
-    case "identity":    return handleIdentity();
-    default:            return handleDefault(name, ctx);
+  // Multi-turn: Beslenme sorusu yanıt bekliyor
+  if (pendingIntent?.startsWith("nutrition")) {
+    return handleNutrition(name, ctx, pendingIntent, userMsg);
   }
+
+  const intent = detectIntent(msg);
+
+  if (intent === "nutrition") {
+    return handleNutrition(name, ctx, null, userMsg);
+  }
+
+  const reply = (() => {
+    switch (intent) {
+      case "training":    return handleTraining(name, ctx);
+      case "technical":   return handleTechnical(name, ctx);
+      case "lesson":      return handleLesson(name, ctx);
+      case "appointment": return handleAppointment(name, ctx);
+      case "progress":    return handleProgress(name, ctx);
+      case "motivation":  return handleMotivation(name, ctx);
+      case "water":       return handleWater(name, ctx);
+      case "greeting":    return handleGreeting(name, ctx);
+      case "badge":       return handleBadge(name, ctx);
+      case "identity":    return handleIdentity();
+      case "xp":          return handleXP(name, ctx);
+      case "goal":        return handleGoal(name, ctx, userMsg);
+      case "appinfo":     return handleAppInfo(msg, name);
+      default:            return handleDefault(name, ctx);
+    }
+  })();
+
+  return { reply };
 }
 
 /* ── Mesaj bubble ─────────────────────────────────────────────────── */
@@ -460,12 +780,13 @@ function TypingIndicator() {
 
 export default function BlackCatAI() {
   const { student }         = useAuth();
-  const [open, setOpen]     = useState(false);
-  const [msgs, setMsgs]     = useState<Msg[]>([]);
-  const [input, setInput]   = useState("");
-  const [typing, setTyping] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [minimized, setMin] = useState(false);
+  const [open, setOpen]         = useState(false);
+  const [msgs, setMsgs]         = useState<Msg[]>([]);
+  const [input, setInput]       = useState("");
+  const [typing, setTyping]     = useState(false);
+  const [loaded, setLoaded]     = useState(false);
+  const [minimized, setMin]     = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<string | null>(null);
 
   /* Sürükleme */
   const constraintRef = useRef<HTMLDivElement>(null);
@@ -489,21 +810,44 @@ export default function BlackCatAI() {
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
       getWaterLog(student.id, todayDate()).catch(() => null),
-    ]).then(([apts, recs, water]) => {
+      getHealthProfile(student.id).catch(() => null),
+    ]).then(([apts, recs, water, health]) => {
       const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
-      setCtx({
+      const sortedApts = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+      const xp = computeXPFromData(student.completedLessons, apts, sorted);
+
+      // localStorage'dan hedef oku
+      const savedGoal = typeof window !== "undefined"
+        ? localStorage.getItem("kedi_ai_goal") ?? undefined
+        : undefined;
+
+      const ctx: StudentContext = {
         name:             student.fullName,
+        studentId:        student.id,
         remainingLessons: student.remainingLessons,
         completedLessons: student.completedLessons,
         totalLessons:     student.totalLessons,
         level:            student.level,
-        appointments:     [...apts].sort((a, b) => b.date.localeCompare(a.date)),
+        appointments:     sortedApts,
         records:          sorted,
         waterGlasses:     water?.glasses ?? 0,
         waterTarget:      8,
         subscriptionType: student.subscriptionType,
-      });
+        weight:           health?.weight ?? student.weight,
+        age:              health?.age    ?? student.age,
+        height:           health?.height,
+        gender:           health?.gender,
+        goal:             savedGoal,
+        xp,
+      };
+
+      setCtx(ctx);
       setLoaded(true);
+
+      // 5000 XP eşiğine ulaştıysa admin'e talep gönder
+      if (xp.giftEarned) {
+        createGiftLessonRequest(student.id, student.fullName, xp.breakdown.total).catch(() => {});
+      }
     }).catch(() => setLoaded(true));
   }, [student, loaded]);
 
@@ -536,11 +880,12 @@ export default function BlackCatAI() {
     setInput("");
     setTyping(true);
     setTimeout(() => {
-      const reply = aiRespond(userMsg.text, ctx, msgs);
+      const { reply, nextPending } = aiRespond(userMsg.text, ctx, msgs, pendingIntent);
+      setPendingIntent(nextPending ?? null);
       setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now() }]);
       setTyping(false);
     }, 600 + Math.random() * 800);
-  }, [input, ctx, msgs]);
+  }, [input, ctx, msgs, pendingIntent]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -713,7 +1058,7 @@ export default function BlackCatAI() {
                   {/* Hızlı sorular */}
                   {msgs.length <= 1 && (
                     <div className="flex-shrink-0 px-4 pb-2 flex gap-2 flex-wrap">
-                      {["Bugün ne antrenman yapayım?", "Teknik analizim", "Beslenme önerisi", "Motivasyon ver!"].map(q => (
+                      {["Bugün ne antrenman yapayım?", "Randevum ne zaman?", "Beslenme önerisi", "XP durumum"].map(q => (
                         <button
                           key={q}
                           onClick={() => {
@@ -722,7 +1067,8 @@ export default function BlackCatAI() {
                             setMsgs(prev => [...prev, userMsg]);
                             setTyping(true);
                             setTimeout(() => {
-                              const reply = aiRespond(q, ctx, msgs);
+                              const { reply, nextPending: np } = aiRespond(q, ctx, msgs, null);
+                              setPendingIntent(np ?? null);
                               setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now() }]);
                               setTyping(false);
                             }, 700 + Math.random() * 600);

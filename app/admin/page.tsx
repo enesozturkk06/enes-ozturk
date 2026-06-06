@@ -7,8 +7,9 @@ import {
   bulkGetAppointmentStudents, createLessonRecord,
   markNotificationRead, markAllAdminNotificationsRead,
   adminCancelAppointment,
+  getPendingGiftLessonRequests, approveGiftLessonRequest,
 } from "@/lib/db";
-import type { Appointment, Student, Notification, AppointmentStudent } from "@/lib/types";
+import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
 import { STATUS_LABELS } from "@/lib/constants";
 import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight } from "lucide-react";
@@ -47,6 +48,10 @@ export default function AdminDashboard() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelBusy, setCancelBusy]     = useState(false);
 
+  /* Hediye ders talepleri */
+  const [giftRequests, setGiftRequests] = useState<GiftLessonRequest[]>([]);
+  const [giftBusy, setGiftBusy]         = useState<string | null>(null);
+
   /* Ders notu modalı (tamamlama sonrası) */
   const [noteModal, setNoteModal] = useState<Appointment | null>(null);
   const [scores, setScores] = useState<Record<string,number>>({
@@ -67,11 +72,14 @@ export default function AdminDashboard() {
   }, [today]);
 
   useEffect(() => {
-    Promise.all([reloadApts(), getStudents(), getAdminNotifications()]).then(([, s, n]) => {
+    Promise.all([
+      reloadApts(), getStudents(), getAdminNotifications(),
+      getPendingGiftLessonRequests().catch(() => []),
+    ]).then(([, s, n, gifts]) => {
       setStudents(s);
       setNotifs(n);
+      setGiftRequests(gifts as GiftLessonRequest[]);
       setLoading(false);
-      // Giriş toast'u: okunmamış önemli bildirimler varsa göster
       const unread = n.filter(x => !x.isRead);
       if (unread.length > 0) setLoginToast(unread[0]);
     });
@@ -367,6 +375,42 @@ export default function AdminDashboard() {
                       </div>
                     );
                   })}
+                </div>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* ── Hediye Ders Onay ───────────────────────────────── */}
+          {giftRequests.length > 0 && (
+            <motion.div variants={fadeUp}>
+              <Card className="p-4 border border-violet/30 bg-violet/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🎁</span>
+                  <h3 className="text-sm tracking-wider text-violet" style={{ fontFamily:"var(--font-bebas)" }}>Hediye Ders Onayı Bekliyor</h3>
+                  <span className="text-xs text-white/40 ml-auto">{giftRequests.length} talep</span>
+                </div>
+                <div className="space-y-2">
+                  {giftRequests.map(req => (
+                    <div key={req.id} className="p-2 border border-violet/20 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-white/80 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{req.studentName}</p>
+                        <p className="text-[10px] text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{req.xpAtRequest.toLocaleString()} XP — 5000 XP'ye ulaştı</p>
+                      </div>
+                      <button
+                        disabled={giftBusy === req.id}
+                        onClick={async () => {
+                          setGiftBusy(req.id);
+                          await approveGiftLessonRequest(req.id, req.studentId).catch(() => {});
+                          setGiftRequests(prev => prev.filter(r => r.id !== req.id));
+                          setGiftBusy(null);
+                        }}
+                        className="text-[10px] px-3 py-1 flex-shrink-0 transition-colors"
+                        style={{ background:"rgba(139,92,246,0.25)", border:"1px solid rgba(139,92,246,0.5)", color:"#C4B5FD", fontFamily:"var(--font-barlow-condensed)" }}
+                      >
+                        {giftBusy === req.id ? "..." : "Onayla +1 Ders"}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </Card>
             </motion.div>

@@ -251,7 +251,7 @@ export default function MagazaAdminPage() {
       {/* ══ Ekle / Düzenle Modalı ══ */}
       <AnimatePresence>
         {panelMode !== "none" && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ padding:0 }}
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
             onClick={() => setPanelMode("none")}>
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
             <motion.div initial={{ y:40, opacity:0 }} animate={{ y:0, opacity:1 }} exit={{ y:40, opacity:0 }}

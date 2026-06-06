@@ -154,7 +154,7 @@ export default function OdemelerPage() {
     <div className="max-w-6xl mx-auto space-y-5">
 
       {/* Başlık */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <span className="w-8 h-px bg-crimson" />

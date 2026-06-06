@@ -147,3 +147,18 @@ export interface AuthState {
   isAdmin: boolean;
   salonOwner: SalonOwner | null;
 }
+
+export type GoalType =
+  | "kilo-verme" | "kondisyon" | "teknik"
+  | "esneklik"   | "musabaka"  | "kilo-alma"
+  | "duzensiz-katilim";
+
+export interface GiftLessonRequest {
+  id:          string;
+  studentId:   string;
+  studentName: string;
+  xpAtRequest: number;
+  status:      "pending" | "approved" | "rejected";
+  approvedAt?: string;
+  createdAt:   string;
+}
