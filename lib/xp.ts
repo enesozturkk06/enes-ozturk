@@ -219,3 +219,80 @@ export function computeXPFromData(
 }
 
 export const XP_GIFT_THRESHOLD = 5000;
+
+/* ── Sezon sistemi ───────────────────────────────────────────────── */
+
+/** Mevcut sezonu döndürür: "2026-Q2" */
+export function getCurrentSeason(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const quarter = Math.ceil((now.getMonth() + 1) / 3);
+  return `${year}-Q${quarter}`;
+}
+
+/** Sezonun başlangıç ve bitiş tarihlerini ISO string olarak döndürür */
+export function getSeasonDateRange(season: string): { start: string; end: string } {
+  const [yearStr, qStr] = season.split("-Q");
+  const year  = parseInt(yearStr, 10);
+  const q     = parseInt(qStr, 10);
+  const startMonth = (q - 1) * 3; // 0=Ocak, 3=Nisan, 6=Temmuz, 9=Ekim
+  const start = new Date(year, startMonth, 1);
+  const end   = new Date(year, startMonth + 3, 0); // çeyreğin son günü
+  return {
+    start: start.toISOString().split("T")[0],
+    end:   end.toISOString().split("T")[0],
+  };
+}
+
+/** Sezon bitiş tarihini okunabilir formatta döndürür */
+export function getSeasonLabel(season: string): string {
+  const labels: Record<string, string> = {
+    "Q1": "Ocak – Mart",
+    "Q2": "Nisan – Haziran",
+    "Q3": "Temmuz – Eylül",
+    "Q4": "Ekim – Aralık",
+  };
+  const [yearStr, qStr] = season.split("-");
+  return `${labels[qStr] ?? qStr} ${yearStr}`;
+}
+
+/** Sezon bitiş tarihini döndürür (gün sayısı için) */
+export function getDaysUntilSeasonEnd(season: string): number {
+  const { end } = getSeasonDateRange(season);
+  const endDate = new Date(end + "T23:59:59");
+  const now     = new Date();
+  return Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+/** Hem sezon hem de ömür boyu XP'yi hesaplar */
+export interface SeasonXPSummary {
+  season:        string;    // "2026-Q2"
+  seasonEnd:     string;    // "2026-06-30"
+  seasonResult:  XPResult;  // sadece bu sezondaki XP
+  lifetimeResult:XPResult;  // tüm zamandaki XP
+}
+
+export function computeFullXP(
+  completedLessons: number,
+  appointments:     Appointment[],
+  records:          LessonRecord[],
+  season:           string = getCurrentSeason(),
+): SeasonXPSummary {
+  // Ömür boyu XP
+  const lifetimeResult = computeXPFromData(completedLessons, appointments, records);
+
+  // Sezon filtresi
+  const { start, end } = getSeasonDateRange(season);
+  const seasonApts      = appointments.filter(a => a.date >= start && a.date <= end);
+  const seasonRecs      = records.filter(r => r.date >= start && r.date <= end);
+  const seasonCompleted = seasonApts.filter(a => a.status === "tamamlandi").length;
+
+  const seasonResult = computeXPFromData(seasonCompleted, seasonApts, seasonRecs);
+
+  return {
+    season,
+    seasonEnd:     end,
+    seasonResult,
+    lifetimeResult,
+  };
+}

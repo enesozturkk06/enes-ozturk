@@ -9,6 +9,7 @@ import {
   adminCancelAppointment,
   getPendingGiftLessonRequests, approveGiftLessonRequest,
 } from "@/lib/db";
+import { getSeasonLabel } from "@/lib/xp";
 import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
 import { STATUS_LABELS } from "@/lib/constants";
@@ -391,20 +392,33 @@ export default function AdminDashboard() {
                 </div>
                 <div className="space-y-2">
                   {giftRequests.map(req => (
-                    <div key={req.id} className="p-2 border border-violet/20 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-white/80 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{req.studentName}</p>
-                        <p className="text-[10px] text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{req.xpAtRequest.toLocaleString()} XP — 5000 XP'ye ulaştı</p>
+                    <div key={req.id} className="p-3 border border-violet/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs text-white/80 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{req.studentName}</p>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background: req.threshold === 10000 ? "rgba(103,232,249,0.1)" : "rgba(251,191,36,0.1)", border: `1px solid ${req.threshold === 10000 ? "rgba(103,232,249,0.3)" : "rgba(251,191,36,0.3)"}`, color: req.threshold === 10000 ? "#67E8F9" : "#FCD34D", fontFamily:"var(--font-barlow-condensed)" }}>
+                            {req.threshold === 10000 ? "💎 10.000 XP eşiği" : "🥇 5.000 XP eşiği"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                          <p className="text-[10px] text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            Sezon XP: <strong style={{ color:"rgba(251,191,36,0.8)" }}>{(req.seasonXP || req.xpAtRequest).toLocaleString()} XP</strong>
+                          </p>
+                          <p className="text-[10px] text-white/25" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            {getSeasonLabel(req.season)}
+                          </p>
+                        </div>
                       </div>
                       <button
                         disabled={giftBusy === req.id}
                         onClick={async () => {
                           setGiftBusy(req.id);
-                          await approveGiftLessonRequest(req.id, req.studentId).catch(() => {});
+                          await approveGiftLessonRequest(req.id, req.studentId, req.threshold).catch(() => {});
                           setGiftRequests(prev => prev.filter(r => r.id !== req.id));
                           setGiftBusy(null);
                         }}
-                        className="text-[10px] px-3 py-1 flex-shrink-0 transition-colors"
+                        className="text-[10px] px-3 py-1.5 flex-shrink-0 transition-colors font-semibold"
                         style={{ background:"rgba(139,92,246,0.25)", border:"1px solid rgba(139,92,246,0.5)", color:"#C4B5FD", fontFamily:"var(--font-barlow-condensed)" }}
                       >
                         {giftBusy === req.id ? "..." : "Onayla +1 Ders"}

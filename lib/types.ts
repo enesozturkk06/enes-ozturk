@@ -158,6 +158,9 @@ export interface GiftLessonRequest {
   studentId:   string;
   studentName: string;
   xpAtRequest: number;
+  seasonXP:    number;    // Bu sezondaki XP (eşik hesabında kullanılan)
+  season:      string;    // Örn: "2026-Q2"
+  threshold:   number;    // 5000 veya 10000
   status:      "pending" | "approved" | "rejected";
   approvedAt?: string;
   createdAt:   string;

@@ -1312,33 +1312,48 @@ function mapGiftReq(r: any): GiftLessonRequest {
     studentId:   r.student_id,
     studentName: r.student_name ?? "",
     xpAtRequest: r.xp_at_request ?? 0,
+    seasonXP:    r.season_xp ?? 0,
+    season:      r.season ?? "2026-Q2",
+    threshold:   r.threshold ?? 5000,
     status:      r.status ?? "pending",
     approvedAt:  r.approved_at ?? undefined,
     createdAt:   r.created_at ?? "",
   };
 }
 
-/** Öğrenci 5000 XP'ye ulaşınca hediye ders talebi oluştur (duplicate önleme var) */
+/**
+ * Öğrenci XP eşiğine ulaşınca hediye ders talebi oluştur.
+ * Aynı sezonda aynı eşikten sadece 1 kez talep oluşturulur.
+ * threshold: 5000 veya 10000
+ */
 export async function createGiftLessonRequest(
-  studentId: string,
+  studentId:   string,
   studentName: string,
   xpAtRequest: number,
+  season:      string,
+  threshold:   number,
+  seasonXP:    number,
 ): Promise<void> {
-  // Zaten pending/approved talep var mı?
+  // Bu sezon + bu eşik için zaten pending/approved talep var mı?
   const { data: existing } = await db()
     .from("gift_lesson_requests")
     .select("id, status")
     .eq("student_id", studentId)
+    .eq("season", season)
+    .eq("threshold", threshold)
     .in("status", ["pending", "approved"])
     .maybeSingle();
 
-  if (existing) return; // Tekrar talep oluşturma
+  if (existing) return; // Bu eşik bu sezon için zaten talep edilmiş
 
   const { error } = await db().from("gift_lesson_requests").insert({
-    student_id:   studentId,
-    student_name: studentName,
+    student_id:    studentId,
+    student_name:  studentName,
     xp_at_request: xpAtRequest,
-    status:       "pending",
+    season_xp:     seasonXP,
+    season:        season,
+    threshold:     threshold,
+    status:        "pending",
   });
   if (error) console.error("[createGiftLessonRequest]", error.message);
 
@@ -1346,10 +1361,25 @@ export async function createGiftLessonRequest(
   try {
     await createAdminNotification(
       `🎁 Hediye Ders Talebi`,
-      `${studentName} 5000 XP'ye ulaştı! Hediye ders onayı bekliyor.`,
+      `${studentName} ${season} sezonunda ${threshold.toLocaleString()} XP'ye ulaştı! Hediye ders onayı bekliyor.`,
       "success",
     );
   } catch { /* sessizce geç */ }
+}
+
+/** Öğrencinin bir sezon içindeki hediye ders taleplerini döndürür */
+export async function getStudentGiftClaimsForSeason(
+  studentId: string,
+  season:    string,
+): Promise<GiftLessonRequest[]> {
+  const { data, error } = await db()
+    .from("gift_lesson_requests")
+    .select("*")
+    .eq("student_id", studentId)
+    .eq("season", season)
+    .in("status", ["pending", "approved"]);
+  if (error) { console.error("[getStudentGiftClaimsForSeason]", error.message); return []; }
+  return (data ?? []).map(mapGiftReq);
 }
 
 /** Admin: bekleyen hediye ders taleplerini getir */
@@ -1367,6 +1397,7 @@ export async function getPendingGiftLessonRequests(): Promise<GiftLessonRequest[
 export async function approveGiftLessonRequest(
   requestId: string,
   studentId: string,
+  threshold: number = 5000,
 ): Promise<void> {
   // 1. Talebi onayla
   const { error: re } = await db()
@@ -1393,7 +1424,7 @@ export async function approveGiftLessonRequest(
     await db().from("notifications").insert({
       student_id: studentId,
       title:      "🎁 Hediye Ders Kazandın!",
-      message:    "Tebrikler! Disiplinin sayesinde 5000 XP'ye ulaştın ve 1 hediye ders kazandın. Ders hakkın hesabına eklendi!",
+      message:    `Tebrikler! ${threshold.toLocaleString()} XP eşiğine ulaştın ve 1 hediye ders kazandın. Ders hakkın hesabına eklendi!`,
       type:       "success",
       is_read:    false,
     });

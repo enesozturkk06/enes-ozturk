@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
-import { getStudentAppointments, getLessonRecords, createGiftLessonRequest } from "@/lib/db";
+import { getStudentAppointments, getLessonRecords, createGiftLessonRequest, getStudentGiftClaimsForSeason } from "@/lib/db";
 import { getWaterLog, getHealthProfile, todayDate } from "@/lib/health";
 import type { Appointment, LessonRecord } from "@/lib/types";
-import { computeXPFromData, type XPResult } from "@/lib/xp";
+import { computeFullXP, getCurrentSeason, getSeasonLabel, getDaysUntilSeasonEnd, type XPResult, type SeasonXPSummary } from "@/lib/xp";
 import { X, Send, ChevronDown } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -83,7 +83,11 @@ interface StudentContext {
   /* Hedef (localStorage'dan) */
   goal?:            string;
   /* XP */
-  xp:               XPResult;
+  xp:               XPResult;      // ömür boyu (rozetler, motivasyon için)
+  seasonSummary:    SeasonXPSummary; // sezon XP (hediye ders için)
+  /* Sezon hediye ders talepleri */
+  claimed5k:        boolean;
+  claimed10k:       boolean;
 }
 
 /* ── Yardımcılar ─────────────────────────────────────────────────── */
@@ -499,34 +503,49 @@ function handleIdentity(): string {
 /* ── XP handler ──────────────────────────────────────────────────── */
 
 function handleXP(name: string, ctx: StudentContext): string {
-  const xp      = ctx.xp;
-  const GIFT    = 5000;
-  const total   = xp.breakdown.total;
-  const toGift  = Math.max(0, GIFT - total);
-  const pct     = Math.min(100, Math.round((total / GIFT) * 100));
-  const filled  = Math.round(pct / 10);
-  const bar     = "█".repeat(filled) + "░".repeat(10 - filled);
+  const { seasonResult, season, seasonEnd } = ctx.seasonSummary;
+  const lifetimeTotal = ctx.xp.breakdown.total;
+  const seasonTotal   = seasonResult.breakdown.total;
 
-  let msg = `${name}, XP durumun:\n\n`;
-  msg += `⚡ **Toplam XP**: ${total.toLocaleString()}\n`;
-  msg += `${bar} ${pct}%\n\n`;
-  msg += `📊 **Nasıl kazandın:**\n`;
-  msg += `• Ders tamamlama: +${xp.breakdown.lessonsXP} XP\n`;
-  if (xp.breakdown.streakXP > 0)
-    msg += `• Seri bonusu (${xp.maxStreak} derslik seri): +${xp.breakdown.streakXP} XP\n`;
-  if (xp.breakdown.improvementXP > 0)
-    msg += `• Puan artışı: +${xp.breakdown.improvementXP} XP\n`;
-  if (xp.breakdown.absenceDeduction < 0)
-    msg += `• Devamsızlık: ${xp.breakdown.absenceDeduction} XP\n`;
+  const nextThreshold = ctx.claimed5k ? (ctx.claimed10k ? null : 10000) : 5000;
+  const toNext        = nextThreshold ? Math.max(0, nextThreshold - seasonTotal) : 0;
+  const pct           = nextThreshold
+    ? Math.min(100, Math.round((seasonTotal / nextThreshold) * 100))
+    : 100;
+  const filled = Math.round(pct / 10);
+  const bar    = "█".repeat(filled) + "░".repeat(10 - filled);
 
-  if (xp.gold5kReached) {
-    msg += `\n🎁 **5000 XP'ye ulaştın!** Antrenörün Enes onaylamasını bekle — 1 ders hediye gelecek!`;
-    if (xp.diamond10kReached) {
-      msg += `\n💎 **10000 XP'ye de ulaştın!** 2. hediye ders hakkın var — admin onayı bekliyor!`;
-    }
-  } else {
-    msg += `\n🎁 **Hediye Ders için**: ${toGift.toLocaleString()} XP daha gerekiyor\n`;
-    msg += `💡 Her ders +100 XP, her 5 ders üst üste +250 XP bonus!`;
+  const daysLeft = getDaysUntilSeasonEnd(season);
+  const seasonLbl = getSeasonLabel(season);
+
+  let msg = `${name}, **${seasonLbl}** sezon XP durumun:\n\n`;
+  msg += `🗓️ **Sezon Bitiş**: ${seasonEnd} (${daysLeft} gün kaldı)\n\n`;
+  msg += `⚡ **Bu Sezon XP**: ${seasonTotal.toLocaleString()} XP\n`;
+  msg += `${bar} ${pct}%\n`;
+  msg += `🏅 **Ömür Boyu XP**: ${lifetimeTotal.toLocaleString()} XP\n\n`;
+
+  msg += `📊 **Bu sezon nasıl kazandın:**\n`;
+  msg += `• Ders tamamlama: +${seasonResult.breakdown.lessonsXP} XP\n`;
+  if (seasonResult.breakdown.streakXP > 0)
+    msg += `• Seri bonusu: +${seasonResult.breakdown.streakXP} XP\n`;
+  if (seasonResult.breakdown.improvementXP > 0)
+    msg += `• Puan artışı: +${seasonResult.breakdown.improvementXP} XP\n`;
+  if (seasonResult.breakdown.absenceDeduction < 0)
+    msg += `• Devamsızlık: ${seasonResult.breakdown.absenceDeduction} XP\n`;
+
+  msg += `\n🎁 **Sezon Hediye Dersler** (max 2):\n`;
+  if (ctx.claimed5k)  msg += `• 5000 XP → ✅ Talep edildi\n`;
+  else if (seasonTotal >= 5000) msg += `• 5000 XP → ✅ Eşik geçildi, admin onayı bekleniyor\n`;
+  else msg += `• 5000 XP → ${Math.max(0,5000-seasonTotal).toLocaleString()} XP kaldı\n`;
+
+  if (ctx.claimed10k) msg += `• 10000 XP → ✅ Talep edildi\n`;
+  else if (seasonTotal >= 10000) msg += `• 10000 XP → ✅ Eşik geçildi, admin onayı bekleniyor\n`;
+  else msg += `• 10000 XP → ${Math.max(0,10000-seasonTotal).toLocaleString()} XP kaldı\n`;
+
+  if (nextThreshold && toNext > 0) {
+    msg += `\n💡 Sıradaki hediye derse **${toNext.toLocaleString()} XP** kaldı. Her ders +100 XP!`;
+  } else if (!nextThreshold) {
+    msg += `\n👑 Bu sezon her iki hediye dersi de kazandın!`;
   }
 
   return msg;
@@ -662,9 +681,11 @@ function buildContext(ctx: StudentContext): string {
     lines.push(`Henüz ders kaydın yok. İlk ders sonrası sana özel analiz yapacağım!`);
   }
 
-  // XP özeti
-  const toGiftXP = Math.max(0, 5000 - xp.breakdown.total);
-  lines.push(`⚡ **XP**: ${xp.breakdown.total.toLocaleString()} puan${xp.gold5kReached ? " | 🎁 Hediye ders bekliyor!" : ` | Hediye ders için ${toGiftXP.toLocaleString()} XP kaldı`}`);
+  // XP özeti — sezon bazlı hediye ders durumu
+  const seasonTotal = ctx.seasonSummary.seasonResult.breakdown.total;
+  const nextGift    = ctx.claimed5k ? (ctx.claimed10k ? null : 10000) : 5000;
+  const toGiftXP    = nextGift ? Math.max(0, nextGift - seasonTotal) : 0;
+  lines.push(`⚡ **Sezon XP**: ${seasonTotal.toLocaleString()} puan${(ctx.claimed5k || seasonTotal >= 5000) ? " | 🎁 Hediye ders durumun var!" : ` | Hediye ders için ${toGiftXP.toLocaleString()} XP kaldı`}`);
 
   lines.push(`\nNe hakkında konuşmak istersin?`);
   return lines.join(" \n");
@@ -811,17 +832,23 @@ export default function BlackCatAI() {
   /* Veri yükle */
   useEffect(() => {
     if (!student || loaded) return;
+    const season = getCurrentSeason();
     Promise.all([
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
       getWaterLog(student.id, todayDate()).catch(() => null),
       getHealthProfile(student.id).catch(() => null),
-    ]).then(([apts, recs, water, health]) => {
-      const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
-      const sortedApts = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
-      const xp = computeXPFromData(student.completedLessons, apts, sorted);
+      getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
+    ]).then(([apts, recs, water, health, giftClaims]) => {
+      const sorted      = [...recs].sort((a, b) => b.date.localeCompare(a.date));
+      const sortedApts  = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+      const summary     = computeFullXP(student.completedLessons, apts, sorted, season);
+      const xp          = summary.lifetimeResult;
+      const seasonTotal = summary.seasonResult.breakdown.total;
 
-      // localStorage'dan hedef oku
+      const claimed5k  = giftClaims.some(c => c.threshold === 5000);
+      const claimed10k = giftClaims.some(c => c.threshold === 10000);
+
       const savedGoal = typeof window !== "undefined"
         ? localStorage.getItem("kedi_ai_goal") ?? undefined
         : undefined;
@@ -844,14 +871,24 @@ export default function BlackCatAI() {
         gender:           health?.gender,
         goal:             savedGoal,
         xp,
+        seasonSummary:    summary,
+        claimed5k,
+        claimed10k,
       };
 
       setCtx(ctx);
       setLoaded(true);
 
-      // 5000 veya 10000 XP eşiğine ulaştıysa admin'e talep gönder
-      if (xp.gold5kReached) {
-        createGiftLessonRequest(student.id, student.fullName, xp.breakdown.total).catch(() => {});
+      // Sezon XP eşiğine ulaşıldıysa ve henüz talep edilmediyse admin'e gönder
+      if (seasonTotal >= 5000 && !claimed5k) {
+        createGiftLessonRequest(
+          student.id, student.fullName, xp.breakdown.total, season, 5000, seasonTotal,
+        ).catch(() => {});
+      }
+      if (seasonTotal >= 10000 && !claimed10k) {
+        createGiftLessonRequest(
+          student.id, student.fullName, xp.breakdown.total, season, 10000, seasonTotal,
+        ).catch(() => {});
       }
     }).catch(() => setLoaded(true));
   }, [student, loaded]);
