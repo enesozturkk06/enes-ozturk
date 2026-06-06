@@ -1,49 +1,191 @@
 /**
- * lib/xp.ts — Öğrenci XP (Deneyim Puanı) hesaplama motoru
- * Mevcut Supabase verisinden client-side hesaplanır — ek tablo gerekmez.
+ * lib/xp.ts — XP & Seviye sistemi
+ * Mevcut verilerden client-side hesaplanır.
  */
 import type { Appointment, LessonRecord } from "./types";
 
+/* ── Seviye tanımları ────────────────────────────────────────────── */
+
+export interface XPLevel {
+  id:          string;
+  threshold:   number;
+  name:        string;
+  shortName:   string;
+  icon:        string;
+  /* Gradient renkleri */
+  colorPrimary:string;
+  gradFrom:    string;
+  gradTo:      string;
+  glowColor:   string;        // rgba
+  borderColor: string;        // rgba
+  /* Ödüller */
+  bonusXP:     number;
+  giftLesson:  boolean;
+  description: string;
+  reward:      string;        // kısa ödül açıklaması
+  notifMsg:    string;
+}
+
+export const XP_LEVELS: XPLevel[] = [
+  {
+    id: "starter",
+    threshold:    0,
+    name:         "Amatör Sporcu",
+    shortName:    "Amatör",
+    icon:         "⚔️",
+    colorPrimary: "#6B7280",
+    gradFrom:     "#374151",
+    gradTo:       "#6B7280",
+    glowColor:    "rgba(107,114,128,0.2)",
+    borderColor:  "rgba(107,114,128,0.25)",
+    bonusXP:      0,
+    giftLesson:   false,
+    description:  "Yolculuğun başlangıcı. Her ders seni ileriye taşıyor!",
+    reward:       "—",
+    notifMsg:     "",
+  },
+  {
+    id: "bronze",
+    threshold:    1000,
+    name:         "Bronz Sporcu",
+    shortName:    "Bronz",
+    icon:         "🛡️",
+    colorPrimary: "#CD7F32",
+    gradFrom:     "#92400E",
+    gradTo:       "#F59E0B",
+    glowColor:    "rgba(205,127,50,0.3)",
+    borderColor:  "rgba(205,127,50,0.45)",
+    bonusXP:      100,
+    giftLesson:   false,
+    description:  "Temel disiplinini kanıtladın. Artık düzenli sporcu yolundasın.",
+    reward:       "Bronz rozet + +100 XP bonus + Profilde bronz çerçeve",
+    notifMsg:     "Tebrikler! 1000 XP'ye ulaştın ve Bronz Sporcu rozetini kazandın. Disiplinin yeni başlıyor.",
+  },
+  {
+    id: "silver",
+    threshold:    2500,
+    name:         "Gümüş Sporcu",
+    shortName:    "Gümüş",
+    icon:         "⭐",
+    colorPrimary: "#D1D5DB",
+    gradFrom:     "#9CA3AF",
+    gradTo:       "#F3F4F6",
+    glowColor:    "rgba(209,213,219,0.25)",
+    borderColor:  "rgba(209,213,219,0.4)",
+    bonusXP:      200,
+    giftLesson:   false,
+    description:  "Düzenli çalışman artık net görülüyor. İstikrarın güçleniyor.",
+    reward:       "Gümüş rozet + +200 XP bonus + Profilde gümüş çerçeve",
+    notifMsg:     "Harika gidiyorsun! 2500 XP'ye ulaştın ve Gümüş Sporcu oldun. Artık hedeflerin daha ciddi.",
+  },
+  {
+    id: "gold",
+    threshold:    5000,
+    name:         "Altın Sporcu",
+    shortName:    "Altın",
+    icon:         "🥇",
+    colorPrimary: "#FBBF24",
+    gradFrom:     "#D97706",
+    gradTo:       "#FDE68A",
+    glowColor:    "rgba(251,191,36,0.28)",
+    borderColor:  "rgba(251,191,36,0.5)",
+    bonusXP:      0,
+    giftLesson:   true,
+    description:  "Yüksek disiplin gösterdin. Bu seviyeye ulaşan sporcu gerçek emek vermiştir.",
+    reward:       "🎁 1 Hediye Ders + Altın rozet + Profilde altın çerçeve",
+    notifMsg:     "Tebrikler! 5000 XP'ye ulaştın ve Altın Sporcu oldun. 1 hediye ders hakkı kazandın. Antrenör onayından sonra hesabına eklenecek.",
+  },
+  {
+    id: "diamond",
+    threshold:    10000,
+    name:         "Elmas Sporcu",
+    shortName:    "Elmas",
+    icon:         "💎",
+    colorPrimary: "#67E8F9",
+    gradFrom:     "#0E7490",
+    gradTo:       "#A5F3FC",
+    glowColor:    "rgba(103,232,249,0.25)",
+    borderColor:  "rgba(103,232,249,0.5)",
+    bonusXP:      0,
+    giftLesson:   true,
+    description:  "Üst seviye disiplin, devamlılık ve karakter gösterdin.",
+    reward:       "🎁 1 Hediye Ders daha + Elmas rozet + Hall of Fame + Mor-mavi çerçeve",
+    notifMsg:     "Efsane ilerliyorsun! 10000 XP'ye ulaştın ve Elmas Sporcu oldun. 1 hediye ders hakkı daha kazandın. Bu seviyeye ulaşmak büyük disiplin ister.",
+  },
+  {
+    id: "legend",
+    threshold:    15000,
+    name:         "Efsane Sporcu",
+    shortName:    "Efsane",
+    icon:         "👑",
+    colorPrimary: "#C084FC",
+    gradFrom:     "#7C3AED",
+    gradTo:       "#F0ABFC",
+    glowColor:    "rgba(192,132,252,0.3)",
+    borderColor:  "rgba(192,132,252,0.55)",
+    bonusXP:      0,
+    giftLesson:   false,
+    description:  "Bu seviye artık ödülden çok prestij seviyesidir. Sen bu kulübün efsanesisin.",
+    reward:       "Efsane rozet + Onur Listesi zirvesi + Animasyonlu taç + Özel profil etiketi",
+    notifMsg:     "Büyük başarı! 15000 XP'ye ulaştın ve Efsane Sporcu oldun. Bu seviye sadece en disiplinli sporcular içindir. Artık Onur Listesi'ndesin.",
+  },
+];
+
+/* ── Seviye hesaplama ────────────────────────────────────────────── */
+
+export function getLevelForXP(xp: number): { current: XPLevel; next: XPLevel | null; progressPct: number; xpInLevel: number; xpToNext: number } {
+  let current = XP_LEVELS[0];
+  for (const lvl of XP_LEVELS) {
+    if (xp >= lvl.threshold) current = lvl;
+    else break;
+  }
+  const currentIdx = XP_LEVELS.indexOf(current);
+  const next = XP_LEVELS[currentIdx + 1] ?? null;
+
+  const xpInLevel = xp - current.threshold;
+  const levelRange = next ? next.threshold - current.threshold : 5000;
+  const progressPct = next ? Math.min(100, Math.round((xpInLevel / levelRange) * 100)) : 100;
+  const xpToNext = next ? Math.max(0, next.threshold - xp) : 0;
+
+  return { current, next, progressPct, xpInLevel, xpToNext };
+}
+
+/* ── XP Hesaplama ────────────────────────────────────────────────── */
+
 export interface XPBreakdown {
   total:            number;
-  lessonsXP:        number;    // tamamlanan ders × 100
-  streakXP:         number;    // üst üste 5 ders serisi × 250
-  improvementXP:    number;    // her puan artışı × 100
-  absenceDeduction: number;    // gelmedi × -100
+  lessonsXP:        number;
+  streakXP:         number;
+  improvementXP:    number;
+  absenceDeduction: number;
 }
 
 export interface XPResult {
   breakdown:     XPBreakdown;
-  nextMilestone: number;       // sonraki XP hedefi
-  toGift:        number;       // hediye ders için kalan XP (5000 eşik)
-  currentStreak: number;       // şu anki seri uzunluğu
-  maxStreak:     number;       // en uzun seri
-  giftEarned:    boolean;      // 5000 XP'ye ulaşıldı mı
+  currentStreak: number;
+  maxStreak:     number;
+  level:         ReturnType<typeof getLevelForXP>;
+  /* Hediye ders eşikleri */
+  gold5kReached:    boolean;   // 5000 XP
+  diamond10kReached:boolean;   // 10000 XP
 }
-
-const GIFT_XP_THRESHOLD = 5000;
-const MILESTONES        = [500, 1000, 2000, 3000, 5000, 7500, 10000];
 
 export function computeXPFromData(
   completedLessons: number,
   appointments:     Appointment[],
   records:          LessonRecord[],
 ): XPResult {
-  /* Ders XP */
   const lessonsXP = completedLessons * 100;
 
-  /* Devamsızlık kesintisi */
   const absents          = appointments.filter(a => a.status === "gelmedi").length;
   const absenceDeduction = absents * -100;
 
-  /* Seri hesaplama */
   const sortedApts = [...appointments]
     .filter(a => a.status === "tamamlandi" || a.status === "gelmedi")
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  let currentStreak = 0;
-  let maxStreak     = 0;
   let runningStreak = 0;
+  let maxStreak     = 0;
   for (const apt of sortedApts) {
     if (apt.status === "tamamlandi") {
       runningStreak++;
@@ -52,10 +194,10 @@ export function computeXPFromData(
       runningStreak = 0;
     }
   }
-  currentStreak = runningStreak;
-  const streakXP = Math.floor(maxStreak / 5) * 250;
+  const currentStreak = runningStreak;
+  /* 5 ders serisi → +250 XP, 10 ders serisi → ek +500 XP */
+  const streakXP = Math.floor(maxStreak / 10) * 500 + Math.floor((maxStreak % 10) / 5) * 250;
 
-  /* Puan iyileştirme XP */
   let improvementXP = 0;
   if (records.length >= 2) {
     const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
@@ -64,18 +206,16 @@ export function computeXPFromData(
     }
   }
 
-  const total        = Math.max(0, lessonsXP + streakXP + improvementXP + absenceDeduction);
-  const toGift       = Math.max(0, GIFT_XP_THRESHOLD - total);
-  const nextMilestone = MILESTONES.find(m => m > total) ?? total + 1000;
+  const total = Math.max(0, lessonsXP + streakXP + improvementXP + absenceDeduction);
 
   return {
     breakdown: { total, lessonsXP, streakXP, improvementXP, absenceDeduction },
-    nextMilestone,
-    toGift,
     currentStreak,
     maxStreak,
-    giftEarned: total >= GIFT_XP_THRESHOLD,
+    level: getLevelForXP(total),
+    gold5kReached:     total >= 5000,
+    diamond10kReached: total >= 10000,
   };
 }
 
-export const XP_GIFT_THRESHOLD = GIFT_XP_THRESHOLD;
+export const XP_GIFT_THRESHOLD = 5000;

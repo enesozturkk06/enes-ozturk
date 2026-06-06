@@ -6,17 +6,18 @@ import { useAuth } from "@/app/providers";
 import Logo from "@/app/components/shared/Logo";
 import {
   LayoutDashboard, Calendar, TrendingUp, Dumbbell,
-  Bell, LogOut, Menu, X, ChevronRight, Heart, Award,
+  Bell, LogOut, Menu, X, ChevronRight, Heart, Award, Zap,
 } from "lucide-react";
 
 const links = [
-  { href: "/ogrenci",              label: "Panel",        icon: LayoutDashboard, exact: true },
-  { href: "/ogrenci/randevu",      label: "Randevu",      icon: Calendar },
-  { href: "/ogrenci/gelisim",      label: "Gelişimim",    icon: TrendingUp },
-  { href: "/ogrenci/saglik",       label: "Sağlık",       icon: Heart },
-  { href: "/ogrenci/antrenman",    label: "AI Antrenman", icon: Dumbbell },
-  { href: "/ogrenci/rozetler",     label: "Rozetlerim",   icon: Award },
-  { href: "/ogrenci/bildirimler",  label: "Bildirimler",  icon: Bell },
+  { href: "/ogrenci",              label: "Panel",          icon: LayoutDashboard, exact: true },
+  { href: "/ogrenci/randevu",      label: "Randevu",        icon: Calendar },
+  { href: "/ogrenci/gelisim",      label: "Gelişimim",      icon: TrendingUp },
+  { href: "/ogrenci/saglik",       label: "Sağlık",         icon: Heart },
+  { href: "/ogrenci/antrenman",    label: "AI Antrenman",   icon: Dumbbell },
+  { href: "/ogrenci/rozetler",     label: "Rozetlerim",     icon: Award },
+  { href: "/ogrenci/seviye",       label: "Seviye Merkezi", icon: Zap },
+  { href: "/ogrenci/bildirimler",  label: "Bildirimler",    icon: Bell },
 ];
 
 export default function StudentNav() {

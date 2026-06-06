@@ -5,6 +5,7 @@
 
 import type { Student, LessonRecord, Appointment } from "./types";
 import { differenceInDays, parseISO } from "date-fns";
+import { computeXPFromData } from "./xp";
 
 export type Rarity = "common" | "rare" | "epic" | "legendary";
 
@@ -265,9 +266,65 @@ const DEFS: BadgeDef[] = [
     color:       "#6D28D9",
     bgColor:     "rgba(109,40,217,0.12)",
     rarity:      "rare",
-    // Bu rozet localStorage flag'i ile client-side tetiklenir
     check:       () => false, // BlackCatAI component'i unlock eder
     progress:    () => ({ current: 0, max: 1 }),
+  },
+
+  /* ── XP Seviye rozetleri ───────────────────────────────────────────── */
+  {
+    id:          "level-bronze",
+    name:        "Bronz Sporcu",
+    description: "1000 XP'ye ulaştın. Temel disiplinini kanıtladın, düzenli sporcu yolundasın.",
+    icon:        "🛡️",
+    color:       "#CD7F32",
+    bgColor:     "rgba(205,127,50,0.12)",
+    rarity:      "common",
+    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 1000,
+    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 1000), max: 1000 }),
+  },
+  {
+    id:          "level-silver",
+    name:        "Gümüş Sporcu",
+    description: "2500 XP'ye ulaştın. Düzenli çalışman artık net görülüyor, istikrarın güçleniyor.",
+    icon:        "⭐",
+    color:       "#D1D5DB",
+    bgColor:     "rgba(209,213,219,0.1)",
+    rarity:      "rare",
+    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 2500,
+    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 2500), max: 2500 }),
+  },
+  {
+    id:          "level-gold",
+    name:        "Altın Sporcu",
+    description: "5000 XP'ye ulaştın. Yüksek disiplin gösterdin — 1 hediye ders kazandın!",
+    icon:        "🥇",
+    color:       "#FBBF24",
+    bgColor:     "rgba(251,191,36,0.1)",
+    rarity:      "epic",
+    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 5000,
+    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 5000), max: 5000 }),
+  },
+  {
+    id:          "level-diamond",
+    name:        "Elmas Sporcu",
+    description: "10000 XP'ye ulaştın. Üst seviye disiplin ve devamlılık — Hall of Fame'desin!",
+    icon:        "💎",
+    color:       "#67E8F9",
+    bgColor:     "rgba(103,232,249,0.1)",
+    rarity:      "legendary",
+    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 10000,
+    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 10000), max: 10000 }),
+  },
+  {
+    id:          "level-legend",
+    name:        "Efsane Sporcu",
+    description: "15000 XP'ye ulaştın. Bu seviye prestij ve onurdur. Artık bu kulübün efsanesisin.",
+    icon:        "👑",
+    color:       "#C084FC",
+    bgColor:     "rgba(192,132,252,0.1)",
+    rarity:      "legendary",
+    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 15000,
+    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 15000), max: 15000 }),
   },
 ];
 

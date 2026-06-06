@@ -477,12 +477,13 @@ function handleGreeting(name: string, ctx: StudentContext): string {
 /* ── Rozet handler ───────────────────────────────────────────────── */
 
 function handleBadge(name: string, ctx: StudentContext): string {
-  const xp    = ctx.xp;
-  const toGift = xp.toGift;
-  const pct    = Math.min(100, Math.round(((5000 - toGift) / 5000) * 100));
+  const xp     = ctx.xp;
+  const total  = xp.breakdown.total;
+  const toGift = Math.max(0, 5000 - total);
+  const pct    = Math.min(100, Math.round((total / 5000) * 100));
   return pick([
-    `${name}, **${ctx.completedLessons}** ders tamamladın — birçok rozet kazanmış olmalısın!\n\n⚡ XP Durumu: **${xp.breakdown.total.toLocaleString()} XP** (Hediye Ders için ${toGift > 0 ? `${toGift.toLocaleString()} daha` : "ulaştın! 🎁"})\n\n"Rozetlerim" sayfasında koleksiyonunu görebilirsin. 🏅`,
-    `Rozet koleksiyonunu merak ediyorsun ${name}? "Rozetlerim" sayfasına bak!\n\n🏆 **${ctx.completedLessons}** ders + **${xp.breakdown.total.toLocaleString()} XP** → ${pct}% hediye ders ilerleme.`,
+    `${name}, **${ctx.completedLessons}** ders tamamladın — birçok rozet kazanmış olmalısın!\n\n⚡ XP Durumu: **${total.toLocaleString()} XP** (Hediye Ders için ${toGift > 0 ? `${toGift.toLocaleString()} daha` : "ulaştın! 🎁"})\n\n"Rozetlerim" sayfasında koleksiyonunu görebilirsin. 🏅`,
+    `Rozet koleksiyonunu merak ediyorsun ${name}? "Rozetlerim" sayfasına bak!\n\n🏆 **${ctx.completedLessons}** ders + **${total.toLocaleString()} XP** → ${pct}% hediye ders ilerleme.`,
   ]);
 }
 
@@ -501,7 +502,7 @@ function handleXP(name: string, ctx: StudentContext): string {
   const xp      = ctx.xp;
   const GIFT    = 5000;
   const total   = xp.breakdown.total;
-  const toGift  = xp.toGift;
+  const toGift  = Math.max(0, GIFT - total);
   const pct     = Math.min(100, Math.round((total / GIFT) * 100));
   const filled  = Math.round(pct / 10);
   const bar     = "█".repeat(filled) + "░".repeat(10 - filled);
@@ -518,8 +519,11 @@ function handleXP(name: string, ctx: StudentContext): string {
   if (xp.breakdown.absenceDeduction < 0)
     msg += `• Devamsızlık: ${xp.breakdown.absenceDeduction} XP\n`;
 
-  if (toGift === 0) {
+  if (xp.gold5kReached) {
     msg += `\n🎁 **5000 XP'ye ulaştın!** Antrenörün Enes onaylamasını bekle — 1 ders hediye gelecek!`;
+    if (xp.diamond10kReached) {
+      msg += `\n💎 **10000 XP'ye de ulaştın!** 2. hediye ders hakkın var — admin onayı bekliyor!`;
+    }
   } else {
     msg += `\n🎁 **Hediye Ders için**: ${toGift.toLocaleString()} XP daha gerekiyor\n`;
     msg += `💡 Her ders +100 XP, her 5 ders üst üste +250 XP bonus!`;
@@ -659,7 +663,8 @@ function buildContext(ctx: StudentContext): string {
   }
 
   // XP özeti
-  lines.push(`⚡ **XP**: ${xp.breakdown.total.toLocaleString()} puan${xp.giftEarned ? " | 🎁 Hediye ders bekliyor!" : ` | Hediye ders için ${xp.toGift.toLocaleString()} XP kaldı`}`);
+  const toGiftXP = Math.max(0, 5000 - xp.breakdown.total);
+  lines.push(`⚡ **XP**: ${xp.breakdown.total.toLocaleString()} puan${xp.gold5kReached ? " | 🎁 Hediye ders bekliyor!" : ` | Hediye ders için ${toGiftXP.toLocaleString()} XP kaldı`}`);
 
   lines.push(`\nNe hakkında konuşmak istersin?`);
   return lines.join(" \n");
@@ -844,8 +849,8 @@ export default function BlackCatAI() {
       setCtx(ctx);
       setLoaded(true);
 
-      // 5000 XP eşiğine ulaştıysa admin'e talep gönder
-      if (xp.giftEarned) {
+      // 5000 veya 10000 XP eşiğine ulaştıysa admin'e talep gönder
+      if (xp.gold5kReached) {
         createGiftLessonRequest(student.id, student.fullName, xp.breakdown.total).catch(() => {});
       }
     }).catch(() => setLoaded(true));
