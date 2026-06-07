@@ -1,19 +1,21 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   getAppointments, getStudents, getAdminNotifications,
   completeAppointmentWithAttendance, getAppointmentStudents,
   bulkGetAppointmentStudents, createLessonRecord,
   markNotificationRead, markAllAdminNotificationsRead,
-  adminCancelAppointment,
+  adminCancelAppointment, getLessonRecords,
   getPendingGiftLessonRequests, approveGiftLessonRequest,
+  getGiftLessonRequestsForSeason,
 } from "@/lib/db";
-import { getSeasonLabel } from "@/lib/xp";
-import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest } from "@/lib/types";
+import { getSeasonLabel, computeFullXP, getLevelForXP, getCurrentSeason } from "@/lib/xp";
+import { computeBadges } from "@/lib/badges";
+import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
 import { STATUS_LABELS } from "@/lib/constants";
-import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight } from "lucide-react";
+import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
 import Link from "next/link";
@@ -53,6 +55,12 @@ export default function AdminDashboard() {
   const [giftRequests, setGiftRequests] = useState<GiftLessonRequest[]>([]);
   const [giftBusy, setGiftBusy]         = useState<string | null>(null);
 
+  /* XP & Seviye Takibi */
+  const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
+  const [allRecords, setAllRecords]           = useState<LessonRecord[]>([]);
+  const [seasonGifts, setSeasonGifts]         = useState<GiftLessonRequest[]>([]);
+  const [xpFilter, setXpFilter]                = useState<"all"|"top"|"pendingGift"|"gold"|"diamond"|"legend">("all");
+
   /* Ders notu modalı (tamamlama sonrası) */
   const [noteModal, setNoteModal] = useState<Appointment | null>(null);
   const [scores, setScores] = useState<Record<string,number>>({
@@ -73,13 +81,20 @@ export default function AdminDashboard() {
   }, [today]);
 
   useEffect(() => {
+    const season = getCurrentSeason();
     Promise.all([
       reloadApts(), getStudents(), getAdminNotifications(),
       getPendingGiftLessonRequests().catch(() => []),
-    ]).then(([, s, n, gifts]) => {
+      getAppointments().catch(() => []),
+      getLessonRecords().catch(() => []),
+      getGiftLessonRequestsForSeason(season).catch(() => []),
+    ]).then(([, s, n, gifts, apts, recs, seasonGiftReqs]) => {
       setStudents(s);
       setNotifs(n);
       setGiftRequests(gifts as GiftLessonRequest[]);
+      setAllAppointments(apts as Appointment[]);
+      setAllRecords(recs as LessonRecord[]);
+      setSeasonGifts(seasonGiftReqs as GiftLessonRequest[]);
       setLoading(false);
       const unread = n.filter(x => !x.isRead);
       if (unread.length > 0) setLoginToast(unread[0]);
@@ -200,6 +215,45 @@ export default function AdminDashboard() {
     .filter(s => s.isActive && s.subscriptionType !== "monthly" && s.remainingLessons <= 2)
     .sort((a, b) => a.remainingLessons - b.remainingLessons);
   const unreadNotifs   = notifs.filter(n => !n.isRead).length;
+
+  /* ── XP & Seviye Takibi — öğrenci başına özet ─────────────── */
+  const currentSeason = getCurrentSeason();
+  const xpRows = useMemo(() => {
+    if (students.length === 0) return [];
+    return students.map(s => {
+      const apts    = allAppointments.filter(a => a.studentId === s.id);
+      const recs    = allRecords.filter(r => r.studentId === s.id);
+      const summary = computeFullXP(s.completedLessons, apts, recs, currentSeason);
+      const lifetimeXP = summary.lifetimeResult.breakdown.total;
+      const seasonXP   = summary.seasonResult.breakdown.total;
+      const level      = getLevelForXP(lifetimeXP);
+      const badges     = computeBadges(s, apts, recs).filter(b => b.earned);
+      const myGifts    = seasonGifts.filter(g => g.studentId === s.id);
+      const giftEarned = myGifts.filter(g => g.status === "approved").length;
+      const giftPending= myGifts.some(g => g.status === "pending");
+      return { student: s, lifetimeXP, seasonXP, level, badges, giftEarned, giftPending, myGifts };
+    }).sort((a, b) => b.lifetimeXP - a.lifetimeXP);
+  }, [students, allAppointments, allRecords, seasonGifts, currentSeason]);
+
+  const filteredXpRows = xpRows.filter(row => {
+    switch (xpFilter) {
+      case "pendingGift": return row.giftPending;
+      case "gold":        return row.level.current.id === "gold"   || row.lifetimeXP >= 5000;
+      case "diamond":     return row.level.current.id === "diamond"|| row.lifetimeXP >= 10000;
+      case "legend":      return row.level.current.id === "legend" || row.lifetimeXP >= 15000;
+      default:            return true;
+    }
+  });
+  const topXpRows = xpFilter === "top" ? filteredXpRows.slice(0, 10) : filteredXpRows;
+
+  const XP_FILTERS: { key: typeof xpFilter; label: string }[] = [
+    { key: "all",         label: "Tümü" },
+    { key: "top",         label: "En Yüksek XP" },
+    { key: "pendingGift", label: "Hediye Ders Bekleyen" },
+    { key: "gold",        label: "🥇 Altın Sporcu" },
+    { key: "diamond",     label: "💎 Elmas Sporcu" },
+    { key: "legend",      label: "👑 Efsane Sporcu" },
+  ];
 
   /* ── Render ───────────────────────────────────────────────── */
   return (
@@ -450,6 +504,112 @@ export default function AdminDashboard() {
           </motion.div>
         </div>
       </div>
+
+      {/* ── XP & Seviye Takibi ─────────────────────────────────── */}
+      {students.length > 0 && (
+        <motion.div variants={fadeUp}>
+          <Card className="p-4 sm:p-6">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <Zap size={18} className="text-violet" />
+              <h3 className="text-lg sm:text-xl font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                XP & Seviye Takibi
+              </h3>
+              <span className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {getSeasonLabel(currentSeason)} sezonu
+              </span>
+              <span className="text-xs text-white/30 ml-auto" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {filteredXpRows.length} öğrenci
+              </span>
+            </div>
+
+            {/* Filtreler */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {XP_FILTERS.map(f => (
+                <button key={f.key} onClick={() => setXpFilter(f.key)}
+                  className={`px-3 py-1.5 text-xs tracking-wider transition-all border ${xpFilter === f.key ? "bg-violet border-violet text-white" : "border-white/10 text-white/35 hover:border-white/20"}`}
+                  style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Öğrenci XP listesi */}
+            <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
+              {topXpRows.length === 0 ? (
+                <div className="text-center py-10">
+                  <Zap size={28} className="text-white/10 mx-auto mb-2" />
+                  <p className="text-white/20 text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Bu filtreye uygun öğrenci yok</p>
+                </div>
+              ) : topXpRows.map(row => {
+                const { student: s, level } = row;
+                return (
+                  <div key={s.id} className="p-3 bg-steel/30 border border-white/5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 flex items-center justify-center text-base flex-shrink-0 border rounded-full"
+                          style={{ background: level.current.glowColor, borderColor: level.current.borderColor }}>
+                          {level.current.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm text-white truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            <span className="font-semibold">{s.fullName}</span>
+                            <span className="text-white/30"> — </span>
+                            <span style={{ color: level.current.colorPrimary }}>{row.lifetimeXP.toLocaleString("tr-TR")} XP</span>
+                            <span className="text-white/30"> — </span>
+                            <span className="text-white/60">{level.current.name}</span>
+                          </div>
+                          <div className="text-[10px] text-white/30 flex flex-wrap gap-x-2.5 mt-0.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            <span>Sezon XP: <strong className="text-gold/80">{row.seasonXP.toLocaleString("tr-TR")}</strong></span>
+                            <span>Sıradaki: <strong className="text-white/50">{level.next ? level.next.name : "Maks. seviye"}</strong></span>
+                            {level.next && <span>Kalan: <strong className="text-white/50">{level.xpToNext.toLocaleString("tr-TR")} XP</strong></span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end flex-shrink-0">
+                        {row.giftEarned > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background:"rgba(139,92,246,0.12)", border:"1px solid rgba(139,92,246,0.3)", color:"#C4B5FD", fontFamily:"var(--font-barlow-condensed)" }}>
+                            🎁 {row.giftEarned} hediye ders
+                          </span>
+                        )}
+                        {row.giftPending && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded animate-pulse"
+                            style={{ background:"rgba(251,191,36,0.1)", border:"1px solid rgba(251,191,36,0.3)", color:"#FCD34D", fontFamily:"var(--font-barlow-condensed)" }}>
+                            ⏳ Onay bekliyor
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Seviye ilerleme çubuğu */}
+                    <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mt-2.5">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${level.progressPct}%`, background: `linear-gradient(90deg, ${level.current.gradFrom}, ${level.current.gradTo})` }} />
+                    </div>
+
+                    {/* Rozetler */}
+                    {row.badges.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {row.badges.slice(0, 8).map(b => (
+                          <span key={b.id} className="text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background: b.bgColor, border: `1px solid ${b.color}40`, color: b.color, fontFamily:"var(--font-barlow-condensed)" }}>
+                            {b.icon} {b.name}
+                          </span>
+                        ))}
+                        {row.badges.length > 8 && (
+                          <span className="text-[10px] px-1.5 py-0.5 text-white/25" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            +{row.badges.length - 8} rozet
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </motion.div>
+      )}
 
       {/* ══ Katılım Modalı (Geldi / Gelmedi) ══ */}
       <Modal open={!!attendModal} onClose={() => setAttendModal(null)} title="Ders Tamamla — Katılım" maxWidth="max-w-md">

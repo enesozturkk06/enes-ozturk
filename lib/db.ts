@@ -1382,6 +1382,17 @@ export async function getStudentGiftClaimsForSeason(
   return (data ?? []).map(mapGiftReq);
 }
 
+/** Admin: belirli sezona ait tüm hediye ders taleplerini getir (durum farketmeksizin) */
+export async function getGiftLessonRequestsForSeason(season: string): Promise<GiftLessonRequest[]> {
+  const { data, error } = await db()
+    .from("gift_lesson_requests")
+    .select("*")
+    .eq("season", season)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getGiftLessonRequestsForSeason]", error.message); return []; }
+  return (data ?? []).map(mapGiftReq);
+}
+
 /** Admin: bekleyen hediye ders taleplerini getir */
 export async function getPendingGiftLessonRequests(): Promise<GiftLessonRequest[]> {
   const { data, error } = await db()
