@@ -163,6 +163,9 @@ export interface GiftLessonRequest {
   threshold:   number;    // 5000 veya 10000
   status:      "pending" | "approved" | "rejected";
   approvedAt?: string;
+  rejectedAt?: string;
+  adminNote?:  string;
+  requestedAt?:string;
   createdAt:   string;
 }
 

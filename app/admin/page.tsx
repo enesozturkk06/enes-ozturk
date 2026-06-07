@@ -7,8 +7,8 @@ import {
   bulkGetAppointmentStudents, createLessonRecord,
   markNotificationRead, markAllAdminNotificationsRead,
   adminCancelAppointment, getLessonRecords,
-  getPendingGiftLessonRequests, approveGiftLessonRequest,
-  getGiftLessonRequestsForSeason, createGiftLessonRequest,
+  getPendingGiftLessonRequests, approveGiftLessonRequest, rejectGiftLessonRequest,
+  getGiftLessonRequestsForSeason, createGiftLessonRequest, getAllGiftLessonRequests,
   getAllXPAdjustments, createXPAdjustment, getStudentXPAdjustments,
 } from "@/lib/db";
 import { getSeasonLabel, computeFullXP, getLevelForXP, getCurrentSeason } from "@/lib/xp";
@@ -63,6 +63,13 @@ export default function AdminDashboard() {
   const [giftRequests, setGiftRequests] = useState<GiftLessonRequest[]>([]);
   const [giftBusy, setGiftBusy]         = useState<string | null>(null);
 
+  /* 🎁 Hediye Ders Onayları (tüm talepler, tüm durumlar) */
+  const [allGiftRequests, setAllGiftRequests] = useState<GiftLessonRequest[]>([]);
+  const [giftActionBusy, setGiftActionBusy]   = useState<string | null>(null);
+  const [giftRejectModal, setGiftRejectModal] = useState<GiftLessonRequest | null>(null);
+  const [giftRejectNote, setGiftRejectNote]   = useState("");
+  const [giftRejectBusy, setGiftRejectBusy]   = useState(false);
+
   /* XP & Seviye Takibi */
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [allRecords, setAllRecords]           = useState<LessonRecord[]>([]);
@@ -108,7 +115,8 @@ export default function AdminDashboard() {
       getLessonRecords().catch(() => []),
       getGiftLessonRequestsForSeason(season).catch(() => []),
       getAllXPAdjustments().catch(() => []),
-    ]).then(([, s, n, gifts, apts, recs, seasonGiftReqs, adjustments]) => {
+      getAllGiftLessonRequests().catch(() => []),
+    ]).then(([, s, n, gifts, apts, recs, seasonGiftReqs, adjustments, allGifts]) => {
       setStudents(s);
       setNotifs(n);
       setGiftRequests(gifts as GiftLessonRequest[]);
@@ -116,6 +124,7 @@ export default function AdminDashboard() {
       setAllRecords(recs as LessonRecord[]);
       setSeasonGifts(seasonGiftReqs as GiftLessonRequest[]);
       setAllAdjustments(adjustments as XPAdjustment[]);
+      setAllGiftRequests(allGifts as GiftLessonRequest[]);
       setLoading(false);
       const unread = n.filter(x => !x.isRead);
       if (unread.length > 0) setLoginToast(unread[0]);
@@ -334,12 +343,14 @@ export default function AdminDashboard() {
       if (seasonTotal >= 5000)  await createGiftLessonRequest(student.id, student.fullName, lifetimeTotal, currentSeason, 5000,  seasonTotal).catch(() => {});
       if (seasonTotal >= 10000) await createGiftLessonRequest(student.id, student.fullName, lifetimeTotal, currentSeason, 10000, seasonTotal).catch(() => {});
 
-      const [pendingGifts, seasonGiftReqs] = await Promise.all([
+      const [pendingGifts, seasonGiftReqs, allGifts] = await Promise.all([
         getPendingGiftLessonRequests().catch(() => []),
         getGiftLessonRequestsForSeason(currentSeason).catch(() => []),
+        getAllGiftLessonRequests().catch(() => []),
       ]);
       setGiftRequests(pendingGifts as GiftLessonRequest[]);
       setSeasonGifts(seasonGiftReqs as GiftLessonRequest[]);
+      setAllGiftRequests(allGifts as GiftLessonRequest[]);
     }
 
     toast(mode === "add" ? "XP başarıyla eklendi." : "XP başarıyla düşüldü.", "success");
@@ -528,53 +539,138 @@ export default function AdminDashboard() {
             </motion.div>
           )}
 
-          {/* ── Hediye Ders Onay ───────────────────────────────── */}
-          {giftRequests.length > 0 && (
-            <motion.div variants={fadeUp}>
-              <Card className="p-4 border border-violet/30 bg-violet/5">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">🎁</span>
-                  <h3 className="text-sm tracking-wider text-violet" style={{ fontFamily:"var(--font-bebas)" }}>Hediye Ders Onayı Bekliyor</h3>
-                  <span className="text-xs text-white/40 ml-auto">{giftRequests.length} talep</span>
-                </div>
+          {/* ── 🎁 Hediye Ders Onayları ─────────────────────────── */}
+          <motion.div variants={fadeUp}>
+            <Card className="p-4 border border-violet/30 bg-violet/5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">🎁</span>
+                <h3 className="text-sm tracking-wider text-violet" style={{ fontFamily:"var(--font-bebas)" }}>Hediye Ders Onayları</h3>
+                <span className="text-xs text-white/40 ml-auto">{allGiftRequests.length} talep</span>
+              </div>
+              {allGiftRequests.length === 0 ? (
+                <p className="text-xs text-white/30 py-4 text-center" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  Henüz hediye ders talebi yok.
+                </p>
+              ) : (
                 <div className="space-y-2">
-                  {giftRequests.map(req => (
-                    <div key={req.id} className="p-3 border border-violet/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-xs text-white/80 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{req.studentName}</p>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded"
-                            style={{ background: req.threshold === 10000 ? "rgba(103,232,249,0.1)" : "rgba(251,191,36,0.1)", border: `1px solid ${req.threshold === 10000 ? "rgba(103,232,249,0.3)" : "rgba(251,191,36,0.3)"}`, color: req.threshold === 10000 ? "#67E8F9" : "#FCD34D", fontFamily:"var(--font-barlow-condensed)" }}>
-                            {req.threshold === 10000 ? "💎 10.000 XP eşiği" : "🥇 5.000 XP eşiği"}
-                          </span>
+                  {allGiftRequests.map(req => {
+                    const statusInfo = {
+                      pending:  { label: "Bekliyor",   color: "#FCD34D", bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.3)" },
+                      approved: { label: "Onaylandı",  color: "#6EE7B7", bg: "rgba(16,185,129,0.1)", border: "rgba(16,185,129,0.3)" },
+                      rejected: { label: "Reddedildi", color: "#FCA5A5", bg: "rgba(239,68,68,0.1)",  border: "rgba(239,68,68,0.3)" },
+                    }[req.status];
+                    const reqDate = req.requestedAt || req.createdAt;
+                    return (
+                      <div key={req.id} className="p-3 border border-violet/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-xs text-white/80 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{req.studentName}</p>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background: req.threshold === 10000 ? "rgba(103,232,249,0.1)" : "rgba(251,191,36,0.1)", border: `1px solid ${req.threshold === 10000 ? "rgba(103,232,249,0.3)" : "rgba(251,191,36,0.3)"}`, color: req.threshold === 10000 ? "#67E8F9" : "#FCD34D", fontFamily:"var(--font-barlow-condensed)" }}>
+                              {req.threshold === 10000 ? "💎 10.000 XP eşiği" : "🥇 5.000 XP eşiği"}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background: statusInfo.bg, border: `1px solid ${statusInfo.border}`, color: statusInfo.color, fontFamily:"var(--font-barlow-condensed)" }}>
+                              {statusInfo.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                            <p className="text-[10px] text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                              Sezon XP: <strong style={{ color:"rgba(251,191,36,0.8)" }}>{(req.seasonXP || req.xpAtRequest).toLocaleString()} XP</strong>
+                            </p>
+                            <p className="text-[10px] text-white/25" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                              {getSeasonLabel(req.season)}
+                            </p>
+                            <p className="text-[10px] text-white/25" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                              Talep: {reqDate ? format(new Date(reqDate), "dd MMM yyyy, HH:mm", { locale: tr }) : "—"}
+                            </p>
+                          </div>
+                          {req.status === "rejected" && req.adminNote && (
+                            <p className="text-[10px] text-red-300/60 mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                              Admin notu: {req.adminNote}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                          <p className="text-[10px] text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                            Sezon XP: <strong style={{ color:"rgba(251,191,36,0.8)" }}>{(req.seasonXP || req.xpAtRequest).toLocaleString()} XP</strong>
-                          </p>
-                          <p className="text-[10px] text-white/25" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                            {getSeasonLabel(req.season)}
-                          </p>
-                        </div>
+                        {req.status === "pending" && (
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button
+                              disabled={giftActionBusy === req.id}
+                              onClick={async () => {
+                                setGiftActionBusy(req.id);
+                                try {
+                                  await approveGiftLessonRequest(req.id, req.studentId, req.threshold);
+                                  const fresh = await getAllGiftLessonRequests().catch(() => allGiftRequests);
+                                  setAllGiftRequests(fresh);
+                                  setGiftRequests(prev => prev.filter(r => r.id !== req.id));
+                                  toast("Hediye ders onaylandı, öğrenciye +1 ders eklendi.", "success");
+                                } catch (e: any) {
+                                  toast(`Onaylanamadı: ${e?.message ?? "Veritabanı hatası"}`, "error");
+                                }
+                                setGiftActionBusy(null);
+                              }}
+                              className="text-[10px] px-3 py-1.5 transition-colors font-semibold"
+                              style={{ background:"rgba(139,92,246,0.25)", border:"1px solid rgba(139,92,246,0.5)", color:"#C4B5FD", fontFamily:"var(--font-barlow-condensed)" }}
+                            >
+                              {giftActionBusy === req.id ? "..." : "Onayla +1 Ders"}
+                            </button>
+                            <button
+                              disabled={giftActionBusy === req.id}
+                              onClick={() => { setGiftRejectModal(req); setGiftRejectNote(""); }}
+                              className="text-[10px] px-3 py-1.5 transition-colors font-semibold"
+                              style={{ background:"rgba(239,68,68,0.12)", border:"1px solid rgba(239,68,68,0.4)", color:"#FCA5A5", fontFamily:"var(--font-barlow-condensed)" }}
+                            >
+                              Reddet
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        disabled={giftBusy === req.id}
-                        onClick={async () => {
-                          setGiftBusy(req.id);
-                          await approveGiftLessonRequest(req.id, req.studentId, req.threshold).catch(() => {});
-                          setGiftRequests(prev => prev.filter(r => r.id !== req.id));
-                          setGiftBusy(null);
-                        }}
-                        className="text-[10px] px-3 py-1.5 flex-shrink-0 transition-colors font-semibold"
-                        style={{ background:"rgba(139,92,246,0.25)", border:"1px solid rgba(139,92,246,0.5)", color:"#C4B5FD", fontFamily:"var(--font-barlow-condensed)" }}
-                      >
-                        {giftBusy === req.id ? "..." : "Onayla +1 Ders"}
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </Card>
-            </motion.div>
+              )}
+            </Card>
+          </motion.div>
+
+          {/* ── Hediye ders reddetme modalı ──────────────────────── */}
+          {giftRejectModal && (
+            <Modal open={!!giftRejectModal} onClose={() => !giftRejectBusy && setGiftRejectModal(null)} title="Hediye Ders Talebini Reddet">
+              <div className="space-y-3">
+                <p className="text-xs text-white/60" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <strong className="text-white/80">{giftRejectModal.studentName}</strong> adlı öğrencinin{" "}
+                  {giftRejectModal.threshold.toLocaleString()} XP eşiğinden gelen hediye ders talebini reddetmek üzeresin.
+                </p>
+                <Textarea
+                  label="Admin notu (opsiyonel)"
+                  value={giftRejectNote}
+                  onChange={setGiftRejectNote}
+                  placeholder="Reddetme sebebini buraya yazabilirsin..."
+                  rows={3}
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="ghost" onClick={() => setGiftRejectModal(null)} disabled={giftRejectBusy}>Vazgeç</Button>
+                  <Button
+                    onClick={async () => {
+                      if (!giftRejectModal) return;
+                      setGiftRejectBusy(true);
+                      try {
+                        await rejectGiftLessonRequest(giftRejectModal.id, giftRejectNote);
+                        const fresh = await getAllGiftLessonRequests().catch(() => allGiftRequests);
+                        setAllGiftRequests(fresh);
+                        setGiftRequests(prev => prev.filter(r => r.id !== giftRejectModal.id));
+                        toast("Hediye ders talebi reddedildi.", "success");
+                        setGiftRejectModal(null);
+                      } catch (e: any) {
+                        toast(`Reddedilemedi: ${e?.message ?? "Veritabanı hatası"}`, "error");
+                      }
+                      setGiftRejectBusy(false);
+                    }}
+                    disabled={giftRejectBusy}
+                  >
+                    {giftRejectBusy ? "..." : "Talebi Reddet"}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
           )}
 
           <motion.div variants={fadeUp}>

@@ -1317,6 +1317,9 @@ function mapGiftReq(r: any): GiftLessonRequest {
     threshold:   r.threshold ?? 5000,
     status:      r.status ?? "pending",
     approvedAt:  r.approved_at ?? undefined,
+    rejectedAt:  r.rejected_at ?? undefined,
+    adminNote:   r.admin_note ?? undefined,
+    requestedAt: r.requested_at ?? undefined,
     createdAt:   r.created_at ?? "",
   };
 }
@@ -1404,6 +1407,16 @@ export async function getPendingGiftLessonRequests(): Promise<GiftLessonRequest[
   return (data ?? []).map(mapGiftReq);
 }
 
+/** Admin: tüm sezonlardaki / tüm durumlardaki hediye ders taleplerini getir */
+export async function getAllGiftLessonRequests(): Promise<GiftLessonRequest[]> {
+  const { data, error } = await db()
+    .from("gift_lesson_requests")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getAllGiftLessonRequests]", error.message); return []; }
+  return (data ?? []).map(mapGiftReq);
+}
+
 /** Admin: hediye ders onayla — öğrenciye +1 ders ekle */
 export async function approveGiftLessonRequest(
   requestId: string,
@@ -1440,6 +1453,22 @@ export async function approveGiftLessonRequest(
       is_read:    false,
     });
   } catch { /* sessizce geç */ }
+}
+
+/** Admin: hediye ders talebini reddet — admin notu eklenebilir */
+export async function rejectGiftLessonRequest(
+  requestId: string,
+  adminNote: string = "",
+): Promise<void> {
+  const { error } = await db()
+    .from("gift_lesson_requests")
+    .update({
+      status:      "rejected",
+      rejected_at: new Date().toISOString(),
+      admin_note:  adminNote.trim() || null,
+    })
+    .eq("id", requestId);
+  if (error) fail("rejectGiftLessonRequest:update", error);
 }
 
 /* ═══════════════════════════════════════════════════════════════
