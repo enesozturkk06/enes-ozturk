@@ -17,6 +17,7 @@ import type { Appointment, Student, Notification, AppointmentStudent, GiftLesson
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea, Input, Select } from "@/app/components/ui";
 import { STATUS_LABELS, TRAINER_NAME } from "@/lib/constants";
 import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap, Plus, Minus, History } from "lucide-react";
+import { useToast } from "@/app/components/shared/Toast";
 
 const XP_REASONS = [
   "Turnuva Katılımı", "Madalya Kazandı", "Örnek Davranış", "Arkadaş Getirdi",
@@ -35,6 +36,7 @@ const stagger = { animate: { transition: { staggerChildren: 0.06 } } };
 const fadeUp  = { initial: { opacity:0, y:16 }, animate: { opacity:1, y:0 } };
 
 export default function AdminDashboard() {
+  const { toast } = useToast();
   const today = format(new Date(), "yyyy-MM-dd");
   const [todayApts, setTodayApts]   = useState<Appointment[]>([]);
   const [students, setStudents]     = useState<Student[]>([]);
@@ -295,17 +297,33 @@ export default function AdminDashboard() {
   const handleXPAdjustSave = async () => {
     if (!xpAdjModal) return;
     const raw = parseInt(xpAmount, 10);
-    if (!raw || raw <= 0) return;
+    if (!raw || raw <= 0) {
+      toast("Geçerli bir XP miktarı gir.", "error");
+      return;
+    }
     const { student, mode } = xpAdjModal;
     const signedAmount = mode === "add" ? raw : -raw;
 
     setXpAdjBusy(true);
-    await createXPAdjustment(student.id, student.fullName, signedAmount, xpReason, xpNote.trim(), TRAINER_NAME, currentSeason).catch(() => {});
+    let result: { ok: boolean; error?: string };
+    try {
+      result = await createXPAdjustment(student.id, student.fullName, signedAmount, xpReason, xpNote.trim(), TRAINER_NAME, currentSeason);
+    } catch (e: any) {
+      result = { ok: false, error: e?.message ?? "Bilinmeyen hata" };
+    }
 
-    // Taze veriyi al ve eşik kontrolü yap (otomatik seviye/rozet/hediye ders kontrolü)
-    const fresh = await getAllXPAdjustments().catch(() => []);
+    if (!result.ok) {
+      console.error("[handleXPAdjustSave] kayıt başarısız:", result.error);
+      toast(`XP kaydedilemedi: ${result.error ?? "Veritabanı hatası"}`, "error");
+      setXpAdjBusy(false);
+      return;
+    }
+
+    // Taze veriyi al — liste anında güncellensin
+    const fresh = await getAllXPAdjustments().catch(() => allAdjustments);
     setAllAdjustments(fresh);
 
+    // Eşik kontrolü (otomatik seviye/rozet/hediye ders kontrolü)
     if (signedAmount > 0) {
       const apts = allAppointments.filter(a => a.studentId === student.id);
       const recs = allRecords.filter(r => r.studentId === student.id);
@@ -324,6 +342,7 @@ export default function AdminDashboard() {
       setSeasonGifts(seasonGiftReqs as GiftLessonRequest[]);
     }
 
+    toast(mode === "add" ? "XP başarıyla eklendi." : "XP başarıyla düşüldü.", "success");
     setXpAdjBusy(false);
     setXpAdjModal(null);
     setXpAmount(""); setXpNote(""); setXpReason(XP_REASONS[0]);

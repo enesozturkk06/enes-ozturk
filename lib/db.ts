@@ -1469,7 +1469,7 @@ export async function createXPAdjustment(
   note:        string,
   adminName:   string,
   season:      string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   const { error } = await db().from("xp_adjustments").insert({
     student_id:   studentId,
     student_name: studentName,
@@ -1479,7 +1479,11 @@ export async function createXPAdjustment(
     admin_name:   adminName,
     season,
   });
-  if (error) { fail("createXPAdjustment", error); return; }
+  if (error) {
+    console.error("[createXPAdjustment]", error.message, error.code);
+    const hint = isSchemaError(error) ? " — Supabase'de SUPABASE_XP_ADJUSTMENTS.sql dosyasını çalıştırın (xp_adjustments tablosu eksik)." : "";
+    return { ok: false, error: error.message + hint };
+  }
 
   const isPositive = amount >= 0;
   try {
@@ -1491,6 +1495,8 @@ export async function createXPAdjustment(
       is_read:    false,
     });
   } catch { /* sessizce geç */ }
+
+  return { ok: true };
 }
 
 /** Öğrencinin manuel XP geçmişini getir (en yeni → en eski) */
