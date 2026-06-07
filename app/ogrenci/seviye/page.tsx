@@ -5,13 +5,13 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudents,
-  getStudentGiftClaimsForSeason, getStudentXPAdjustments,
+  getStudentGiftClaimsForSeason, getStudentXPAdjustments, getAllXPAdjustments,
 } from "@/lib/db";
 import type { Student } from "@/lib/types";
 import {
   computeFullXP, getLevelForXP, getCurrentSeason,
   getSeasonDateRange, getSeasonLabel, getDaysUntilSeasonEnd,
-  XP_LEVELS, type XPLevel, type XPResult, type SeasonXPSummary,
+  sumManualXP, XP_LEVELS, type XPLevel, type XPResult, type SeasonXPSummary,
 } from "@/lib/xp";
 import { PageHeader } from "@/app/components/ui";
 import { Zap, Crown, Trophy, Gift, Clock, ChevronRight } from "lucide-react";
@@ -395,30 +395,35 @@ export default function SeviyeMerkeziPage() {
       getStudents().catch(() => [] as Student[]),
       getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
       getStudentXPAdjustments(student.id).catch(() => []),
-    ]).then(([apts, recs, allStudents, giftClaims, xpAdjustments]) => {
+      getAllXPAdjustments().catch(() => []),
+    ]).then(([apts, recs, allStudents, giftClaims, xpAdjustments, allAdjustments]) => {
       const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const result = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
       setSummary(result);
       setClaimed5k(giftClaims.some(c => c.threshold === 5000));
       setClaimed10k(giftClaims.some(c => c.threshold === 10000));
 
-      // Hall of Fame: ömür boyu XP için tüm öğrenciler (heuristic: completedLessons × 100)
+      // Hall of Fame: ömür boyu XP için tüm öğrenciler
+      // (heuristic: tamamlanan ders × 100 + manuel XP düzeltmeleri toplamı)
       const entries: HallEntry[] = allStudents
-        .filter(s => s.completedLessons > 0)
         .map(s => {
-          const approxXP   = s.completedLessons * 100;
-          const levelInfo  = getLevelForXP(approxXP);
+          const manualTotal = sumManualXP(allAdjustments.filter(a => a.studentId === s.id));
+          const approxXP    = Math.max(0, s.completedLessons * 100 + manualTotal);
+          const levelInfo   = getLevelForXP(approxXP);
           return { name: s.fullName, xp: approxXP, level: levelInfo.current, isMe: s.id === student.id };
         })
+        .filter(e => e.xp > 0)
         .sort((a, b) => b.xp - a.xp);
 
-      // Kendi gerçek ömür boyu XP'sini güncelle
+      // Kendi gerçek ömür boyu XP'sini güncelle (seri/gelişim bonusları dahil)
       const myIdx = entries.findIndex(e => e.isMe);
       if (myIdx !== -1) {
         entries[myIdx].xp    = result.lifetimeResult.breakdown.total;
         entries[myIdx].level = result.lifetimeResult.level.current;
-        entries.sort((a, b) => b.xp - a.xp);
+      } else if (result.lifetimeResult.breakdown.total > 0) {
+        entries.push({ name: student.fullName, xp: result.lifetimeResult.breakdown.total, level: result.lifetimeResult.level.current, isMe: true });
       }
+      entries.sort((a, b) => b.xp - a.xp);
       setHallEntries(entries);
       setLoading(false);
     }).catch(() => setLoading(false));

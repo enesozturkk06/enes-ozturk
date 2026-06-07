@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
-import { getStudentAppointments, getLessonRecords } from "@/lib/db";
-import type { Appointment, LessonRecord } from "@/lib/types";
+import { getStudentAppointments, getLessonRecords, getStudentXPAdjustments } from "@/lib/db";
+import type { Appointment, LessonRecord, XPAdjustment } from "@/lib/types";
+import { sumManualXP } from "@/lib/xp";
 import {
   computeBadges, RARITY_LABELS, RARITY_COLORS,
   type Badge, type Rarity,
@@ -145,6 +146,7 @@ export default function RozetlerPage() {
   const { student } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [records, setRecords]           = useState<LessonRecord[]>([]);
+  const [adjustments, setAdjustments]   = useState<XPAdjustment[]>([]);
   const [loading, setLoading]           = useState(true);
   const [filter, setFilter]             = useState<"all" | "earned" | "locked">("all");
 
@@ -153,9 +155,11 @@ export default function RozetlerPage() {
     Promise.all([
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
-    ]).then(([apts, recs]) => {
+      getStudentXPAdjustments(student.id).catch(() => []),
+    ]).then(([apts, recs, adjs]) => {
       setAppointments(apts);
       setRecords(recs);
+      setAdjustments(adjs);
       setLoading(false);
     });
   }, [student]);
@@ -174,7 +178,8 @@ export default function RozetlerPage() {
     extraFlags["shadow-fan"] = localStorage.getItem("kedi_ai_used") === "1" || localStorage.getItem("kara_ai_used") === "1";
   }
 
-  const badges  = computeBadges(student, appointments, records, extraFlags);
+  const manualXP = sumManualXP(adjustments);
+  const badges  = computeBadges(student, appointments, records, extraFlags, manualXP);
   const earned  = badges.filter(b => b.earned);
   const locked  = badges.filter(b => !b.earned);
 
