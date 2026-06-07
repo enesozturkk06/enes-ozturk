@@ -1303,7 +1303,7 @@ export async function renewStudentPackage(params: {
    HEDİYE DERS (Gift Lesson) — 5000 XP eşiğinde tetiklenir
    ═══════════════════════════════════════════════════════════════ */
 
-import type { GiftLessonRequest } from "./types";
+import type { GiftLessonRequest, XPAdjustment } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapGiftReq(r: any): GiftLessonRequest {
@@ -1440,4 +1440,76 @@ export async function approveGiftLessonRequest(
       is_read:    false,
     });
   } catch { /* sessizce geç */ }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MANUEL XP YÖNETİMİ (xp_adjustments)
+   ═══════════════════════════════════════════════════════════════ */
+
+function mapXPAdjustment(r: any): XPAdjustment {
+  return {
+    id:          r.id,
+    studentId:   r.student_id,
+    studentName: r.student_name ?? "",
+    amount:      r.amount ?? 0,
+    reason:      r.reason ?? "Manuel Düzeltme",
+    note:        r.note ?? "",
+    adminName:   r.admin_name ?? "Admin",
+    season:      r.season ?? "",
+    createdAt:   r.created_at ?? "",
+  };
+}
+
+/** Admin: öğrenciye elle XP ekle/düş — kayıt oluşturur ve öğrenciye bildirim gönderir */
+export async function createXPAdjustment(
+  studentId:   string,
+  studentName: string,
+  amount:      number,
+  reason:      string,
+  note:        string,
+  adminName:   string,
+  season:      string,
+): Promise<void> {
+  const { error } = await db().from("xp_adjustments").insert({
+    student_id:   studentId,
+    student_name: studentName,
+    amount,
+    reason,
+    note,
+    admin_name:   adminName,
+    season,
+  });
+  if (error) { fail("createXPAdjustment", error); return; }
+
+  const isPositive = amount >= 0;
+  try {
+    await db().from("notifications").insert({
+      student_id: studentId,
+      title:      isPositive ? `⭐ ${amount.toLocaleString()} XP Kazandın!` : `📉 ${Math.abs(amount).toLocaleString()} XP Düşüldü`,
+      message:    `${reason}${note ? ` — ${note}` : ""} sebebiyle ${isPositive ? "+" : ""}${amount.toLocaleString()} XP ${isPositive ? "kazandın" : "düşüldü"}.`,
+      type:       isPositive ? "success" : "warning",
+      is_read:    false,
+    });
+  } catch { /* sessizce geç */ }
+}
+
+/** Öğrencinin manuel XP geçmişini getir (en yeni → en eski) */
+export async function getStudentXPAdjustments(studentId: string): Promise<XPAdjustment[]> {
+  const { data, error } = await db()
+    .from("xp_adjustments")
+    .select("*")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getStudentXPAdjustments]", error.message); return []; }
+  return (data ?? []).map(mapXPAdjustment);
+}
+
+/** Admin: tüm öğrencilerin manuel XP kayıtlarını getir (toplu hesaplama için) */
+export async function getAllXPAdjustments(): Promise<XPAdjustment[]> {
+  const { data, error } = await db()
+    .from("xp_adjustments")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getAllXPAdjustments]", error.message); return []; }
+  return (data ?? []).map(mapXPAdjustment);
 }

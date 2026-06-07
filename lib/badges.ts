@@ -33,8 +33,8 @@ type BadgeDef = {
   color:       string;
   bgColor:     string;
   rarity:      Rarity;
-  check:       (s: Student, apts: Appointment[], recs: LessonRecord[]) => boolean;
-  progress:    (s: Student, apts: Appointment[], recs: LessonRecord[]) => {
+  check:       (s: Student, apts: Appointment[], recs: LessonRecord[], manualXP?: number) => boolean;
+  progress:    (s: Student, apts: Appointment[], recs: LessonRecord[], manualXP?: number) => {
     current:   number;
     max:       number;
     earnedAt?: string;
@@ -279,8 +279,8 @@ const DEFS: BadgeDef[] = [
     color:       "#CD7F32",
     bgColor:     "rgba(205,127,50,0.12)",
     rarity:      "common",
-    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 1000,
-    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 1000), max: 1000 }),
+    check:    (s, apts, recs, mxp = 0) => computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total >= 1000,
+    progress: (s, apts, recs, mxp = 0) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total, 1000), max: 1000 }),
   },
   {
     id:          "level-silver",
@@ -290,8 +290,8 @@ const DEFS: BadgeDef[] = [
     color:       "#D1D5DB",
     bgColor:     "rgba(209,213,219,0.1)",
     rarity:      "rare",
-    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 2500,
-    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 2500), max: 2500 }),
+    check:    (s, apts, recs, mxp = 0) => computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total >= 2500,
+    progress: (s, apts, recs, mxp = 0) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total, 2500), max: 2500 }),
   },
   {
     id:          "level-gold",
@@ -301,8 +301,8 @@ const DEFS: BadgeDef[] = [
     color:       "#FBBF24",
     bgColor:     "rgba(251,191,36,0.1)",
     rarity:      "epic",
-    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 5000,
-    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 5000), max: 5000 }),
+    check:    (s, apts, recs, mxp = 0) => computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total >= 5000,
+    progress: (s, apts, recs, mxp = 0) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total, 5000), max: 5000 }),
   },
   {
     id:          "level-diamond",
@@ -312,8 +312,8 @@ const DEFS: BadgeDef[] = [
     color:       "#67E8F9",
     bgColor:     "rgba(103,232,249,0.1)",
     rarity:      "legendary",
-    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 10000,
-    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 10000), max: 10000 }),
+    check:    (s, apts, recs, mxp = 0) => computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total >= 10000,
+    progress: (s, apts, recs, mxp = 0) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total, 10000), max: 10000 }),
   },
   {
     id:          "level-legend",
@@ -323,8 +323,8 @@ const DEFS: BadgeDef[] = [
     color:       "#C084FC",
     bgColor:     "rgba(192,132,252,0.1)",
     rarity:      "legendary",
-    check:    (s, apts, recs) => computeXPFromData(s.completedLessons, apts, recs).breakdown.total >= 15000,
-    progress: (s, apts, recs) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs).breakdown.total, 15000), max: 15000 }),
+    check:    (s, apts, recs, mxp = 0) => computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total >= 15000,
+    progress: (s, apts, recs, mxp = 0) => ({ current: Math.min(computeXPFromData(s.completedLessons, apts, recs, mxp).breakdown.total, 15000), max: 15000 }),
   },
 ];
 
@@ -335,12 +335,13 @@ export function computeBadges(
   appointments: Appointment[],
   records:      LessonRecord[],
   extraFlags:   Record<string, boolean> = {},
+  manualXP:     number = 0,
 ): Badge[] {
   return DEFS.map(def => {
     // Harici flag (örn: KARA ile konuşma)
     const forcedEarned = extraFlags[def.id] ?? false;
-    const earned = forcedEarned || def.check(student, appointments, records);
-    const { current, max, earnedAt } = def.progress(student, appointments, records);
+    const earned = forcedEarned || def.check(student, appointments, records, manualXP);
+    const { current, max, earnedAt } = def.progress(student, appointments, records, manualXP);
 
     return {
       id:              def.id,

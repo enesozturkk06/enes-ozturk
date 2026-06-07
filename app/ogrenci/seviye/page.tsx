@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudents,
-  getStudentGiftClaimsForSeason,
+  getStudentGiftClaimsForSeason, getStudentXPAdjustments,
 } from "@/lib/db";
 import type { Student } from "@/lib/types";
 import {
@@ -394,9 +394,10 @@ export default function SeviyeMerkeziPage() {
       getLessonRecords(student.id),
       getStudents().catch(() => [] as Student[]),
       getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
-    ]).then(([apts, recs, allStudents, giftClaims]) => {
+      getStudentXPAdjustments(student.id).catch(() => []),
+    ]).then(([apts, recs, allStudents, giftClaims, xpAdjustments]) => {
       const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
-      const result = computeFullXP(student.completedLessons, apts, sorted, season);
+      const result = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
       setSummary(result);
       setClaimed5k(giftClaims.some(c => c.threshold === 5000));
       setClaimed10k(giftClaims.some(c => c.threshold === 10000));

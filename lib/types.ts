@@ -165,3 +165,16 @@ export interface GiftLessonRequest {
   approvedAt?: string;
   createdAt:   string;
 }
+
+/** Admin tarafından elle eklenen/düşülen XP kaydı */
+export interface XPAdjustment {
+  id:          string;
+  studentId:   string;
+  studentName: string;
+  amount:      number;   // Pozitif = ekleme, negatif = düşme
+  reason:      string;   // "Turnuva Katılımı", "Manuel Düzeltme" vb.
+  note:        string;   // Serbest metin açıklama
+  adminName:   string;   // İşlemi yapan kişi
+  season:      string;   // Örn: "2026-Q2"
+  createdAt:   string;
+}

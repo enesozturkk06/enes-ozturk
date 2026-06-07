@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
-import { getStudentAppointments, getLessonRecords, createGiftLessonRequest, getStudentGiftClaimsForSeason } from "@/lib/db";
+import { getStudentAppointments, getLessonRecords, createGiftLessonRequest, getStudentGiftClaimsForSeason, getStudentXPAdjustments } from "@/lib/db";
 import { getWaterLog, getHealthProfile, todayDate } from "@/lib/health";
 import type { Appointment, LessonRecord } from "@/lib/types";
 import { computeFullXP, getCurrentSeason, getSeasonLabel, getDaysUntilSeasonEnd, type XPResult, type SeasonXPSummary } from "@/lib/xp";
@@ -839,10 +839,11 @@ export default function BlackCatAI() {
       getWaterLog(student.id, todayDate()).catch(() => null),
       getHealthProfile(student.id).catch(() => null),
       getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
-    ]).then(([apts, recs, water, health, giftClaims]) => {
+      getStudentXPAdjustments(student.id).catch(() => []),
+    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments]) => {
       const sorted      = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const sortedApts  = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
-      const summary     = computeFullXP(student.completedLessons, apts, sorted, season);
+      const summary     = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
       const xp          = summary.lifetimeResult;
       const seasonTotal = summary.seasonResult.breakdown.total;
 

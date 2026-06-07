@@ -8,14 +8,20 @@ import {
   markNotificationRead, markAllAdminNotificationsRead,
   adminCancelAppointment, getLessonRecords,
   getPendingGiftLessonRequests, approveGiftLessonRequest,
-  getGiftLessonRequestsForSeason,
+  getGiftLessonRequestsForSeason, createGiftLessonRequest,
+  getAllXPAdjustments, createXPAdjustment, getStudentXPAdjustments,
 } from "@/lib/db";
 import { getSeasonLabel, computeFullXP, getLevelForXP, getCurrentSeason } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
-import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord } from "@/lib/types";
-import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea } from "@/app/components/ui";
-import { STATUS_LABELS } from "@/lib/constants";
-import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap } from "lucide-react";
+import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord, XPAdjustment } from "@/lib/types";
+import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea, Input, Select } from "@/app/components/ui";
+import { STATUS_LABELS, TRAINER_NAME } from "@/lib/constants";
+import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap, Plus, Minus, History } from "lucide-react";
+
+const XP_REASONS = [
+  "Turnuva Katılımı", "Madalya Kazandı", "Örnek Davranış", "Arkadaş Getirdi",
+  "Sosyal Medya Paylaşımı", "Özel Başarı", "Disiplin Cezası", "Manuel Düzeltme",
+];
 import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
 import Link from "next/link";
@@ -61,6 +67,17 @@ export default function AdminDashboard() {
   const [seasonGifts, setSeasonGifts]         = useState<GiftLessonRequest[]>([]);
   const [xpFilter, setXpFilter]                = useState<"all"|"top"|"pendingGift"|"gold"|"diamond"|"legend">("all");
 
+  /* Manuel XP Yönetimi */
+  const [allAdjustments, setAllAdjustments] = useState<XPAdjustment[]>([]);
+  const [xpAdjModal, setXpAdjModal]   = useState<{ student: Student; mode: "add" | "subtract" } | null>(null);
+  const [xpAmount, setXpAmount]       = useState("");
+  const [xpReason, setXpReason]       = useState(XP_REASONS[0]);
+  const [xpNote, setXpNote]           = useState("");
+  const [xpAdjBusy, setXpAdjBusy]     = useState(false);
+  const [xpHistoryModal, setXpHistoryModal]   = useState<Student | null>(null);
+  const [xpHistory, setXpHistory]             = useState<XPAdjustment[]>([]);
+  const [xpHistoryLoading, setXpHistoryLoading] = useState(false);
+
   /* Ders notu modalı (tamamlama sonrası) */
   const [noteModal, setNoteModal] = useState<Appointment | null>(null);
   const [scores, setScores] = useState<Record<string,number>>({
@@ -88,13 +105,15 @@ export default function AdminDashboard() {
       getAppointments().catch(() => []),
       getLessonRecords().catch(() => []),
       getGiftLessonRequestsForSeason(season).catch(() => []),
-    ]).then(([, s, n, gifts, apts, recs, seasonGiftReqs]) => {
+      getAllXPAdjustments().catch(() => []),
+    ]).then(([, s, n, gifts, apts, recs, seasonGiftReqs, adjustments]) => {
       setStudents(s);
       setNotifs(n);
       setGiftRequests(gifts as GiftLessonRequest[]);
       setAllAppointments(apts as Appointment[]);
       setAllRecords(recs as LessonRecord[]);
       setSeasonGifts(seasonGiftReqs as GiftLessonRequest[]);
+      setAllAdjustments(adjustments as XPAdjustment[]);
       setLoading(false);
       const unread = n.filter(x => !x.isRead);
       if (unread.length > 0) setLoginToast(unread[0]);
@@ -223,17 +242,18 @@ export default function AdminDashboard() {
     return students.map(s => {
       const apts    = allAppointments.filter(a => a.studentId === s.id);
       const recs    = allRecords.filter(r => r.studentId === s.id);
-      const summary = computeFullXP(s.completedLessons, apts, recs, currentSeason);
+      const adjs    = allAdjustments.filter(a => a.studentId === s.id);
+      const summary = computeFullXP(s.completedLessons, apts, recs, currentSeason, adjs);
       const lifetimeXP = summary.lifetimeResult.breakdown.total;
       const seasonXP   = summary.seasonResult.breakdown.total;
       const level      = getLevelForXP(lifetimeXP);
-      const badges     = computeBadges(s, apts, recs).filter(b => b.earned);
+      const badges     = computeBadges(s, apts, recs, {}, summary.lifetimeResult.breakdown.manualXP).filter(b => b.earned);
       const myGifts    = seasonGifts.filter(g => g.studentId === s.id);
       const giftEarned = myGifts.filter(g => g.status === "approved").length;
       const giftPending= myGifts.some(g => g.status === "pending");
       return { student: s, lifetimeXP, seasonXP, level, badges, giftEarned, giftPending, myGifts };
     }).sort((a, b) => b.lifetimeXP - a.lifetimeXP);
-  }, [students, allAppointments, allRecords, seasonGifts, currentSeason]);
+  }, [students, allAppointments, allRecords, allAdjustments, seasonGifts, currentSeason]);
 
   const filteredXpRows = xpRows.filter(row => {
     switch (xpFilter) {
@@ -254,6 +274,60 @@ export default function AdminDashboard() {
     { key: "diamond",     label: "💎 Elmas Sporcu" },
     { key: "legend",      label: "👑 Efsane Sporcu" },
   ];
+
+  /* ── Manuel XP işlemleri ──────────────────────────────────── */
+  const openXPAdjust = (student: Student, mode: "add" | "subtract") => {
+    setXpAdjModal({ student, mode });
+    setXpAmount("");
+    setXpReason(XP_REASONS[0]);
+    setXpNote("");
+  };
+
+  const openXPHistory = async (student: Student) => {
+    setXpHistoryModal(student);
+    setXpHistory([]);
+    setXpHistoryLoading(true);
+    const hist = await getStudentXPAdjustments(student.id).catch(() => []);
+    setXpHistory(hist);
+    setXpHistoryLoading(false);
+  };
+
+  const handleXPAdjustSave = async () => {
+    if (!xpAdjModal) return;
+    const raw = parseInt(xpAmount, 10);
+    if (!raw || raw <= 0) return;
+    const { student, mode } = xpAdjModal;
+    const signedAmount = mode === "add" ? raw : -raw;
+
+    setXpAdjBusy(true);
+    await createXPAdjustment(student.id, student.fullName, signedAmount, xpReason, xpNote.trim(), TRAINER_NAME, currentSeason).catch(() => {});
+
+    // Taze veriyi al ve eşik kontrolü yap (otomatik seviye/rozet/hediye ders kontrolü)
+    const fresh = await getAllXPAdjustments().catch(() => []);
+    setAllAdjustments(fresh);
+
+    if (signedAmount > 0) {
+      const apts = allAppointments.filter(a => a.studentId === student.id);
+      const recs = allRecords.filter(r => r.studentId === student.id);
+      const myAdj = fresh.filter(a => a.studentId === student.id);
+      const summary = computeFullXP(student.completedLessons, apts, recs, currentSeason, myAdj);
+      const seasonTotal    = summary.seasonResult.breakdown.total;
+      const lifetimeTotal  = summary.lifetimeResult.breakdown.total;
+      if (seasonTotal >= 5000)  await createGiftLessonRequest(student.id, student.fullName, lifetimeTotal, currentSeason, 5000,  seasonTotal).catch(() => {});
+      if (seasonTotal >= 10000) await createGiftLessonRequest(student.id, student.fullName, lifetimeTotal, currentSeason, 10000, seasonTotal).catch(() => {});
+
+      const [pendingGifts, seasonGiftReqs] = await Promise.all([
+        getPendingGiftLessonRequests().catch(() => []),
+        getGiftLessonRequestsForSeason(currentSeason).catch(() => []),
+      ]);
+      setGiftRequests(pendingGifts as GiftLessonRequest[]);
+      setSeasonGifts(seasonGiftReqs as GiftLessonRequest[]);
+    }
+
+    setXpAdjBusy(false);
+    setXpAdjModal(null);
+    setXpAmount(""); setXpNote(""); setXpReason(XP_REASONS[0]);
+  };
 
   /* ── Render ───────────────────────────────────────────────── */
   return (
@@ -603,6 +677,25 @@ export default function AdminDashboard() {
                         )}
                       </div>
                     )}
+
+                    {/* Manuel XP Yönetimi */}
+                    <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
+                      <button onClick={() => openXPAdjust(s, "add")}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold tracking-wider transition-colors"
+                        style={{ border:"1px solid rgba(34,197,94,0.3)", color:"#4ADE80", background:"rgba(34,197,94,0.08)", fontFamily:"var(--font-barlow-condensed)" }}>
+                        <Plus size={11}/> XP Ekle
+                      </button>
+                      <button onClick={() => openXPAdjust(s, "subtract")}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold tracking-wider transition-colors"
+                        style={{ border:"1px solid rgba(239,68,68,0.3)", color:"#F87171", background:"rgba(239,68,68,0.08)", fontFamily:"var(--font-barlow-condensed)" }}>
+                        <Minus size={11}/> XP Düş
+                      </button>
+                      <button onClick={() => openXPHistory(s)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold tracking-wider transition-colors"
+                        style={{ border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.4)", background:"rgba(255,255,255,0.03)", fontFamily:"var(--font-barlow-condensed)" }}>
+                        <History size={11}/> XP Geçmişi
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -610,6 +703,95 @@ export default function AdminDashboard() {
           </Card>
         </motion.div>
       )}
+
+      {/* ══ Manuel XP Ekle / Düş Modalı ══ */}
+      <Modal open={!!xpAdjModal} onClose={() => !xpAdjBusy && setXpAdjModal(null)}
+        title={xpAdjModal?.mode === "subtract" ? "XP Düş" : "XP Ekle"} maxWidth="max-w-md">
+        {xpAdjModal && (
+          <div className="space-y-4">
+            <div className={`p-3 border space-y-0.5 ${xpAdjModal.mode === "subtract" ? "bg-red-500/5 border-red-500/20" : "bg-green-500/5 border-green-500/20"}`}>
+              <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {xpAdjModal.student.fullName}
+              </div>
+              <div className="text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {xpAdjModal.mode === "subtract" ? "Öğrenciden XP düşülecek ve kendisine bildirim gönderilecek." : "Öğrenciye XP eklenecek ve kendisine bildirim gönderilecek."}
+              </div>
+            </div>
+
+            <Input
+              label={xpAdjModal.mode === "subtract" ? "Düşülecek XP Miktarı" : "Verilecek XP Miktarı"}
+              type="number" min="1" inputMode="numeric"
+              value={xpAmount} onChange={e => setXpAmount(e.target.value)}
+              placeholder="örn. 250"
+            />
+
+            <Select
+              label="Açıklama / Neden"
+              value={xpReason} onChange={setXpReason}
+              options={XP_REASONS.map(r => ({ value: r, label: r }))}
+            />
+
+            <Textarea
+              label="Ek not (isteğe bağlı)"
+              value={xpNote} onChange={setXpNote} rows={2}
+              placeholder="Detay ekleyebilirsin..."
+            />
+
+            <div className="flex gap-3">
+              <Button onClick={() => setXpAdjModal(null)} variant="secondary" className="flex-1" disabled={xpAdjBusy}>Vazgeç</Button>
+              <button
+                onClick={handleXPAdjustSave}
+                disabled={xpAdjBusy || !xpAmount || parseInt(xpAmount, 10) <= 0}
+                className="flex-1 py-2 text-sm font-semibold tracking-wider uppercase transition-all"
+                style={{
+                  background: xpAdjModal.mode === "subtract" ? "rgba(239,68,68,0.85)" : "rgba(34,197,94,0.85)",
+                  color: "#fff",
+                  fontFamily: "var(--font-barlow-condensed)",
+                  opacity: (xpAdjBusy || !xpAmount || parseInt(xpAmount, 10) <= 0) ? 0.5 : 1,
+                }}>
+                {xpAdjBusy ? "Kaydediliyor..." : "Kaydet"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ══ XP Geçmişi Modalı ══ */}
+      <Modal open={!!xpHistoryModal} onClose={() => setXpHistoryModal(null)} title="XP Geçmişi" maxWidth="max-w-lg">
+        {xpHistoryModal && (
+          <div className="space-y-3">
+            <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+              {xpHistoryModal.fullName}
+            </div>
+            {xpHistoryLoading ? (
+              <p className="text-center py-8 text-white/30 text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Yükleniyor...</p>
+            ) : xpHistory.length === 0 ? (
+              <div className="text-center py-8">
+                <History size={26} className="text-white/10 mx-auto mb-2" />
+                <p className="text-white/20 text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Henüz manuel XP kaydı yok</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {xpHistory.map(h => (
+                  <div key={h.id} className="p-3 bg-steel/30 border border-white/5 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs text-white/80 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{h.reason}</div>
+                      {h.note && <div className="text-[11px] text-white/35 mt-0.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{h.note}</div>}
+                      <div className="text-[10px] text-white/25 mt-1 flex items-center gap-2 flex-wrap" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        <span>{h.createdAt ? format(new Date(h.createdAt), "dd MMMM yyyy, HH:mm", { locale: tr }) : "—"}</span>
+                        <span>· {h.adminName}</span>
+                      </div>
+                    </div>
+                    <span className={`text-sm font-display flex-shrink-0 ${h.amount >= 0 ? "text-green-400" : "text-crimson"}`} style={{ fontFamily:"var(--font-bebas)" }}>
+                      {h.amount >= 0 ? "+" : ""}{h.amount.toLocaleString("tr-TR")} XP
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* ══ Katılım Modalı (Geldi / Gelmedi) ══ */}
       <Modal open={!!attendModal} onClose={() => setAttendModal(null)} title="Ders Tamamla — Katılım" maxWidth="max-w-md">

@@ -2,7 +2,7 @@
  * lib/xp.ts — XP & Seviye sistemi
  * Mevcut verilerden client-side hesaplanır.
  */
-import type { Appointment, LessonRecord } from "./types";
+import type { Appointment, LessonRecord, XPAdjustment } from "./types";
 
 /* ── Seviye tanımları ────────────────────────────────────────────── */
 
@@ -158,6 +158,7 @@ export interface XPBreakdown {
   streakXP:         number;
   improvementXP:    number;
   absenceDeduction: number;
+  manualXP:         number;
 }
 
 export interface XPResult {
@@ -174,6 +175,7 @@ export function computeXPFromData(
   completedLessons: number,
   appointments:     Appointment[],
   records:          LessonRecord[],
+  manualXP:         number = 0,
 ): XPResult {
   const lessonsXP = completedLessons * 100;
 
@@ -206,10 +208,10 @@ export function computeXPFromData(
     }
   }
 
-  const total = Math.max(0, lessonsXP + streakXP + improvementXP + absenceDeduction);
+  const total = Math.max(0, lessonsXP + streakXP + improvementXP + absenceDeduction + manualXP);
 
   return {
-    breakdown: { total, lessonsXP, streakXP, improvementXP, absenceDeduction },
+    breakdown: { total, lessonsXP, streakXP, improvementXP, absenceDeduction, manualXP },
     currentStreak,
     maxStreak,
     level: getLevelForXP(total),
@@ -272,22 +274,34 @@ export interface SeasonXPSummary {
   lifetimeResult:XPResult;  // tüm zamandaki XP
 }
 
+/** Verilen XP kayıtlarının toplamını döndürür (opsiyonel tarih aralığıyla sınırlı) */
+export function sumManualXP(adjustments: XPAdjustment[], range?: { start: string; end: string }): number {
+  return adjustments
+    .filter(a => !range || (a.createdAt.slice(0, 10) >= range.start && a.createdAt.slice(0, 10) <= range.end))
+    .reduce((sum, a) => sum + a.amount, 0);
+}
+
 export function computeFullXP(
   completedLessons: number,
   appointments:     Appointment[],
   records:          LessonRecord[],
   season:           string = getCurrentSeason(),
+  adjustments:      XPAdjustment[] = [],
 ): SeasonXPSummary {
-  // Ömür boyu XP
-  const lifetimeResult = computeXPFromData(completedLessons, appointments, records);
-
   // Sezon filtresi
   const { start, end } = getSeasonDateRange(season);
+
+  // Ömür boyu XP (tüm manuel kayıtlar dahil)
+  const lifetimeManual = sumManualXP(adjustments);
+  const lifetimeResult = computeXPFromData(completedLessons, appointments, records, lifetimeManual);
+
   const seasonApts      = appointments.filter(a => a.date >= start && a.date <= end);
   const seasonRecs      = records.filter(r => r.date >= start && r.date <= end);
   const seasonCompleted = seasonApts.filter(a => a.status === "tamamlandi").length;
 
-  const seasonResult = computeXPFromData(seasonCompleted, seasonApts, seasonRecs);
+  // Sezon XP (sadece bu sezona ait manuel kayıtlar dahil)
+  const seasonManual = sumManualXP(adjustments, { start, end });
+  const seasonResult = computeXPFromData(seasonCompleted, seasonApts, seasonRecs, seasonManual);
 
   return {
     season,
