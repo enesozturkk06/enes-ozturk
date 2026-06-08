@@ -6,13 +6,14 @@ import { useAuth } from "@/app/providers";
 import {
   getTimeSlots, getStudentAppointments, createAppointment,
   cancelAppointment, getDuetPartner, getPendingInvites, respondToInvite,
+  joinWaitlist, leaveWaitlist, getStudentWaitlist,
 } from "@/lib/db";
-import type { TimeSlot, Appointment, Student, LessonType, PendingInvite } from "@/lib/types";
+import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry } from "@/lib/types";
 import { PageHeader } from "@/app/components/ui";
 import { TRAINER_NAME, TRAINER_WHATSAPP, CANCEL_LIMIT_HOURS } from "@/lib/constants";
 import {
   Calendar, Clock, CheckCircle, XCircle, AlertTriangle,
-  Users, User, Bell,
+  Users, User, Bell, Clock3,
 } from "lucide-react";
 import { format, addDays, parseISO, differenceInHours, isFuture } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -85,6 +86,10 @@ export default function RandevuPage() {
   const [saving, setSaving]                 = useState(false);
   const [bookError, setBookError]           = useState("");
 
+  /* Bekleme listesi */
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [waitlistBusy, setWaitlistBusy] = useState<string | null>(null);
+
   const dates = Array.from({ length: 14 }, (_, i) =>
     format(addDays(new Date(), i), "yyyy-MM-dd")
   );
@@ -92,14 +97,16 @@ export default function RandevuPage() {
   const reload = useCallback(async () => {
     if (!student) return;
     setLoadingSlots(true);
-    const [s, a, invites] = await Promise.all([
+    const [s, a, invites, wl] = await Promise.all([
       getTimeSlots(selectedDate),
       getStudentAppointments(student.id),
       getPendingInvites(student.id),
+      getStudentWaitlist(student.id).catch(() => []),
     ]);
     setSlots(s);
     setAppointments(a);
     setPendingInvites(invites);
+    setWaitlist(wl);
     setLoadingSlots(false);
   }, [selectedDate, student]);
 
@@ -173,6 +180,20 @@ export default function RandevuPage() {
     if (!cancelId) return;
     await cancelAppointment(cancelId, student?.fullName);
     setCancelId(null); await reload();
+  };
+
+  const handleWaitlist = async (slot: TimeSlot) => {
+    if (!student) return;
+    const key = `${slot.date ?? selectedDate}-${slot.startTime}`;
+    const isOn = waitlist.some(w => w.date === (slot.date ?? selectedDate) && w.startTime === slot.startTime);
+    setWaitlistBusy(key);
+    if (isOn) {
+      await leaveWaitlist(student.id, slot.date ?? selectedDate, slot.startTime).catch(() => {});
+    } else {
+      await joinWaitlist(student.id, slot.date ?? selectedDate, slot.startTime, slot.endTime, lessonType).catch(() => {});
+    }
+    await reload();
+    setWaitlistBusy(null);
   };
 
   const myAptOnDate = appointments.find(a => a.date === selectedDate && a.status === "onaylandi");
@@ -431,28 +452,57 @@ export default function RandevuPage() {
                 /* 2 sütun mobilde, 3 büyük ekranda — her zaman grid */
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {slots.map(slot => {
-                    const taken = !slot.isAvailable || !!myAptOnDate;
+                    const taken    = !slot.isAvailable || !!myAptOnDate;
+                    const blocked  = slot.isBlocked;
+                    const canWait  = taken && !blocked && !myAptOnDate && student && student.remainingLessons > 0;
+                    const wlKey    = `${slot.date ?? selectedDate}-${slot.startTime}`;
+                    const inWl     = waitlist.some(w => w.date === (slot.date ?? selectedDate) && w.startTime === slot.startTime);
+                    const wlBusy   = waitlistBusy === wlKey;
+
                     return (
-                      <button key={slot.id} disabled={taken} onClick={() => handleSlotClick(slot)}
-                        className="p-3 rounded-xl text-center transition-all"
-                        style={{
-                          background: taken ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.06)",
-                          border: taken ? "1px solid rgba(255,255,255,0.04)" : `1px solid ${V}25`,
-                          cursor: taken ? "not-allowed" : "pointer",
-                          opacity: taken ? 0.4 : 1,
-                        }}>
-                        <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                          {slot.startTime}
-                        </div>
-                        <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
-                          {slot.endTime}
-                        </div>
-                        {taken && (
-                          <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
-                            Dolu
+                      <div key={slot.id} className="flex flex-col gap-1">
+                        <button disabled={taken} onClick={() => handleSlotClick(slot)}
+                          className="p-3 rounded-xl text-center transition-all w-full"
+                          style={{
+                            background: taken ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.06)",
+                            border: taken
+                              ? `1px solid rgba(255,255,255,${blocked ? "0.02" : "0.04"})`
+                              : `1px solid ${V}25`,
+                            cursor: taken ? "not-allowed" : "pointer",
+                            opacity: blocked ? 0.2 : taken ? 0.6 : 1,
+                          }}>
+                          <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                            {slot.startTime}
                           </div>
+                          <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                            {slot.endTime}
+                          </div>
+                          {taken && (
+                            <div className="text-xs mt-0.5" style={{ color: blocked ? "rgba(255,255,255,0.15)" : "rgba(251,113,133,0.7)", fontFamily: "var(--font-barlow-condensed)" }}>
+                              {blocked ? "Kapalı" : "Dolu"}
+                            </div>
+                          )}
+                        </button>
+
+                        {/* Bekleme listesi butonu — sadece dolu ve kapalı olmayan slotlar */}
+                        {canWait && (
+                          <button
+                            onClick={() => handleWaitlist(slot)}
+                            disabled={wlBusy}
+                            className="w-full py-1 text-[10px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
+                            style={{
+                              background: inWl ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
+                              border: `1px solid ${inWl ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.08)"}`,
+                              color: inWl ? "#FBBF24" : "rgba(255,255,255,0.3)",
+                              fontFamily: "var(--font-barlow-condensed)",
+                              opacity: wlBusy ? 0.5 : 1,
+                            }}
+                          >
+                            <Clock3 size={9} />
+                            {wlBusy ? "..." : inWl ? "Listeden Çık" : "Sıraya Gir"}
+                          </button>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -463,6 +513,40 @@ export default function RandevuPage() {
 
         {/* ── Sağ sidebar ──────────────────────────────────── */}
         <div className="flex flex-col gap-4 min-w-0">
+
+          {/* Bekleme Listesi */}
+          {waitlist.length > 0 && (
+            <Card style={{ border: "1px solid rgba(251,191,36,0.2)", background: "rgba(251,191,36,0.03)" }}>
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock3 size={13} style={{ color: "#FBBF24" }} />
+                  <p className="text-xs uppercase" style={{ color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+                    Bekleme Listem ({waitlist.length})
+                  </p>
+                </div>
+                {waitlist.map(w => (
+                  <div key={w.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
+                    style={{ borderColor: "rgba(251,191,36,0.08)" }}>
+                    <div>
+                      <div className="text-xs font-semibold text-white/70" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        {w.date} · {w.startTime}
+                      </div>
+                      <div className="text-[10px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        {w.notified ? "🔔 Bildirim gönderildi — hemen randevu al!" : "Sırada bekliyorsun"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => student && leaveWaitlist(student.id, w.date, w.startTime).then(() => reload())}
+                      className="text-[10px] px-2 py-1 transition-colors"
+                      style={{ border: "1px solid rgba(239,68,68,0.3)", color: "rgba(239,68,68,0.7)", borderRadius: 4, fontFamily: "var(--font-barlow-condensed)" }}
+                    >
+                      Çık
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Yaklaşan randevular */}
           <Card>

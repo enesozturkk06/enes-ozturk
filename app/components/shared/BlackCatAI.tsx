@@ -22,7 +22,7 @@ import {
   getLevelForXP, sumManualXP, type XPResult, type SeasonXPSummary,
 } from "@/lib/xp";
 import { computeBadges, type Badge } from "@/lib/badges";
-import { X, Send, ChevronDown } from "lucide-react";
+import { X, Send, ChevronDown, Mic, MicOff } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -1136,6 +1136,57 @@ export default function BlackCatAI() {
   const [minimized, setMin]     = useState(false);
   const [pendingIntent, setPendingIntent] = useState<string | null>(null);
 
+  /* Sesli komut (Web Speech API) */
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSpeechSupported(!!(
+        (window as unknown as Record<string, unknown>).SpeechRecognition ||
+        (window as unknown as Record<string, unknown>).webkitSpeechRecognition
+      ));
+    }
+  }, []);
+
+  const toggleVoice = useCallback(() => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const SR = (
+      (window as unknown as Record<string, unknown>).SpeechRecognition ||
+      (window as unknown as Record<string, unknown>).webkitSpeechRecognition
+    ) as any;
+    if (!SR) return;
+
+    const recognition = new SR();
+    recognition.lang = "tr-TR";
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+
+    recognition.onstart  = () => setListening(true);
+    recognition.onerror  = () => setListening(false);
+    recognition.onend    = () => setListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results as any[])
+        .map((r: any) => r[0].transcript)
+        .join("");
+      setInput(transcript);
+      if (event.results[event.results.length - 1].isFinal) {
+        setListening(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch { setListening(false); }
+  }, [listening]);
+
   /* Sürükleme */
   const constraintRef = useRef<HTMLDivElement>(null);
   const [didDrag, setDidDrag] = useState(false);
@@ -1526,12 +1577,31 @@ export default function BlackCatAI() {
                   {/* Input */}
                   <div className="flex-shrink-0 flex items-center gap-2 px-3 py-3"
                     style={{ borderTop:"1px solid rgba(139,92,246,0.1)" }}>
+
+                    {/* Mikrofon butonu */}
+                    {speechSupported && (
+                      <button
+                        onClick={toggleVoice}
+                        className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 flex-shrink-0"
+                        title={listening ? "Dinleniyor — durdurmak için tıkla" : "Sesli komut"}
+                        style={{
+                          background: listening ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.05)",
+                          border: `1px solid ${listening ? "rgba(239,68,68,0.6)" : "rgba(255,255,255,0.08)"}`,
+                          color: listening ? "#FCA5A5" : "rgba(255,255,255,0.25)",
+                          animation: listening ? "glowPulse 1s ease-in-out infinite" : "none",
+                        }}
+                        aria-label={listening ? "Dinlemeyi durdur" : "Sesli komut başlat"}
+                      >
+                        {listening ? <MicOff size={13} /> : <Mic size={13} />}
+                      </button>
+                    )}
+
                     <input
                       ref={inputRef}
                       value={input}
                       onChange={e => setInput(e.target.value)}
                       onKeyDown={handleKey}
-                      placeholder="Bir şey sor…"
+                      placeholder={listening ? "Dinleniyor…" : "Bir şey sor…"}
                       className="flex-1 bg-transparent outline-none text-sm text-white placeholder-white/20"
                       style={{ fontFamily:"var(--font-inter)" }}
                     />

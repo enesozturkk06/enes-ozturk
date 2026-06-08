@@ -204,6 +204,18 @@ export interface StudentMission {
   isCustom:    boolean;
 }
 
+/** Bekleme listesi girişi */
+export interface WaitlistEntry {
+  id:          string;
+  studentId:   string;
+  date:        string;
+  startTime:   string;
+  endTime:     string;
+  lessonType:  string;
+  notified:    boolean;
+  createdAt:   string;
+}
+
 /** Admin tarafından elle eklenen/düşülen XP kaydı */
 export interface XPAdjustment {
   id:          string;

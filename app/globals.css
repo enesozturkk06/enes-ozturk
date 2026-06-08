@@ -217,6 +217,37 @@ body::before {
     radial-gradient(ellipse 60% 40% at 85% 65%, rgba(217,70,239,0.07) 0%, transparent 55%);
 }
 
+/* ── Confetti / XP animasyonları ─────────────────────────────── */
+@keyframes xpFloat {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(0)   scale(0.6); }
+  15%  { opacity: 1; transform: translateX(-50%) translateY(-8px) scale(1.1); }
+  70%  { opacity: 1; transform: translateX(-50%) translateY(-48px) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-80px) scale(0.9); }
+}
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(1.08); }
+}
+@keyframes badgeShine {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes levelUpShake {
+  0%,100% { transform: translateX(0); }
+  20%     { transform: translateX(-4px) rotate(-1deg); }
+  40%     { transform: translateX(4px)  rotate(1deg); }
+  60%     { transform: translateX(-3px); }
+  80%     { transform: translateX(3px); }
+}
+
+/* Print styles */
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  body::before { display: none; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+}
+
 ::selection { background: rgba(139,92,246,0.4); color: #fff; }
 ::-webkit-scrollbar       { width: 4px; }
 ::-webkit-scrollbar-track { background: #18181B; }

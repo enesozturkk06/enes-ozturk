@@ -21,7 +21,8 @@ import {
 } from "@/lib/hallOfFame";
 import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
 import { PageHeader } from "@/app/components/ui";
-import { Zap, Crown, Trophy, Gift, Clock, ChevronRight } from "lucide-react";
+import { Zap, Crown, Trophy, Gift, Clock, ChevronRight, ChevronDown } from "lucide-react";
+import { triggerConfetti } from "@/app/components/shared/ConfettiEffect";
 
 /* ── Seviye kart bileşeni ─────────────────────────────────────────── */
 
@@ -341,6 +342,7 @@ export default function SeviyeMerkeziPage() {
   const [loading, setLoading]       = useState(true);
   const [showInHall, setShowInHall] = useState(true);
   const [savingPref, setSavingPref] = useState(false);
+  const [levelsOpen, setLevelsOpen] = useState(false);
 
   useEffect(() => {
     if (!student) return;
@@ -407,6 +409,16 @@ export default function SeviyeMerkeziPage() {
 
       setHallEntries(entries);
       setLoading(false);
+
+      // Seviye atlama konfetisi
+      if (typeof window !== "undefined") {
+        const newLevelId = result.lifetimeResult.level.current.id;
+        const prevLevelId = localStorage.getItem("kedi_last_level");
+        if (prevLevelId && prevLevelId !== newLevelId) {
+          setTimeout(() => triggerConfetti("levelup"), 1000);
+        }
+        localStorage.setItem("kedi_last_level", newLevelId);
+      }
     }).catch(() => setLoading(false));
   }, [student]);
 
@@ -435,46 +447,20 @@ export default function SeviyeMerkeziPage() {
   const currentLevel   = lifetimeXP.level.current;
 
   return (
-    <div className="p-5 lg:p-7 max-w-3xl mx-auto space-y-6">
+    <div className="p-4 sm:p-5 lg:p-7 max-w-3xl mx-auto space-y-5 sm:space-y-6 pb-28 sm:pb-8">
       <PageHeader title="Seviye Merkezi" subtitle="Sezon XP, hediye dersler ve ömür boyu prestij" />
 
-      {/* ── Ömür boyu seviye + progress ─────────────────────────── */}
+      {/* ── 1. Ömür boyu seviye + progress ──────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <LifetimeXPCard xpResult={lifetimeXP} />
       </motion.div>
 
-      {/* ── Sezon kartı ─────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
-        <SeasonCard summary={summary} claimed5k={claimed5k} claimed10k={claimed10k} />
-      </motion.div>
-
-      {/* ── Tüm seviye kartları (ömür boyu) ─────────────────────── */}
+      {/* ── 2. Onur Listesi — öğrencinin en çok merak ettiği ────── */}
       <div>
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-3">
           <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-          <span className="text-xs uppercase tracking-widest px-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}>
-            Ömür Boyu Seviyeler
-          </span>
-          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {XP_LEVELS.filter(l => l.id !== "starter").map((level, i) => (
-            <LevelCard
-              key={level.id}
-              level={level}
-              isCurrent={currentLevel.id === level.id}
-              isEarned={earnedLevelIds.includes(level.id)}
-              index={i}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* ── Onur Listesi (Hall of Fame) Premium ─────────────────── */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-          <span className="text-xs uppercase tracking-widest px-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}>
+          <span className="text-xs uppercase tracking-widest px-3"
+            style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}>
             Onur Listesi
           </span>
           <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
@@ -484,17 +470,19 @@ export default function SeviyeMerkeziPage() {
         <button
           onClick={togglePrivacy}
           disabled={savingPref}
-          className="w-full flex items-center justify-between gap-3 px-4 py-3 mb-4 border transition-all duration-200"
+          className="w-full flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 sm:py-3 mb-3 border transition-all duration-200"
           style={{
             background: "rgba(255,255,255,0.02)", borderColor: "rgba(139,92,246,0.15)",
             borderRadius: 4, opacity: savingPref ? 0.6 : 1, cursor: savingPref ? "wait" : "pointer",
           }}
         >
           <div className="text-left">
-            <div className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.04em" }}>
+            <div className="text-xs font-semibold"
+              style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.04em" }}>
               Onur Listesi&apos;nde görünmek istiyorum
             </div>
-            <div className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+            <div className="text-[10px] mt-0.5"
+              style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
               Kapatırsan adın hiçbir sıralamada görünmez
             </div>
           </div>
@@ -516,6 +504,48 @@ export default function SeviyeMerkeziPage() {
         </button>
 
         {hallEntries.length > 0 && <HallOfFamePremium entries={hallEntries} />}
+      </div>
+
+      {/* ── 3. Sezon kartı ──────────────────────────────────────── */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+        <SeasonCard summary={summary} claimed5k={claimed5k} claimed10k={claimed10k} />
+      </motion.div>
+
+      {/* ── 4. Ömür boyu seviyeler — mobilde accordion ──────────── */}
+      <div>
+        {/* Başlık — mobilde tıklanabilir accordion trigger */}
+        <button
+          type="button"
+          onClick={() => setLevelsOpen(o => !o)}
+          className="flex items-center w-full gap-2 mb-4"
+        >
+          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+          <span className="text-xs uppercase tracking-widest px-3 flex items-center gap-2"
+            style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}>
+            Ömür Boyu Seviyeler
+            <ChevronDown
+              size={12}
+              className="sm:hidden transition-transform duration-200"
+              style={{ transform: levelsOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </span>
+          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+        </button>
+
+        {/* Kartlar — mobilde accordion, masaüstünde her zaman açık */}
+        <div className={levelsOpen ? "block" : "hidden sm:block"}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {XP_LEVELS.filter(l => l.id !== "starter").map((level, i) => (
+              <LevelCard
+                key={level.id}
+                level={level}
+                isCurrent={currentLevel.id === level.id}
+                isEarned={earnedLevelIds.includes(level.id)}
+                index={i}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1309,7 +1309,7 @@ export async function renewStudentPackage(params: {
    HEDİYE DERS (Gift Lesson) — 5000 XP eşiğinde tetiklenir
    ═══════════════════════════════════════════════════════════════ */
 
-import type { GiftLessonRequest, XPAdjustment, KediMission } from "./types";
+import type { GiftLessonRequest, XPAdjustment, KediMission, WaitlistEntry } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapGiftReq(r: any): GiftLessonRequest {
@@ -1631,4 +1631,107 @@ export async function recordMissionCompletion(
     { onConflict: "student_id,mission_key" },
   );
   if (error) console.error("[recordMissionCompletion]", error.message);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Bekleme Listesi (Waitlist)
+   ══════════════════════════════════════════════════════════ */
+
+function mapWaitlist(r: any): WaitlistEntry {
+  return {
+    id:         r.id,
+    studentId:  r.student_id,
+    date:       r.date,
+    startTime:  r.start_time,
+    endTime:    r.end_time,
+    lessonType: r.lesson_type ?? "bireysel",
+    notified:   r.notified ?? false,
+    createdAt:  r.created_at,
+  };
+}
+
+/** Öğrenciyi bekleme listesine ekle */
+export async function joinWaitlist(
+  studentId: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+  lessonType = "bireysel",
+): Promise<WaitlistEntry | null> {
+  const { data, error } = await db()
+    .from("waitlist")
+    .upsert(
+      { student_id: studentId, date, start_time: startTime, end_time: endTime, lesson_type: lessonType },
+      { onConflict: "student_id,date,start_time" },
+    )
+    .select()
+    .single();
+  if (error) { console.error("[joinWaitlist]", error.message); return null; }
+  return mapWaitlist(data);
+}
+
+/** Öğrenciyi bekleme listesinden çıkar */
+export async function leaveWaitlist(
+  studentId: string,
+  date: string,
+  startTime: string,
+): Promise<void> {
+  const { error } = await db()
+    .from("waitlist")
+    .delete()
+    .eq("student_id", studentId)
+    .eq("date", date)
+    .eq("start_time", startTime);
+  if (error) console.error("[leaveWaitlist]", error.message);
+}
+
+/** Belirli bir slot için bekleme listesini getir (admin ve bildirim için) */
+export async function getWaitlistForSlot(
+  date: string,
+  startTime: string,
+): Promise<WaitlistEntry[]> {
+  const { data, error } = await db()
+    .from("waitlist")
+    .select("*")
+    .eq("date", date)
+    .eq("start_time", startTime)
+    .order("created_at");
+  if (error) { console.error("[getWaitlistForSlot]", error.message); return []; }
+  return (data ?? []).map(mapWaitlist);
+}
+
+/** Öğrencinin bekleme listesi kayıtlarını getir */
+export async function getStudentWaitlist(studentId: string): Promise<WaitlistEntry[]> {
+  const { data, error } = await db()
+    .from("waitlist")
+    .select("*")
+    .eq("student_id", studentId)
+    .order("date")
+    .order("start_time");
+  if (error) { console.error("[getStudentWaitlist]", error.message); return []; }
+  return (data ?? []).map(mapWaitlist);
+}
+
+/** Slot açıldığında bekleme listesindeki öğrencilere bildirim gönder */
+export async function notifyWaitlistForSlot(
+  date: string,
+  startTime: string,
+  endTime: string,
+): Promise<void> {
+  const entries = await getWaitlistForSlot(date, startTime);
+  if (entries.length === 0) return;
+
+  await Promise.all(entries.map(e =>
+    db().from("notifications").insert({
+      student_id: e.studentId,
+      title:   "Slot Açıldı! 🎉",
+      message: `${date} tarihli ${startTime}-${endTime} saatlik ders slotu müsait hale geldi. Hızlıca randevu alabilirsin!`,
+      type:    "success",
+      is_read: false,
+    }).then(() => {}, () => {}),
+  ));
+
+  // Bildirim gönderildi olarak işaretle
+  const ids = entries.map(e => e.id);
+  await db().from("waitlist").update({ notified: true }).in("id", ids).then(() => {});
 }

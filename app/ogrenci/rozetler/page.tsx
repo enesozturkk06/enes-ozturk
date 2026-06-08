@@ -12,6 +12,7 @@ import {
 } from "@/lib/badges";
 import { PageHeader } from "@/app/components/ui";
 import { Lock, Award } from "lucide-react";
+import { triggerConfetti } from "@/app/components/shared/ConfettiEffect";
 
 /* ── Yardımcı ─────────────────────────────────────────────────────── */
 
@@ -161,6 +162,15 @@ export default function RozetlerPage() {
       setRecords(recs);
       setAdjustments(adjs);
       setLoading(false);
+
+      // Son 48 saatte kazanılan rozet varsa konfeti
+      const manualXP = sumManualXP(adjs);
+      const allBadges = computeBadges(student, apts, recs, {}, manualXP);
+      const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const newlyEarned = allBadges.filter(b => b.earned && b.earnedAt && b.earnedAt >= cutoff);
+      if (newlyEarned.length > 0) {
+        setTimeout(() => triggerConfetti("badge"), 800);
+      }
     });
   }, [student]);
 
