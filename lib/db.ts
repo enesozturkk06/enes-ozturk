@@ -1309,7 +1309,7 @@ export async function renewStudentPackage(params: {
    HEDİYE DERS (Gift Lesson) — 5000 XP eşiğinde tetiklenir
    ═══════════════════════════════════════════════════════════════ */
 
-import type { GiftLessonRequest, XPAdjustment } from "./types";
+import type { GiftLessonRequest, XPAdjustment, KediMission } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapGiftReq(r: any): GiftLessonRequest {
@@ -1553,4 +1553,82 @@ export async function getAllXPAdjustments(): Promise<XPAdjustment[]> {
     .order("created_at", { ascending: false });
   if (error) { console.error("[getAllXPAdjustments]", error.message); return []; }
   return (data ?? []).map(mapXPAdjustment);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Kedi AI Görev Sistemi
+   ═══════════════════════════════════════════════════════════════════ */
+
+const mapKediMission = (r: any): KediMission => ({
+  id:          r.id,
+  title:       r.title,
+  description: r.description ?? undefined,
+  icon:        r.icon ?? "🎯",
+  xpReward:    r.xp_reward ?? 100,
+  targetValue: r.target_value ?? 1,
+  studentId:   r.student_id ?? undefined,
+  isActive:    r.is_active ?? true,
+  createdAt:   r.created_at ?? "",
+});
+
+/** Aktif görev tanımlarını getir — studentId verilirse ona + global olanlar */
+export async function getKediMissions(studentId?: string): Promise<KediMission[]> {
+  const { data, error } = await db()
+    .from("kedi_missions")
+    .select("*")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getKediMissions]", error.message); return []; }
+  return (data ?? [])
+    .filter((r: any) => !r.student_id || r.student_id === studentId)
+    .map(mapKediMission);
+}
+
+/** Yeni özel görev oluştur */
+export async function createKediMission(m: {
+  title: string; description?: string; icon: string;
+  xpReward: number; targetValue: number; studentId?: string;
+}): Promise<KediMission | null> {
+  const { data, error } = await db().from("kedi_missions").insert({
+    title:        m.title,
+    description:  m.description ?? null,
+    icon:         m.icon,
+    xp_reward:    m.xpReward,
+    target_value: m.targetValue,
+    student_id:   m.studentId ?? null,
+  }).select().single();
+  if (error) { console.error("[createKediMission]", error.message); return null; }
+  return mapKediMission(data);
+}
+
+/** Görevi pasife al (silmek yerine deactivate) */
+export async function deleteKediMission(id: string): Promise<void> {
+  const { error } = await db()
+    .from("kedi_missions")
+    .update({ is_active: false })
+    .eq("id", id);
+  if (error) console.error("[deleteKediMission]", error.message);
+}
+
+/** Öğrencinin tamamladığı görev anahtarlarını Set olarak döndür */
+export async function getStudentMissionCompletions(studentId: string): Promise<Set<string>> {
+  const { data, error } = await db()
+    .from("kedi_mission_completions")
+    .select("mission_key")
+    .eq("student_id", studentId);
+  if (error) { console.error("[getStudentMissionCompletions]", error.message); return new Set(); }
+  return new Set((data ?? []).map((r: any) => r.mission_key as string));
+}
+
+/** Görev tamamlama kaydı ekle (UPSERT — çift eklemeyi engeller) */
+export async function recordMissionCompletion(
+  studentId: string,
+  missionKey: string,
+  xpAmount: number,
+): Promise<void> {
+  const { error } = await db().from("kedi_mission_completions").upsert(
+    { student_id: studentId, mission_key: missionKey, xp_amount: xpAmount },
+    { onConflict: "student_id,mission_key" },
+  );
+  if (error) console.error("[recordMissionCompletion]", error.message);
 }

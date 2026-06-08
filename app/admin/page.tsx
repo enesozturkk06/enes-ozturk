@@ -10,6 +10,7 @@ import {
   getPendingGiftLessonRequests, approveGiftLessonRequest, rejectGiftLessonRequest,
   getGiftLessonRequestsForSeason, createGiftLessonRequest, getAllGiftLessonRequests,
   getAllXPAdjustments, createXPAdjustment, getStudentXPAdjustments, updateStudent,
+  getKediMissions, createKediMission, deleteKediMission,
 } from "@/lib/db";
 import { getSeasonLabel, computeFullXP, getLevelForXP, getCurrentSeason } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
@@ -18,7 +19,7 @@ import {
   type HallEntry,
 } from "@/lib/hallOfFame";
 import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
-import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord, XPAdjustment } from "@/lib/types";
+import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord, XPAdjustment, KediMission } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea, Input, Select } from "@/app/components/ui";
 import { STATUS_LABELS, TRAINER_NAME } from "@/lib/constants";
 import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap, Plus, Minus, History, Crown, Award, Sparkles } from "lucide-react";
@@ -103,6 +104,15 @@ export default function AdminDashboard() {
   const [perStudentScores, setPerStudentScores] = useState<Record<string, Record<string, number>>>({});
   const [perStudentNotes,  setPerStudentNotes]  = useState<Record<string, string>>({});
 
+  /* Kedi AI Görevleri */
+  const [kediMissions, setKediMissions]       = useState<KediMission[]>([]);
+  const [missionTitle, setMissionTitle]       = useState("");
+  const [missionIcon,  setMissionIcon]        = useState("🎯");
+  const [missionXP,    setMissionXP]          = useState("100");
+  const [missionTarget,setMissionTarget]      = useState("1");
+  const [missionStudentId, setMissionStudentId] = useState("all");
+  const [missionBusy,  setMissionBusy]        = useState(false);
+
   /* ── Yükle ──────────────────────────────────────────────────── */
   const reloadApts = useCallback(async () => {
     const apts = await getAppointments({ date: today });
@@ -134,6 +144,7 @@ export default function AdminDashboard() {
       setAllAdjustments(adjustments as XPAdjustment[]);
       setAllGiftRequests(allGifts as GiftLessonRequest[]);
       setLoading(false);
+      getKediMissions().then(m => setKediMissions(m)).catch(() => {});
       const unread = n.filter(x => !x.isRead);
       if (unread.length > 0) setLoginToast(unread[0]);
     });
@@ -386,6 +397,31 @@ export default function AdminDashboard() {
       toast("İşlem başarısız oldu, tekrar dene.", "error");
     }
     setHallBusy(null);
+  };
+
+  /* ── Kedi AI Görev işlemleri ─────────────────────────────── */
+
+  const handleCreateMission = async () => {
+    const title = missionTitle.trim();
+    if (!title) return;
+    setMissionBusy(true);
+    const m = await createKediMission({
+      title,
+      icon:        missionIcon,
+      xpReward:    parseInt(missionXP) || 100,
+      targetValue: parseInt(missionTarget) || 1,
+      studentId:   missionStudentId === "all" ? undefined : missionStudentId,
+    }).catch(() => null);
+    if (m) {
+      setKediMissions(prev => [...prev, m]);
+      setMissionTitle(""); setMissionIcon("🎯"); setMissionXP("100"); setMissionTarget("1"); setMissionStudentId("all");
+    }
+    setMissionBusy(false);
+  };
+
+  const handleDeleteMission = async (id: string) => {
+    await deleteKediMission(id).catch(() => {});
+    setKediMissions(prev => prev.filter(m => m.id !== id));
   };
 
   /* ── Manuel XP işlemleri ──────────────────────────────────── */
@@ -996,6 +1032,125 @@ export default function AdminDashboard() {
                 ? <HallOfFamePremium entries={hallEntries} />
                 : <p className="text-center text-xs text-white/20 py-6" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Henüz sıralanacak öğrenci verisi yok</p>}
             </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* ══ Kedi AI Görevleri ══ */}
+      {students.length > 0 && (
+        <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.05 }}>
+          <Card className="p-4 sm:p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">🎯</span>
+              <h3 className="text-lg sm:text-xl font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                Kedi AI Görevleri
+              </h3>
+              <span className="text-xs text-white/30 ml-auto" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {kediMissions.length} aktif görev
+              </span>
+            </div>
+
+            {/* Yeni görev oluştur */}
+            <div className="space-y-3 p-3 bg-white/3 border border-white/8">
+              <p className="text-[11px] text-white/40 uppercase tracking-widest" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                Yeni Özel Görev
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={missionIcon}
+                  onChange={e => setMissionIcon(e.target.value)}
+                  className="w-12 bg-white/5 border border-white/10 text-center text-lg text-white outline-none px-1 py-1.5"
+                  placeholder="🎯"
+                  maxLength={2}
+                />
+                <input
+                  value={missionTitle}
+                  onChange={e => setMissionTitle(e.target.value)}
+                  className="flex-1 bg-white/5 border border-white/10 text-white text-sm outline-none px-3 py-1.5 placeholder-white/20"
+                  placeholder="Görev başlığı (örn. 3 Ders Tamamla)"
+                  style={{ fontFamily:"var(--font-barlow-condensed)" }}
+                />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] text-white/30 mb-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>XP Ödülü</label>
+                  <input
+                    type="number" min="1"
+                    value={missionXP}
+                    onChange={e => setMissionXP(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 text-white text-sm outline-none px-3 py-1.5"
+                    style={{ fontFamily:"var(--font-barlow-condensed)" }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[10px] text-white/30 mb-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Hedef Değer</label>
+                  <input
+                    type="number" min="1"
+                    value={missionTarget}
+                    onChange={e => setMissionTarget(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 text-white text-sm outline-none px-3 py-1.5"
+                    style={{ fontFamily:"var(--font-barlow-condensed)" }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[10px] text-white/30 mb-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Öğrenci</label>
+                  <select
+                    value={missionStudentId}
+                    onChange={e => setMissionStudentId(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 text-white text-sm outline-none px-3 py-1.5"
+                    style={{ fontFamily:"var(--font-barlow-condensed)" }}
+                  >
+                    <option value="all">Tüm Öğrenciler</option>
+                    {students.filter(s => s.isActive).map(s => (
+                      <option key={s.id} value={s.id}>{s.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <button
+                onClick={handleCreateMission}
+                disabled={missionBusy || !missionTitle.trim()}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold tracking-widest transition-colors"
+                style={{
+                  fontFamily: "var(--font-barlow-condensed)",
+                  background: missionTitle.trim() ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${missionTitle.trim() ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.08)"}`,
+                  color: missionTitle.trim() ? "#C4B5FD" : "rgba(255,255,255,0.25)",
+                  opacity: missionBusy ? 0.6 : 1,
+                }}
+              >
+                <Plus size={12} /> {missionBusy ? "Oluşturuluyor..." : "Görev Oluştur"}
+              </button>
+            </div>
+
+            {/* Mevcut görevler listesi */}
+            {kediMissions.length === 0 ? (
+              <p className="text-center text-xs text-white/20 py-4" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                Henüz özel görev yok
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                {kediMissions.map(m => (
+                  <div key={m.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-white/3 border border-white/8">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span>{m.icon}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs text-white/80 truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{m.title}</div>
+                        <div className="text-[10px] text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          +{m.xpReward} XP · hedef: {m.targetValue} · {m.studentId ? students.find(s => s.id === m.studentId)?.fullName ?? "Öğrenci" : "Tüm öğrenciler"}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteMission(m.id)}
+                      className="w-6 h-6 flex items-center justify-center text-white/25 hover:text-red-400 transition-colors flex-shrink-0"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </motion.div>
       )}

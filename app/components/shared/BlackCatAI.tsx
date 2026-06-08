@@ -8,7 +8,13 @@ import {
   getStudentAppointments, getLessonRecords, createGiftLessonRequest,
   getStudentGiftClaimsForSeason, getStudentXPAdjustments,
   getStudents, getAllXPAdjustments,
+  getStudentMissionCompletions, recordMissionCompletion, getKediMissions,
+  createXPAdjustment,
 } from "@/lib/db";
+import {
+  computeStudentMissions, getWeekKey, nearestMission, activeMissionCount,
+  totalMissionXP, type StudentMission, type MissionComputeInput,
+} from "@/lib/kediTasks";
 import { getWaterLog, getHealthProfile, todayDate } from "@/lib/health";
 import type { Appointment, LessonRecord, GiftLessonRequest } from "@/lib/types";
 import {
@@ -28,11 +34,13 @@ interface ActionLink {
 }
 
 interface Msg {
-  id:    string;
-  role:  "ai" | "user";
-  text:  string;
-  ts:    number;
-  links?: ActionLink[];
+  id:       string;
+  role:     "ai" | "user";
+  text:     string;
+  ts:       number;
+  links?:   ActionLink[];
+  kind?:    "missions";
+  missions?: StudentMission[];
 }
 
 /* ── Kedi SVG ikonu ───────────────────────────────────────────────── */
@@ -117,6 +125,8 @@ interface StudentContext {
   /* KEDİ AI'ın daha önce önerdiği planlar (gerçek geçmiş — localStorage) */
   lastTrainingPlan?: { date: string; summary: string };
   lastNutritionPlan?:{ date: string; summary: string };
+  /* Görevler */
+  missions:         StudentMission[];
 }
 
 /* ── Yardımcılar ─────────────────────────────────────────────────── */
@@ -171,7 +181,8 @@ type Intent =
   | "training" | "technical" | "lesson" | "appointment"
   | "progress"  | "motivation" | "nutrition" | "water"
   | "greeting"  | "badge"      | "identity"  | "appinfo"
-  | "xp"        | "goal"       | "ranking"   | "default";
+  | "xp"        | "goal"       | "ranking"   | "missions"
+  | "default";
 
 function detectIntent(msg: string): Intent {
   if (/antrenman yap|bugün ne|program|egzersiz|hazırla|çalışma|ısın|kondisyon plan|idman/.test(msg)) return "training";
@@ -183,6 +194,7 @@ function detectIntent(msg: string): Intent {
   if (/beslenme|diyet|kalori|protein|karbonhidrat|yemek|ne yemeli|gıda|öğün|ne yesem/.test(msg))      return "nutrition";
   if (/bugün ne kadar su|su iç|su miktarı|hidrasyon|kaç bardak/.test(msg))                            return "water";
   if (/merhaba|selam|hey|nasılsın|iyi misin|naber|günaydın|iyi gece|iyi akşam/.test(msg))             return "greeting";
+  if (/görev|mission|görevim|haftalık görev|görevlerim/.test(msg))                                    return "missions";
   if (/sıralama|kaçıncı|onur listesi|hall of fame|en iyiler|listede/.test(msg))                       return "ranking";
   if (/rozet|ödül|başarı koleksiyon/.test(msg))                                                        return "badge";
   if (/kim|ne sin|yapay zeka|robot|kedi ai|kendin|tanıt/.test(msg))                                   return "identity";
@@ -204,6 +216,7 @@ const ACTION_LINKS: Record<string, ActionLink> = {
   notifications: { label: "Bildirimler",      href: "/ogrenci/bildirimler" },
   shop:          { label: "Mağaza",           href: "/magaza" },
   lessons:       { label: "Kalan Derslerim",  href: "/ogrenci" },
+  missions:      { label: "Görevlerimi Gör",  href: "/ogrenci/seviye" },
 };
 
 /** İlgili yönlendirme butonlarını intent + mesaj içeriğine göre seç (tekrarsız) */
@@ -211,6 +224,7 @@ function getActionLinks(intent: Intent, msg: string): ActionLink[] {
   const links: ActionLink[] = [];
   switch (intent) {
     case "appointment": links.push(ACTION_LINKS.appointment); break;
+    case "missions":    links.push(ACTION_LINKS.missions, ACTION_LINKS.level); break;
     case "xp":
     case "badge":
     case "ranking":     links.push(ACTION_LINKS.level, ACTION_LINKS.badges); break;
@@ -219,6 +233,7 @@ function getActionLinks(intent: Intent, msg: string): ActionLink[] {
     case "training":    links.push(ACTION_LINKS.training); break;
     case "nutrition":   links.push(ACTION_LINKS.nutrition); break;
     case "lesson":      links.push(ACTION_LINKS.lessons); break;
+    case "default":     links.push(ACTION_LINKS.missions); break;
   }
   if (/randevu al|randevu oluştur/.test(msg)) links.push(ACTION_LINKS.appointment);
   if (/mağaza|market|ürün|satın al/.test(msg)) links.push(ACTION_LINKS.shop);
@@ -791,6 +806,43 @@ function handleDefault(name: string, ctx: StudentContext): string {
   ]);
 }
 
+/* ── Görev handler ───────────────────────────────────────────────── */
+
+function handleMissions(
+  name: string,
+  ctx: StudentContext,
+): { reply: string; missions: StudentMission[] } {
+  const missions = ctx.missions;
+  const active   = missions.filter(m => !m.completed);
+  const done     = missions.filter(m => m.completed);
+  const pending  = missions.filter(m => m.completed && !m.xpAwarded);
+  const earnableXP = totalMissionXP(missions);
+  const nearest  = nearestMission(missions);
+
+  let reply = `${name}, bu haftaki görevlerin:\n\n`;
+
+  if (missions.length === 0) {
+    reply += `Henüz aktif görev yok. Antrenman yapınca ve randevu alınca yeni görevler belirecek! 🎯`;
+    return { reply, missions };
+  }
+
+  reply += `🎯 **${active.length}** aktif görev | ✅ **${done.length}** tamamlandı`;
+  if (earnableXP > 0) reply += ` | ⚡ **${earnableXP} XP** kazanabilirsin`;
+  reply += `\n`;
+
+  if (nearest) {
+    const pct = Math.round((nearest.progress / nearest.target) * 100);
+    reply += `\n🏃 En yakın: **${nearest.title}** (${pct}%) — ${nearest.xpReward} XP`;
+  }
+
+  if (pending.length > 0) {
+    reply += `\n\n💰 ${pending.length} tamamlanan görevin XP'si hesaplanıyor...`;
+  }
+
+  reply += `\n\nGörev kartlarına bakabilirsin:`;
+  return { reply, missions };
+}
+
 /* ── buildContext — açılış mesajı ────────────────────────────────── */
 
 function buildContext(ctx: StudentContext): string {
@@ -855,6 +907,13 @@ function buildContext(ctx: StudentContext): string {
   if (ctx.hallRank !== null) levelLine += ` | Onur Listesi: **${ctx.hallRank}.** sıra`;
   lines.push(levelLine);
 
+  // Görev özeti
+  const activeMissions = ctx.missions.filter(m => !m.completed);
+  const earnableXP     = totalMissionXP(ctx.missions);
+  if (activeMissions.length > 0) {
+    lines.push(`🎯 **${activeMissions.length} aktif görev** var — toplam **${earnableXP} XP** kazanabilirsin. "Görevlerim neler?" de detayları gör!`);
+  }
+
   // KEDİ AI'ın daha önce önerdiği plan varsa hatırlat (gerçek geçmiş)
   if (ctx.lastTrainingPlan && ctx.lastTrainingPlan.date === todayStr()) {
     lines.push(`📋 Bugün sana zaten bir antrenman programı önermiştim: *${ctx.lastTrainingPlan.summary}*. İstersen tekrar bakalım veya farklı bir konuya geçelim.`);
@@ -871,7 +930,7 @@ function aiRespond(
   ctx: StudentContext,
   _history: Msg[],
   pendingIntent: string | null,
-): { reply: string; nextPending?: string; links?: ActionLink[] } {
+): { reply: string; nextPending?: string; links?: ActionLink[]; kind?: "missions"; missions?: StudentMission[] } {
   const msg    = userMsg.toLowerCase();
   const name   = ctx.name.split(" ")[0];
 
@@ -883,6 +942,11 @@ function aiRespond(
 
   const intent = detectIntent(msg);
   const links  = getActionLinks(intent, msg);
+
+  if (intent === "missions") {
+    const r = handleMissions(name, ctx);
+    return { reply: r.reply, kind: "missions", missions: r.missions, links };
+  }
 
   if (intent === "nutrition") {
     const r = handleNutrition(name, ctx, null, userMsg);
@@ -940,6 +1004,64 @@ function MsgBubble({ msg }: { msg: Msg }) {
               color:"rgba(255,255,255,0.85)", fontFamily:"var(--font-inter)", borderRadius:"0 12px 12px 12px" }}>
             {parsed}
           </div>
+
+          {/* Görev kartları */}
+          {msg.kind === "missions" && msg.missions && msg.missions.length > 0 && (
+            <div className="flex flex-col gap-2 w-full">
+              {msg.missions.map(m => {
+                const pct = Math.min(100, Math.round((m.progress / m.target) * 100));
+                return (
+                  <div key={m.key}
+                    style={{
+                      background: m.completed ? "rgba(74,222,128,0.08)" : "rgba(139,92,246,0.08)",
+                      border: `1px solid ${m.completed ? "rgba(74,222,128,0.25)" : "rgba(139,92,246,0.2)"}`,
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-base flex-shrink-0">{m.icon}</span>
+                        <div className="min-w-0">
+                          <div className="text-[12px] font-semibold truncate"
+                            style={{ color: m.completed ? "#4ADE80" : "#C4B5FD", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.04em" }}>
+                            {m.title}
+                          </div>
+                          <div className="text-[10px] opacity-60 truncate" style={{ color: "rgba(255,255,255,0.7)" }}>
+                            {m.description}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        <div className="text-[11px] font-bold"
+                          style={{ color: m.xpAwarded ? "#4ADE80" : "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
+                          {m.xpAwarded ? "✅" : `+${m.xpReward} XP`}
+                        </div>
+                        <div className="text-[10px] opacity-50" style={{ color: "rgba(255,255,255,0.7)" }}>
+                          {m.progress}/{m.target}
+                        </div>
+                      </div>
+                    </div>
+                    {/* İlerleme çubuğu */}
+                    {!m.completed && (
+                      <div className="mt-2 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                        <div
+                          style={{
+                            width: `${pct}%`,
+                            height: "100%",
+                            background: "linear-gradient(90deg, #7C3AED, #A78BFA)",
+                            borderRadius: "99px",
+                            transition: "width 0.4s ease",
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {msg.links && msg.links.length > 0 && (
             <div className="flex gap-1.5 flex-wrap">
               {msg.links.map(link => (
@@ -1042,7 +1164,9 @@ export default function BlackCatAI() {
       getStudentXPAdjustments(student.id).catch(() => []),
       getStudents().catch(() => []),
       getAllXPAdjustments().catch(() => []),
-    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments, allStudents, allAdjustments]) => {
+      getStudentMissionCompletions(student.id).catch(() => new Set<string>()),
+      getKediMissions(student.id).catch(() => []),
+    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments, allStudents, allAdjustments, completions, customMissions]) => {
       const sorted      = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const sortedApts  = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
       const summary     = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
@@ -1089,6 +1213,28 @@ export default function BlackCatAI() {
       const cancelledLessons = sortedApts.filter(a => a.status === "iptal").length;
       const noShowLessons    = sortedApts.filter(a => a.status === "gelmedi").length;
 
+      /* Görevler */
+      const weekKey   = getWeekKey();
+      const missionInput: MissionComputeInput = {
+        appointments:     sortedApts,
+        records:          sorted,
+        totalXP:          xp.breakdown.total,
+        lastTrainingPlan: loadAIPlan("training"),
+        lastNutritionPlan:loadAIPlan("nutrition"),
+      };
+      const missions  = computeStudentMissions(missionInput, completions, weekKey, customMissions);
+
+      // Yeni tamamlananlar için XP ödülü (background, best-effort)
+      missions.forEach(m => {
+        if (m.completed && !m.xpAwarded) {
+          recordMissionCompletion(student.id, m.key, m.xpReward).catch(() => {});
+          createXPAdjustment(
+            student.id, student.fullName, m.xpReward,
+            "Görev Tamamlama", m.title, "KEDİ AI", season,
+          ).catch(() => {});
+        }
+      });
+
       const ctx: StudentContext = {
         name:             student.fullName,
         studentId:        student.id,
@@ -1120,6 +1266,7 @@ export default function BlackCatAI() {
         noShowLessons,
         lastTrainingPlan:  loadAIPlan("training"),
         lastNutritionPlan: loadAIPlan("nutrition"),
+        missions,
       };
 
       setCtx(ctx);
@@ -1168,9 +1315,9 @@ export default function BlackCatAI() {
     setInput("");
     setTyping(true);
     setTimeout(() => {
-      const { reply, nextPending, links } = aiRespond(userMsg.text, ctx, msgs, pendingIntent);
+      const { reply, nextPending, links, kind, missions: ms } = aiRespond(userMsg.text, ctx, msgs, pendingIntent);
       setPendingIntent(nextPending ?? null);
-      setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links }]);
+      setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links, kind, missions: ms }]);
       setTyping(false);
     }, 600 + Math.random() * 800);
   }, [input, ctx, msgs, pendingIntent]);
@@ -1346,7 +1493,7 @@ export default function BlackCatAI() {
                   {/* Hızlı sorular */}
                   {msgs.length <= 1 && (
                     <div className="flex-shrink-0 px-4 pb-2 flex gap-2 flex-wrap">
-                      {["Bugün ne antrenman yapayım?", "Randevum ne zaman?", "Beslenme önerisi", "XP durumum"].map(q => (
+                      {["Görevlerim neler?", "Bugün ne antrenman yapayım?", "Randevum ne zaman?", "XP durumum"].map(q => (
                         <button
                           key={q}
                           onClick={() => {
@@ -1355,9 +1502,9 @@ export default function BlackCatAI() {
                             setMsgs(prev => [...prev, userMsg]);
                             setTyping(true);
                             setTimeout(() => {
-                              const { reply, nextPending: np, links } = aiRespond(q, ctx, msgs, null);
+                              const { reply, nextPending: np, links, kind, missions: ms } = aiRespond(q, ctx, msgs, null);
                               setPendingIntent(np ?? null);
-                              setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links }]);
+                              setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links, kind, missions: ms }]);
                               setTyping(false);
                             }, 700 + Math.random() * 600);
                           }}

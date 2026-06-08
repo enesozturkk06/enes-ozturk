@@ -175,6 +175,35 @@ export interface GiftLessonRequest {
   createdAt:   string;
 }
 
+/* ── Kedi AI Görev Sistemi ────────────────────────────────────────── */
+
+/** Admin tarafından oluşturulan özel Kedi AI görevi */
+export interface KediMission {
+  id:           string;
+  title:        string;
+  description?: string;
+  icon:         string;
+  xpReward:     number;
+  targetValue:  number;
+  studentId?:   string;  // undefined/null → tüm öğrenciler
+  isActive:     boolean;
+  createdAt:    string;
+}
+
+/** Öğrenci bazlı hesaplanmış görev (auto + custom) */
+export interface StudentMission {
+  key:         string;   // auto: "weekly_2_lessons_2025-W03", custom: uuid
+  title:       string;
+  description: string;
+  icon:        string;
+  xpReward:    number;
+  progress:    number;
+  target:      number;
+  completed:   boolean;
+  xpAwarded:   boolean;  // XP zaten verildi mi?
+  isCustom:    boolean;
+}
+
 /** Admin tarafından elle eklenen/düşülen XP kaydı */
 export interface XPAdjustment {
   id:          string;
