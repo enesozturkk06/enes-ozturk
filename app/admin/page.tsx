@@ -99,6 +99,9 @@ export default function AdminDashboard() {
   });
   const [noteText, setNoteText] = useState("");
   const [saving, setSaving]     = useState(false);
+  /* Düet ders notu: her öğrenci için ayrı puan + not */
+  const [perStudentScores, setPerStudentScores] = useState<Record<string, Record<string, number>>>({});
+  const [perStudentNotes,  setPerStudentNotes]  = useState<Record<string, string>>({});
 
   /* ── Yükle ──────────────────────────────────────────────────── */
   const reloadApts = useCallback(async () => {
@@ -171,14 +174,29 @@ export default function AdminDashboard() {
       const entries = Object.entries(attendances).map(([studentId, attended]) => ({ studentId, attended }));
       const result = await completeAppointmentWithAttendance(attendModal.id, entries);
       await reloadApts();
+
+      /* Düet ders ise per-student score/note state'ini hazırla */
+      const initDuet = (apt: Appointment) => {
+        if (apt.lessonType !== "duet") return;
+        const defaultS = { conditioning:7, punch:7, kick:7, defense:7, combination:7, sparring:7, overall:7 };
+        const initS: Record<string, Record<string, number>> = {};
+        const initN: Record<string, string> = {};
+        (aptStudents[apt.id] ?? [])
+          .filter(s => s.inviteStatus === "accepted")
+          .forEach(s => { initS[s.studentId] = { ...defaultS }; initN[s.studentId] = ""; });
+        setPerStudentScores(initS);
+        setPerStudentNotes(initN);
+      };
+
       if (result.warnings.length > 0) {
         setAttendWarnings(result.warnings);
-        // Uyarıları göster ama 2s sonra devam et
         setTimeout(() => {
+          initDuet(attendModal);
           setAttendModal(null);
           setNoteModal(attendModal);
         }, 2000);
       } else {
+        initDuet(attendModal);
         setAttendModal(null);
         setNoteModal(attendModal);
       }
@@ -193,24 +211,54 @@ export default function AdminDashboard() {
   const handleSaveNote = async () => {
     if (!noteModal) return;
     setSaving(true);
-    await createLessonRecord({
-      appointmentId: noteModal.id,
-      studentId:     noteModal.studentId,
-      date:          noteModal.date,
-      conditioning:  scores.conditioning,
-      punch:         scores.punch,
-      kick:          scores.kick,
-      defense:       scores.defense,
-      combination:   scores.combination,
-      sparring:      scores.sparring,
-      overall:       scores.overall,
-      trainerNotes:  noteText,
-      durationMinutes: 60,
-    });
-    setSaving(false);
-    setNoteModal(null);
-    setNoteText("");
-    setScores({ conditioning:7,punch:7,kick:7,defense:7,combination:7,sparring:7,overall:7 });
+    try {
+      const isDuet = noteModal.lessonType === "duet";
+      const duetParticipants = isDuet
+        ? (aptStudents[noteModal.id] ?? []).filter(s => s.inviteStatus === "accepted")
+        : [];
+
+      if (isDuet && duetParticipants.length > 0) {
+        await Promise.all(duetParticipants.map(apSt => {
+          const s = perStudentScores[apSt.studentId] ?? {};
+          return createLessonRecord({
+            appointmentId:   noteModal.id,
+            studentId:       apSt.studentId,
+            date:            noteModal.date,
+            conditioning:    (s.conditioning  ?? 7),
+            punch:           (s.punch         ?? 7),
+            kick:            (s.kick          ?? 7),
+            defense:         (s.defense       ?? 7),
+            combination:     (s.combination   ?? 7),
+            sparring:        (s.sparring      ?? 7),
+            overall:         (s.overall       ?? 7),
+            trainerNotes:    perStudentNotes[apSt.studentId] ?? "",
+            durationMinutes: 60,
+          });
+        }));
+      } else {
+        await createLessonRecord({
+          appointmentId: noteModal.id,
+          studentId:     noteModal.studentId,
+          date:          noteModal.date,
+          conditioning:  scores.conditioning,
+          punch:         scores.punch,
+          kick:          scores.kick,
+          defense:       scores.defense,
+          combination:   scores.combination,
+          sparring:      scores.sparring,
+          overall:       scores.overall,
+          trainerNotes:  noteText,
+          durationMinutes: 60,
+        });
+      }
+    } finally {
+      setSaving(false);
+      setNoteModal(null);
+      setNoteText("");
+      setScores({ conditioning:7, punch:7, kick:7, defense:7, combination:7, sparring:7, overall:7 });
+      setPerStudentScores({});
+      setPerStudentNotes({});
+    }
   };
 
   /* ── Admin iptal ─────────────────────────────────────────── */
@@ -1146,33 +1194,111 @@ export default function AdminDashboard() {
       </Modal>
 
       {/* ══ Ders Notu Modalı ══ */}
-      <Modal open={!!noteModal} onClose={() => setNoteModal(null)} title="Ders Notu Ekle" maxWidth="max-w-2xl">
-        {noteModal && (
-          <div className="space-y-4">
-            <div className="p-3 bg-steel/30 border border-white/5">
-              <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{noteModal.studentName}</div>
-              <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{noteModal.date} · {noteModal.startTime}–{noteModal.endTime}</div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {SCORE_KEYS.map(k => (
-                <div key={k} className="space-y-1">
-                  <label className="text-xs text-white/40 tracking-wider" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{SCORE_TR[k]}</label>
-                  <div className="flex items-center gap-2">
-                    <input type="range" min="1" max="10" value={scores[k]}
-                      onChange={e => setScores(p => ({ ...p, [k]: Number(e.target.value) }))}
-                      className="flex-1 accent-crimson"/>
-                    <span className="text-sm text-crimson font-display w-6 text-center" style={{ fontFamily:"var(--font-bebas)" }}>{scores[k]}</span>
+      <Modal
+        open={!!noteModal}
+        onClose={() => setNoteModal(null)}
+        title={noteModal?.lessonType === "duet" ? "Düet Ders Notu Ekle" : "Ders Notu Ekle"}
+        maxWidth="max-w-2xl"
+      >
+        {noteModal && (() => {
+          const isDuet = noteModal.lessonType === "duet";
+          const duetParticipants = isDuet
+            ? (aptStudents[noteModal.id] ?? []).filter(s => s.inviteStatus === "accepted")
+            : [];
+
+          /* ── Düet: iki öğrenci paneli ── */
+          if (isDuet && duetParticipants.length > 0) {
+            return (
+              <div className="space-y-5">
+                {/* Randevu bilgisi */}
+                <div className="p-3 bg-steel/30 border border-white/5">
+                  <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    {duetParticipants.map(s => students.find(st => st.id === s.studentId)?.fullName || s.studentName || "?").join(" + ")}
+                  </div>
+                  <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    Düet Ders · {noteModal.date} · {noteModal.startTime}–{noteModal.endTime}
                   </div>
                 </div>
-              ))}
+
+                {/* Her öğrenci için ayrı not paneli */}
+                {duetParticipants.map((apSt, idx) => {
+                  const name = students.find(s => s.id === apSt.studentId)?.fullName || apSt.studentName || "Öğrenci";
+                  const sScores = perStudentScores[apSt.studentId] ?? { conditioning:7, punch:7, kick:7, defense:7, combination:7, sparring:7, overall:7 };
+                  const sNote   = perStudentNotes[apSt.studentId] ?? "";
+                  return (
+                    <div key={apSt.studentId} className="border border-white/10 p-4 space-y-3" style={{ borderRadius: 4 }}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                          style={{ background: idx === 0 ? "rgba(220,38,38,0.8)" : "rgba(139,92,246,0.8)", color: "#fff", fontFamily:"var(--font-bebas)" }}>
+                          {idx + 1}
+                        </div>
+                        <span className="text-sm font-semibold" style={{ color: idx === 0 ? "#F87171" : "#C4B5FD", fontFamily:"var(--font-barlow-condensed)" }}>
+                          {name}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {SCORE_KEYS.map(k => (
+                          <div key={k} className="space-y-1">
+                            <label className="text-xs text-white/40 tracking-wider" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{SCORE_TR[k]}</label>
+                            <div className="flex items-center gap-2">
+                              <input type="range" min="1" max="10" value={sScores[k]}
+                                onChange={e => setPerStudentScores(p => ({
+                                  ...p,
+                                  [apSt.studentId]: { ...(p[apSt.studentId] ?? sScores), [k]: Number(e.target.value) },
+                                }))}
+                                className="flex-1 accent-crimson" />
+                              <span className="text-sm text-crimson font-display w-6 text-center" style={{ fontFamily:"var(--font-bebas)" }}>{sScores[k]}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <Textarea
+                        label="Antrenör Notu"
+                        value={sNote}
+                        onChange={v => setPerStudentNotes(p => ({ ...p, [apSt.studentId]: v }))}
+                        rows={2}
+                        placeholder={`${name} için ders notu...`}
+                      />
+                    </div>
+                  );
+                })}
+
+                <div className="flex gap-3">
+                  <Button onClick={() => setNoteModal(null)} variant="secondary" className="flex-1">Atla</Button>
+                  <Button onClick={handleSaveNote} loading={saving} className="flex-1">İkisini de Kaydet</Button>
+                </div>
+              </div>
+            );
+          }
+
+          /* ── Bireysel: mevcut tek öğrenci formu (değişmedi) ── */
+          return (
+            <div className="space-y-4">
+              <div className="p-3 bg-steel/30 border border-white/5">
+                <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{noteModal.studentName}</div>
+                <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{noteModal.date} · {noteModal.startTime}–{noteModal.endTime}</div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {SCORE_KEYS.map(k => (
+                  <div key={k} className="space-y-1">
+                    <label className="text-xs text-white/40 tracking-wider" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{SCORE_TR[k]}</label>
+                    <div className="flex items-center gap-2">
+                      <input type="range" min="1" max="10" value={scores[k]}
+                        onChange={e => setScores(p => ({ ...p, [k]: Number(e.target.value) }))}
+                        className="flex-1 accent-crimson" />
+                      <span className="text-sm text-crimson font-display w-6 text-center" style={{ fontFamily:"var(--font-bebas)" }}>{scores[k]}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Textarea label="Antrenör Notu" value={noteText} onChange={setNoteText} rows={3} placeholder="Derste neler yapıldı..." />
+              <div className="flex gap-3">
+                <Button onClick={() => setNoteModal(null)} variant="secondary" className="flex-1">Atla</Button>
+                <Button onClick={handleSaveNote} loading={saving} className="flex-1">Notu Kaydet</Button>
+              </div>
             </div>
-            <Textarea label="Antrenör Notu" value={noteText} onChange={setNoteText} rows={3} placeholder="Derste neler yapıldı..." />
-            <div className="flex gap-3">
-              <Button onClick={() => setNoteModal(null)} variant="secondary" className="flex-1">Atla</Button>
-              <Button onClick={handleSaveNote} loading={saving} className="flex-1">Notu Kaydet</Button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
       {/* ══ Admin İptal Modalı ══ */}
       <Modal open={!!cancelTarget} onClose={() => setCancelTarget(null)} title="Randevuyu İptal Et" maxWidth="max-w-md">
