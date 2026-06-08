@@ -3,10 +3,18 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
-import { getStudentAppointments, getLessonRecords, createGiftLessonRequest, getStudentGiftClaimsForSeason, getStudentXPAdjustments } from "@/lib/db";
+import {
+  getStudentAppointments, getLessonRecords, createGiftLessonRequest,
+  getStudentGiftClaimsForSeason, getStudentXPAdjustments,
+  getStudents, getAllXPAdjustments,
+} from "@/lib/db";
 import { getWaterLog, getHealthProfile, todayDate } from "@/lib/health";
-import type { Appointment, LessonRecord } from "@/lib/types";
-import { computeFullXP, getCurrentSeason, getSeasonLabel, getDaysUntilSeasonEnd, type XPResult, type SeasonXPSummary } from "@/lib/xp";
+import type { Appointment, LessonRecord, GiftLessonRequest } from "@/lib/types";
+import {
+  computeFullXP, getCurrentSeason, getSeasonLabel, getDaysUntilSeasonEnd,
+  getLevelForXP, sumManualXP, type XPResult, type SeasonXPSummary,
+} from "@/lib/xp";
+import { computeBadges, type Badge } from "@/lib/badges";
 import { X, Send, ChevronDown } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -88,6 +96,20 @@ interface StudentContext {
   /* Sezon hediye ders talepleri */
   claimed5k:        boolean;
   claimed10k:       boolean;
+  giftRequests:     GiftLessonRequest[]; // bu sezona ait talepler (durumlarıyla)
+  /* Rozetler */
+  badges:           Badge[];        // tüm rozetler (kazanılan + kilitli)
+  earnedBadges:     Badge[];
+  nextBadge:        Badge | null;   // en yakın kilitli rozet
+  /* Onur Listesi (Hall of Fame) */
+  hallRank:         number | null;  // 1-bazlı sıra
+  hallTotal:        number;
+  /* Ders geçmişi detayı */
+  cancelledLessons: number;
+  noShowLessons:    number;
+  /* KEDİ AI'ın daha önce önerdiği planlar (gerçek geçmiş — localStorage) */
+  lastTrainingPlan?: { date: string; summary: string };
+  lastNutritionPlan?:{ date: string; summary: string };
 }
 
 /* ── Yardımcılar ─────────────────────────────────────────────────── */
@@ -97,6 +119,32 @@ function pick<T>(arr: T[]): T {
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+/** En yakın kilidi açılacak rozeti bul (ilerleme oranına göre) */
+function findNextBadge(badges: Badge[]): Badge | null {
+  const locked = badges.filter(b => !b.earned && b.progressMax > 0);
+  if (locked.length === 0) return null;
+  return [...locked].sort((a, b) => (b.progressCurrent / b.progressMax) - (a.progressCurrent / a.progressMax))[0];
+}
+
+/** KEDİ AI'ın önerdiği son antrenman/diyet planını localStorage'a kaydet (gerçek geçmiş oluşturmak için) */
+function saveAIPlan(kind: "training" | "nutrition", summary: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(`kedi_ai_last_${kind}`, JSON.stringify({ date: todayStr(), summary }));
+  } catch { /* sessizce geç */ }
+}
+
+function loadAIPlan(kind: "training" | "nutrition"): { date: string; summary: string } | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem(`kedi_ai_last_${kind}`);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.date === "string" && typeof parsed.summary === "string") return parsed;
+  } catch { /* sessizce geç */ }
+  return undefined;
 }
 
 /** Randevu gelecekte mi? (tarih + saat bazlı, sadece tarih karşılaştırması değil) */
@@ -116,7 +164,7 @@ type Intent =
   | "training" | "technical" | "lesson" | "appointment"
   | "progress"  | "motivation" | "nutrition" | "water"
   | "greeting"  | "badge"      | "identity"  | "appinfo"
-  | "xp"        | "goal"       | "default";
+  | "xp"        | "goal"       | "ranking"   | "default";
 
 function detectIntent(msg: string): Intent {
   if (/antrenman yap|bugün ne|program|egzersiz|hazırla|çalışma|ısın|kondisyon plan|idman/.test(msg)) return "training";
@@ -128,6 +176,7 @@ function detectIntent(msg: string): Intent {
   if (/beslenme|diyet|kalori|protein|karbonhidrat|yemek|ne yemeli|gıda|öğün|ne yesem/.test(msg))      return "nutrition";
   if (/bugün ne kadar su|su iç|su miktarı|hidrasyon|kaç bardak/.test(msg))                            return "water";
   if (/merhaba|selam|hey|nasılsın|iyi misin|naber|günaydın|iyi gece|iyi akşam/.test(msg))             return "greeting";
+  if (/sıralama|kaçıncı|onur listesi|hall of fame|en iyiler|listede/.test(msg))                       return "ranking";
   if (/rozet|ödül|başarı koleksiyon/.test(msg))                                                        return "badge";
   if (/kim|ne sin|yapay zeka|robot|kedi ai|kendin|tanıt/.test(msg))                                   return "identity";
   if (/xp|enerji puan|puan durumum|hediye ders|5000 xp/.test(msg))                                   return "xp";
@@ -151,10 +200,12 @@ function handleTraining(name: string, ctx: StudentContext): string {
       ["Serbest Çalışma",last.sparring,    "kontrollü spar ve mesafe yönetimi"],
     ];
     const weakest = [...scores].sort((a, b) => a[1] - b[1])[0];
-    return pick([
+    const reply = pick([
       `${name}, bugün **${weakest[0]}** odaklı antrenman öneriyorum (zayıf alanın):\n\n🔥 **Isınma** (10 dk): ip atlama + eklem hareketleri\n🥊 **Ana çalışma** (25 dk): ${weakest[2]}\n💨 **Kondisyon** (10 dk): tabata × 4 tur (20sn iş / 10sn dinlenme)\n🧘 **Soğuma** (5 dk): esneme + nefes`,
       `${weakest[0]} en gelişim alanın ${name}, o yüzden bugün:\n\n1️⃣ 3 dk ip atlama ısınma\n2️⃣ 4×3 dk ${weakest[2]}\n3️⃣ 3×2 dk kondisyon devresi (burpee + squat + plank)\n4️⃣ 5 dk esneme\n\nToplam ~50 dk. Hazır mısın? 🥊`,
     ]);
+    saveAIPlan("training", `${weakest[0]} odaklı antrenman (zayıf alan analizi)`);
+    return reply;
   }
 
   const levelPrograms: Record<string, string[]> = {
@@ -172,7 +223,9 @@ function handleTraining(name: string, ctx: StudentContext): string {
   };
 
   const programs = levelPrograms[level] ?? levelPrograms["orta"];
-  return pick(programs);
+  const reply = pick(programs);
+  saveAIPlan("training", `${level === "baslangic" ? "Başlangıç" : level === "ileri" ? "İleri" : "Orta"} seviye genel program`);
+  return reply;
 }
 
 function handleTechnical(name: string, ctx: StudentContext): string {
@@ -280,9 +333,13 @@ function handleAppointment(name: string, ctx: StudentContext): string {
     return `${name}, bugünkü dersin az önce tamamlandı veya başlamıştı. Yeni randevu için "Randevu" sayfasından müsait slot seçebilirsin! 📅`;
   }
 
+  const missedNote = (ctx.cancelledLessons + ctx.noShowLessons) > 0
+    ? `\n\n(Not: geçmişte ${ctx.cancelledLessons} iptal, ${ctx.noShowLessons} gelinmeyen ders var — yeni randevunu bu sefer sonuna kadar götürelim! 💪)`
+    : "";
+
   return pick([
-    `${name}, şu an aktif onaylı randevun görünmüyor. "Randevu" sayfasından antrenör Enes'in müsait slotlarına bakabilirsin! 📅`,
-    `Takvimde yaklaşan randevun yok ${name}. Hemen "Randevu" sayfasına git ve bir slot ayır — devam etmek için kritik! 🥊`,
+    `${name}, şu an aktif onaylı randevun görünmüyor. "Randevu" sayfasından antrenör Enes'in müsait slotlarına bakabilirsin! 📅${missedNote}`,
+    `Takvimde yaklaşan randevun yok ${name}. Hemen "Randevu" sayfasına git ve bir slot ayır — devam etmek için kritik! 🥊${missedNote}`,
   ]);
 }
 
@@ -390,6 +447,7 @@ function buildNutritionPlan(
   else
     plan += `⚡ Karbonhidratı antrenman saatine göre ayarla. Magnezyum + B vitamini kombinasyonu için ceviz ve muz ekle.`;
 
+  saveAIPlan("nutrition", `${weight} kg, hedef: ${goalType} — ${calories} kcal / ${protein}g protein`);
   return plan;
 }
 
@@ -481,13 +539,46 @@ function handleGreeting(name: string, ctx: StudentContext): string {
 /* ── Rozet handler ───────────────────────────────────────────────── */
 
 function handleBadge(name: string, ctx: StudentContext): string {
-  const xp     = ctx.xp;
-  const total  = xp.breakdown.total;
-  const toGift = Math.max(0, 5000 - total);
-  const pct    = Math.min(100, Math.round((total / 5000) * 100));
+  const earned = ctx.earnedBadges;
+  const next   = ctx.nextBadge;
+
+  let msg = `${name}, rozet koleksiyonun:\n\n🏅 **${earned.length}/${ctx.badges.length}** rozet kazandın`;
+  if (earned.length > 0) {
+    const recent = [...earned].sort((a, b) => (b.earnedAt ?? "").localeCompare(a.earnedAt ?? "")).slice(0, 3);
+    msg += `\n\n✅ Son kazandıkların: ${recent.map(b => `${b.icon} ${b.name}`).join(", ")}`;
+  }
+
+  if (next) {
+    const remaining = Math.max(0, next.progressMax - next.progressCurrent);
+    msg += `\n\n🎯 **Sıradaki rozet**: ${next.icon} **${next.name}**\n${next.description}\n📊 İlerleme: ${next.progressCurrent}/${next.progressMax}${remaining > 0 ? ` — kalan: **${remaining}**` : ""}`;
+  } else if (earned.length === ctx.badges.length) {
+    msg += `\n\n👑 Tüm rozetleri topladın ${name}! Efsane bir koleksiyon — şimdi sırada Hall of Fame zirvesi var!`;
+  }
+
+  msg += `\n\n"Rozetlerim" sayfasından tüm koleksiyonu inceleyebilirsin. 🐾`;
+  return msg;
+}
+
+/* ── Sıralama / Hall of Fame handler ─────────────────────────────── */
+
+function handleRanking(name: string, ctx: StudentContext): string {
+  if (ctx.hallRank === null) {
+    return `${name}, Onur Listesi'nde henüz bir sıralaman görünmüyor — XP kazandıkça listeye gireceksin. Şu an **${ctx.xp.breakdown.total.toLocaleString()} XP**'desin, devam et! 🐾`;
+  }
+
+  const rank = ctx.hallRank;
+  const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏅";
+
+  if (rank <= 3) {
+    return pick([
+      `${name}, Onur Listesi'nde **${rank}.** sıradasın ${medal}! ${ctx.hallTotal} sporcu arasında zirveye bu kadar yakınsın — bu büyük bir başarı! **${ctx.xp.breakdown.total.toLocaleString()} XP** ile listede gururla yerini koruyorsun.`,
+      `Tebrikler ${name}! Şu an Onur Listesi'nde **${rank}. sıradasın** ${medal} (${ctx.hallTotal} sporcu arasında). XP'n: **${ctx.xp.breakdown.total.toLocaleString()}**. Zirveyi bırakma!`,
+    ]);
+  }
+
   return pick([
-    `${name}, **${ctx.completedLessons}** ders tamamladın — birçok rozet kazanmış olmalısın!\n\n⚡ XP Durumu: **${total.toLocaleString()} XP** (Hediye Ders için ${toGift > 0 ? `${toGift.toLocaleString()} daha` : "ulaştın! 🎁"})\n\n"Rozetlerim" sayfasında koleksiyonunu görebilirsin. 🏅`,
-    `Rozet koleksiyonunu merak ediyorsun ${name}? "Rozetlerim" sayfasına bak!\n\n🏆 **${ctx.completedLessons}** ders + **${total.toLocaleString()} XP** → ${pct}% hediye ders ilerleme.`,
+    `${name}, Onur Listesi'nde **${rank}. sıradasın** (${ctx.hallTotal} sporcu arasında) — **${ctx.xp.breakdown.total.toLocaleString()} XP** ile. Birkaç ders ve düzenli su/antrenman takibiyle sıralamada hızla yükselebilirsin! 🐾`,
+    `Şu an **${rank}.** sıradasın ${name} (toplam ${ctx.hallTotal} sporcu). **${ctx.xp.breakdown.total.toLocaleString()} XP**'le iyi gidiyorsun — üst sıralara tırmanmak için her ders +100 XP getiriyor, unutma!`,
   ]);
 }
 
@@ -517,8 +608,20 @@ function handleXP(name: string, ctx: StudentContext): string {
 
   const daysLeft = getDaysUntilSeasonEnd(season);
   const seasonLbl = getSeasonLabel(season);
+  const levelInfo = ctx.xp.level;
 
-  let msg = `${name}, **${seasonLbl}** sezon XP durumun:\n\n`;
+  /* Kişisel açılış cümlesi — örnek: "Hüseyin, şu an 1250 XP ile Bronz Sporcu seviyesindesin..." */
+  let msg = `${name}, şu an **${lifetimeTotal.toLocaleString()} XP** ile **${levelInfo.current.name}** seviyesindesin.`;
+  if (levelInfo.next) {
+    msg += ` **${levelInfo.next.name}** olmak için **${levelInfo.xpToNext.toLocaleString()} XP** daha gerekiyor`;
+    if (levelInfo.next.giftLesson) msg += ` — bu seviyeye ulaşınca 🎁 hediye ders hakkı da kazanacaksın`;
+    msg += `.`;
+  } else {
+    msg += ` En üst seviyedesin — efsane olmuşsun! 👑`;
+  }
+  msg += ` Bu hafta **2 ders** tamamlarsan +200 XP, su takibini düzenli yaparsan ekstra rozet ilerlemesi kazanırsın. 🐾\n\n`;
+
+  msg += `🗓️ **${seasonLbl}** sezon XP durumun:\n\n`;
   msg += `🗓️ **Sezon Bitiş**: ${seasonEnd} (${daysLeft} gün kaldı)\n\n`;
   msg += `⚡ **Bu Sezon XP**: ${seasonTotal.toLocaleString()} XP\n`;
   msg += `${bar} ${pct}%\n`;
@@ -546,6 +649,14 @@ function handleXP(name: string, ctx: StudentContext): string {
     msg += `\n💡 Sıradaki hediye derse **${toNext.toLocaleString()} XP** kaldı. Her ders +100 XP!`;
   } else if (!nextThreshold) {
     msg += `\n👑 Bu sezon her iki hediye dersi de kazandın!`;
+  }
+
+  if (ctx.nextBadge) {
+    const remaining = Math.max(0, ctx.nextBadge.progressMax - ctx.nextBadge.progressCurrent);
+    msg += `\n\n🏅 Sıradaki rozetin: ${ctx.nextBadge.icon} **${ctx.nextBadge.name}** (${ctx.nextBadge.progressCurrent}/${ctx.nextBadge.progressMax}${remaining > 0 ? `, kalan ${remaining}` : ""})`;
+  }
+  if (ctx.hallRank !== null) {
+    msg += `\n🏆 Onur Listesi'nde **${ctx.hallRank}. sıradasın** (${ctx.hallTotal} sporcu arasında).`;
   }
 
   return msg;
@@ -624,7 +735,7 @@ function handleAppInfo(msg: string, name: string): string {
 
 function handleDefault(name: string, ctx: StudentContext): string {
   return pick([
-    `${name}, şu konularda yardımcı olabilirim:\n\n🏋️ **"Antrenman programı"** — bugünkü özel plan\n📊 **"Teknik analizim"** — yumruk, tekme, savunma\n🥗 **"Beslenme öner"** — kişisel plan\n📅 **"Randevum ne zaman?"** — takvim kontrolü\n⚡ **"XP durumum"** — puan ve hediye ders\n🎯 **"Hedefim kilo vermek"** — hedefe özel plan`,
+    `${name}, şu konularda yardımcı olabilirim:\n\n🏋️ **"Antrenman programı"** — bugünkü özel plan\n📊 **"Teknik analizim"** — yumruk, tekme, savunma\n🥗 **"Beslenme öner"** — kişisel plan\n📅 **"Randevum ne zaman?"** — takvim kontrolü\n⚡ **"XP durumum"** — puan ve hediye ders\n🏅 **"Rozetlerim"** — kazandıkların ve sıradaki\n🏆 **"Sıralamam kaç?"** — Onur Listesi konumun\n🎯 **"Hedefim kilo vermek"** — hedefe özel plan`,
     `Bunu tam anlayamadım ${name}, ama buradayım! Dene: "Bugün ne antrenman yapayım?" veya "Teknik analizim nasıl?" 🐾`,
     `${name}, ${ctx.completedLessons} derslik bir geçmişin var. Hangi alanda ilerlemek istiyorsun? Antrenman, beslenme, teknik, randevu — söyle! 🥊`,
   ]);
@@ -687,6 +798,18 @@ function buildContext(ctx: StudentContext): string {
   const toGiftXP    = nextGift ? Math.max(0, nextGift - seasonTotal) : 0;
   lines.push(`⚡ **Sezon XP**: ${seasonTotal.toLocaleString()} puan${(ctx.claimed5k || seasonTotal >= 5000) ? " | 🎁 Hediye ders durumun var!" : ` | Hediye ders için ${toGiftXP.toLocaleString()} XP kaldı`}`);
 
+  // Seviye + rozet + sıralama özeti
+  const levelInfo = xp.level;
+  let levelLine = `🏅 **${levelInfo.current.name}** seviyesindesin (${xp.breakdown.total.toLocaleString()} XP)`;
+  if (ctx.nextBadge) levelLine += ` | Sıradaki rozet: ${ctx.nextBadge.icon} ${ctx.nextBadge.name}`;
+  if (ctx.hallRank !== null) levelLine += ` | Onur Listesi: **${ctx.hallRank}.** sıra`;
+  lines.push(levelLine);
+
+  // KEDİ AI'ın daha önce önerdiği plan varsa hatırlat (gerçek geçmiş)
+  if (ctx.lastTrainingPlan && ctx.lastTrainingPlan.date === todayStr()) {
+    lines.push(`📋 Bugün sana zaten bir antrenman programı önermiştim: *${ctx.lastTrainingPlan.summary}*. İstersen tekrar bakalım veya farklı bir konuya geçelim.`);
+  }
+
   lines.push(`\nNe hakkında konuşmak istersin?`);
   return lines.join(" \n");
 }
@@ -724,6 +847,7 @@ function aiRespond(
       case "water":       return handleWater(name, ctx);
       case "greeting":    return handleGreeting(name, ctx);
       case "badge":       return handleBadge(name, ctx);
+      case "ranking":     return handleRanking(name, ctx);
       case "identity":    return handleIdentity();
       case "xp":          return handleXP(name, ctx);
       case "goal":        return handleGoal(name, ctx, userMsg);
@@ -840,7 +964,9 @@ export default function BlackCatAI() {
       getHealthProfile(student.id).catch(() => null),
       getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
       getStudentXPAdjustments(student.id).catch(() => []),
-    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments]) => {
+      getStudents().catch(() => []),
+      getAllXPAdjustments().catch(() => []),
+    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments, allStudents, allAdjustments]) => {
       const sorted      = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const sortedApts  = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
       const summary     = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
@@ -853,6 +979,39 @@ export default function BlackCatAI() {
       const savedGoal = typeof window !== "undefined"
         ? localStorage.getItem("kedi_ai_goal") ?? undefined
         : undefined;
+
+      /* Rozetler */
+      const extraFlags: Record<string, boolean> = {};
+      if (typeof window !== "undefined") {
+        extraFlags["shadow-fan"] = localStorage.getItem("kedi_ai_used") === "1" || localStorage.getItem("kara_ai_used") === "1";
+      }
+      const manualXP     = sumManualXP(xpAdjustments);
+      const badges       = computeBadges(student, sortedApts, sorted, extraFlags, manualXP);
+      const earnedBadges = badges.filter(b => b.earned);
+      const nextBadge    = findNextBadge(badges);
+
+      /* Onur Listesi (Hall of Fame) sırası — heuristic: tamamlanan ders × 100 + manuel XP */
+      const hallEntries = allStudents
+        .map(s => {
+          const manualTotal = sumManualXP(allAdjustments.filter(a => a.studentId === s.id));
+          const approxXP    = Math.max(0, s.completedLessons * 100 + manualTotal);
+          return { id: s.id, xp: approxXP };
+        })
+        .filter(e => e.xp > 0);
+      const myHallIdx = hallEntries.findIndex(e => e.id === student.id);
+      if (myHallIdx !== -1) {
+        hallEntries[myHallIdx].xp = xp.breakdown.total;
+      } else if (xp.breakdown.total > 0) {
+        hallEntries.push({ id: student.id, xp: xp.breakdown.total });
+      }
+      hallEntries.sort((a, b) => b.xp - a.xp);
+      const myRankIdx = hallEntries.findIndex(e => e.id === student.id);
+      const hallRank  = myRankIdx !== -1 ? myRankIdx + 1 : null;
+      const hallTotal = hallEntries.length;
+
+      /* Ders geçmişi detayı */
+      const cancelledLessons = sortedApts.filter(a => a.status === "iptal").length;
+      const noShowLessons    = sortedApts.filter(a => a.status === "gelmedi").length;
 
       const ctx: StudentContext = {
         name:             student.fullName,
@@ -875,6 +1034,16 @@ export default function BlackCatAI() {
         seasonSummary:    summary,
         claimed5k,
         claimed10k,
+        giftRequests:     giftClaims,
+        badges,
+        earnedBadges,
+        nextBadge,
+        hallRank,
+        hallTotal,
+        cancelledLessons,
+        noShowLessons,
+        lastTrainingPlan:  loadAIPlan("training"),
+        lastNutritionPlan: loadAIPlan("nutrition"),
       };
 
       setCtx(ctx);
