@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
-  getStudentAppointments, getLessonRecords, getStudents,
-  getStudentGiftClaimsForSeason, getStudentXPAdjustments, getAllXPAdjustments,
+  getStudentAppointments, getAppointments, getLessonRecords, getStudents,
+  getStudentGiftClaimsForSeason, getGiftLessonRequestsForSeason,
+  getStudentXPAdjustments, getAllXPAdjustments, updateStudent,
 } from "@/lib/db";
 import type { Student } from "@/lib/types";
 import {
@@ -13,6 +14,12 @@ import {
   getSeasonDateRange, getSeasonLabel, getDaysUntilSeasonEnd,
   sumManualXP, XP_LEVELS, type XPLevel, type XPResult, type SeasonXPSummary,
 } from "@/lib/xp";
+import { computeBadges } from "@/lib/badges";
+import {
+  computeTechnicalAverages, compute30DayImprovement, countEarnedBadges,
+  type HallEntry,
+} from "@/lib/hallOfFame";
+import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
 import { PageHeader } from "@/app/components/ui";
 import { Zap, Crown, Trophy, Gift, Clock, ChevronRight } from "lucide-react";
 
@@ -322,58 +329,6 @@ function LifetimeXPCard({ xpResult }: { xpResult: XPResult }) {
   );
 }
 
-/* ── Hall of Fame ─────────────────────────────────────────────────── */
-
-interface HallEntry { name: string; xp: number; level: XPLevel; isMe: boolean; }
-
-function HallOfFame({ entries }: { entries: HallEntry[] }) {
-  const top = entries.slice(0, 5);
-  const rankStyle: Record<number, { bg: string; border: string; color: string; badge: string }> = {
-    0: { bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.4)", color: "#FBBF24", badge: "🥇" },
-    1: { bg: "rgba(209,213,219,0.07)", border: "rgba(209,213,219,0.3)", color: "#D1D5DB", badge: "🥈" },
-    2: { bg: "rgba(205,127,50,0.07)", border: "rgba(205,127,50,0.3)", color: "#CD7F32", badge: "🥉" },
-  };
-
-  return (
-    <div className="p-5 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)", borderRadius: 2 }}>
-      <div className="flex items-center gap-2 mb-4">
-        <Trophy size={16} style={{ color: "#FBBF24" }} />
-        <span className="text-sm font-bold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-bebas)", letterSpacing: "0.15em" }}>
-          Onur Listesi — Ömür Boyu XP
-        </span>
-      </div>
-      {top.length === 0 ? (
-        <p className="text-xs text-center py-4" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>Henüz sıralama yok</p>
-      ) : (
-        <div className="space-y-2">
-          {top.map((entry, i) => {
-            const rs = rankStyle[i];
-            return (
-              <motion.div key={entry.name + i}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.08 }}
-                className="flex items-center gap-3 px-3 py-2.5 rounded"
-                style={{ background: entry.isMe ? "rgba(139,92,246,0.1)" : (rs?.bg ?? "rgba(255,255,255,0.03)"), border: `1px solid ${entry.isMe ? "rgba(139,92,246,0.3)" : (rs?.border ?? "rgba(255,255,255,0.06)")}` }}>
-                <span className="text-lg w-8 flex-shrink-0 text-center">{rs?.badge ?? `${i + 1}.`}</span>
-                <span className="text-xl flex-shrink-0">{entry.level.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold truncate" style={{ color: entry.isMe ? "#C4B5FD" : "rgba(255,255,255,0.75)", fontFamily: "var(--font-barlow-condensed)" }}>
-                    {entry.name} {entry.isMe && <span style={{ color: "#8B5CF6" }}>(Sen)</span>}
-                  </div>
-                  <div className="text-[10px]" style={{ color: entry.level.colorPrimary, fontFamily: "var(--font-barlow-condensed)" }}>{entry.level.name}</div>
-                </div>
-                <span className="text-sm font-black tabular-nums" style={{ color: rs?.color ?? "rgba(255,255,255,0.4)", fontFamily: "var(--font-bebas)" }}>
-                  {entry.xp.toLocaleString()}
-                </span>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ── Ana sayfa ───────────────────────────────────────────────────── */
 
@@ -384,10 +339,18 @@ export default function SeviyeMerkeziPage() {
   const [claimed10k, setClaimed10k] = useState(false);
   const [hallEntries, setHallEntries] = useState<HallEntry[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [showInHall, setShowInHall] = useState(true);
+  const [savingPref, setSavingPref] = useState(false);
 
   useEffect(() => {
     if (!student) return;
     const season = getCurrentSeason();
+    setShowInHall(student.showInHallOfFame !== false);
+
+    const extraFlags: Record<string, boolean> = {};
+    if (typeof window !== "undefined") {
+      extraFlags["shadow-fan"] = localStorage.getItem("kedi_ai_used") === "1" || localStorage.getItem("kara_ai_used") === "1";
+    }
 
     Promise.all([
       getStudentAppointments(student.id),
@@ -396,38 +359,66 @@ export default function SeviyeMerkeziPage() {
       getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
       getStudentXPAdjustments(student.id).catch(() => []),
       getAllXPAdjustments().catch(() => []),
-    ]).then(([apts, recs, allStudents, giftClaims, xpAdjustments, allAdjustments]) => {
+      getAppointments().catch(() => []),
+      getLessonRecords().catch(() => []),
+      getGiftLessonRequestsForSeason(season).catch(() => []),
+    ]).then(([apts, recs, allStudents, giftClaims, xpAdjustments, allAdjustments, allAppointments, allRecords, seasonGiftRequests]) => {
       const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const result = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
       setSummary(result);
       setClaimed5k(giftClaims.some(c => c.threshold === 5000));
       setClaimed10k(giftClaims.some(c => c.threshold === 10000));
 
-      // Hall of Fame: ömür boyu XP için tüm öğrenciler
-      // (heuristic: tamamlanan ders × 100 + manuel XP düzeltmeleri toplamı)
+      // Onur Listesi: gizliliği kapatmamış tüm öğrenciler için gerçek veriler
       const entries: HallEntry[] = allStudents
+        .filter(s => s.showInHallOfFame !== false)
         .map(s => {
-          const manualTotal = sumManualXP(allAdjustments.filter(a => a.studentId === s.id));
-          const approxXP    = Math.max(0, s.completedLessons * 100 + manualTotal);
-          const levelInfo   = getLevelForXP(approxXP);
-          return { name: s.fullName, xp: approxXP, level: levelInfo.current, isMe: s.id === student.id };
-        })
-        .filter(e => e.xp > 0)
-        .sort((a, b) => b.xp - a.xp);
+          const isMe        = s.id === student.id;
+          const sApts       = allAppointments.filter(a => a.studentId === s.id);
+          const sRecsSorted = [...allRecords.filter(r => r.studentId === s.id)].sort((a, b) => b.date.localeCompare(a.date));
+          const sAdjustments= allAdjustments.filter(a => a.studentId === s.id);
+          const manualXP    = sumManualXP(sAdjustments);
 
-      // Kendi gerçek ömür boyu XP'sini güncelle (seri/gelişim bonusları dahil)
-      const myIdx = entries.findIndex(e => e.isMe);
-      if (myIdx !== -1) {
-        entries[myIdx].xp    = result.lifetimeResult.breakdown.total;
-        entries[myIdx].level = result.lifetimeResult.level.current;
-      } else if (result.lifetimeResult.breakdown.total > 0) {
-        entries.push({ name: student.fullName, xp: result.lifetimeResult.breakdown.total, level: result.lifetimeResult.level.current, isMe: true });
-      }
-      entries.sort((a, b) => b.xp - a.xp);
+          const xpResult = isMe
+            ? result.lifetimeResult
+            : computeFullXP(s.completedLessons, sApts, sRecsSorted, season, sAdjustments).lifetimeResult;
+
+          const badges = computeBadges(s, sApts, sRecsSorted, isMe ? extraFlags : {}, manualXP);
+          const sGiftRequests = seasonGiftRequests.filter(g => g.studentId === s.id);
+
+          const entry: HallEntry = {
+            studentId:        s.id,
+            name:             s.fullName,
+            isMe,
+            xp:               xpResult.breakdown.total,
+            level:            xpResult.level.current,
+            completedLessons: s.completedLessons,
+            badgeCount:       countEarnedBadges(badges),
+            technical:        computeTechnicalAverages(sRecsSorted),
+            improvement:      compute30DayImprovement(sRecsSorted),
+            giftEligible:     sGiftRequests.length > 0,
+            giftClaimed:      sGiftRequests.some(g => g.status === "approved"),
+            featured:         s.hallFeatured ?? false,
+            studentOfMonth:   s.isStudentOfMonth ?? false,
+          };
+          return entry;
+        })
+        .filter(e => e.xp > 0 || e.completedLessons > 0);
+
       setHallEntries(entries);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [student]);
+
+  const togglePrivacy = () => {
+    if (!student || savingPref) return;
+    const next = !showInHall;
+    setShowInHall(next);
+    setSavingPref(true);
+    updateStudent(student.id, { showInHallOfFame: next })
+      .catch(() => setShowInHall(!next))
+      .finally(() => setSavingPref(false));
+  };
 
   if (loading || !summary) {
     return (
@@ -479,8 +470,53 @@ export default function SeviyeMerkeziPage() {
         </div>
       </div>
 
-      {/* ── Hall of Fame ────────────────────────────────────────── */}
-      {hallEntries.length > 0 && <HallOfFame entries={hallEntries} />}
+      {/* ── Onur Listesi (Hall of Fame) Premium ─────────────────── */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+          <span className="text-xs uppercase tracking-widest px-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}>
+            Onur Listesi
+          </span>
+          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+        </div>
+
+        {/* Gizlilik tercihi */}
+        <button
+          onClick={togglePrivacy}
+          disabled={savingPref}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 mb-4 border transition-all duration-200"
+          style={{
+            background: "rgba(255,255,255,0.02)", borderColor: "rgba(139,92,246,0.15)",
+            borderRadius: 4, opacity: savingPref ? 0.6 : 1, cursor: savingPref ? "wait" : "pointer",
+          }}
+        >
+          <div className="text-left">
+            <div className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.04em" }}>
+              Onur Listesi&apos;nde görünmek istiyorum
+            </div>
+            <div className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+              Kapatırsan adın hiçbir sıralamada görünmez
+            </div>
+          </div>
+          <div
+            className="relative flex-shrink-0 transition-all duration-200"
+            style={{
+              width: 42, height: 24, borderRadius: 999,
+              background: showInHall ? "linear-gradient(90deg, #7C3AED, #A78BFA)" : "rgba(255,255,255,0.08)",
+              border: `1px solid ${showInHall ? "rgba(167,139,250,0.5)" : "rgba(255,255,255,0.12)"}`,
+              boxShadow: showInHall ? "0 0 12px rgba(139,92,246,0.4)" : "none",
+            }}
+          >
+            <motion.div
+              className="absolute top-0.5 w-[18px] h-[18px] rounded-full bg-white"
+              animate={{ left: showInHall ? 21 : 3 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </div>
+        </button>
+
+        {hallEntries.length > 0 && <HallOfFamePremium entries={hallEntries} />}
+      </div>
     </div>
   );
 }

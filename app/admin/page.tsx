@@ -9,14 +9,19 @@ import {
   adminCancelAppointment, getLessonRecords,
   getPendingGiftLessonRequests, approveGiftLessonRequest, rejectGiftLessonRequest,
   getGiftLessonRequestsForSeason, createGiftLessonRequest, getAllGiftLessonRequests,
-  getAllXPAdjustments, createXPAdjustment, getStudentXPAdjustments,
+  getAllXPAdjustments, createXPAdjustment, getStudentXPAdjustments, updateStudent,
 } from "@/lib/db";
 import { getSeasonLabel, computeFullXP, getLevelForXP, getCurrentSeason } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
+import {
+  computeTechnicalAverages, compute30DayImprovement, countEarnedBadges,
+  type HallEntry,
+} from "@/lib/hallOfFame";
+import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
 import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord, XPAdjustment } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea, Input, Select } from "@/app/components/ui";
 import { STATUS_LABELS, TRAINER_NAME } from "@/lib/constants";
-import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap, Plus, Minus, History } from "lucide-react";
+import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap, Plus, Minus, History, Crown, Award, Sparkles } from "lucide-react";
 import { useToast } from "@/app/components/shared/Toast";
 
 const XP_REASONS = [
@@ -285,6 +290,55 @@ export default function AdminDashboard() {
     { key: "diamond",     label: "💎 Elmas Sporcu" },
     { key: "legend",      label: "👑 Efsane Sporcu" },
   ];
+
+  /* ── Onur Listesi (Hall of Fame) — canlı önizleme ─────────── */
+  const hallEntries: HallEntry[] = useMemo(() => {
+    return xpRows
+      .filter(row => row.student.showInHallOfFame !== false)
+      .map(row => {
+        const { student: s, lifetimeXP, level, badges } = row;
+        const recs = allRecords.filter(r => r.studentId === s.id);
+        const sortedRecs = [...recs].sort((a, b) => b.date.localeCompare(a.date));
+        const myGifts = seasonGifts.filter(g => g.studentId === s.id);
+        const entry: HallEntry = {
+          studentId:        s.id,
+          name:             s.fullName,
+          isMe:             false,
+          xp:               lifetimeXP,
+          level:            level.current,
+          completedLessons: s.completedLessons,
+          badgeCount:       badges.length,
+          technical:        computeTechnicalAverages(sortedRecs),
+          improvement:      compute30DayImprovement(sortedRecs),
+          giftEligible:     myGifts.length > 0,
+          giftClaimed:      myGifts.some(g => g.status === "approved"),
+          featured:         s.hallFeatured ?? false,
+          studentOfMonth:   s.isStudentOfMonth ?? false,
+        };
+        return entry;
+      })
+      .filter(e => e.xp > 0 || e.completedLessons > 0);
+  }, [xpRows, allRecords, seasonGifts]);
+
+  const [hallBusy, setHallBusy] = useState<string | null>(null);
+
+  const toggleHallFeature = async (s: Student, key: "hallFeatured" | "isStudentOfMonth") => {
+    setHallBusy(s.id + key);
+    const next = !(s[key] ?? false);
+    const ok = await updateStudent(s.id, { [key]: next }).then(() => true).catch(() => false);
+    if (ok) {
+      setStudents(prev => prev.map(st => st.id === s.id ? { ...st, [key]: next } : st));
+      toast(
+        key === "hallFeatured"
+          ? (next ? `${s.fullName} Onur Listesi'nde öne çıkarıldı.` : `${s.fullName} için öne çıkarma kaldırıldı.`)
+          : (next ? `${s.fullName} Ayın Sporcusu seçildi! 🌟` : `${s.fullName} için Ayın Sporcusu seçimi kaldırıldı.`),
+        "success",
+      );
+    } else {
+      toast("İşlem başarısız oldu, tekrar dene.", "error");
+    }
+    setHallBusy(null);
+  };
 
   /* ── Manuel XP işlemleri ──────────────────────────────────── */
   const openXPAdjust = (student: Student, mode: "add" | "subtract") => {
@@ -814,6 +868,85 @@ export default function AdminDashboard() {
                   </div>
                 );
               })}
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* ── Onur Listesi (Hall of Fame) Yönetimi ───────────────── */}
+      {students.length > 0 && (
+        <motion.div variants={fadeUp}>
+          <Card className="p-4 sm:p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <Crown size={18} style={{ color: "#FBBF24" }} />
+              <h3 className="text-lg sm:text-xl font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                Onur Listesi Yönetimi
+              </h3>
+              <span className="text-xs text-white/30 ml-auto" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {hallEntries.length} öğrenci listede
+              </span>
+            </div>
+
+            {/* Öne çıkarma / Ayın Sporcusu kontrolleri */}
+            <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
+              {students
+                .filter(s => s.showInHallOfFame !== false)
+                .sort((a, b) => Number(b.hallFeatured ?? false) - Number(a.hallFeatured ?? false) || a.fullName.localeCompare(b.fullName))
+                .map(s => {
+                  const featuredBusy = hallBusy === s.id + "hallFeatured";
+                  const monthBusy    = hallBusy === s.id + "isStudentOfMonth";
+                  return (
+                    <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 bg-steel/30 border border-white/5 flex-wrap">
+                      <span className="text-xs text-white/70 truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        {s.fullName}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => toggleHallFeature(s, "hallFeatured")}
+                          disabled={featuredBusy}
+                          className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold tracking-wider transition-colors"
+                          style={{
+                            border: `1px solid ${s.hallFeatured ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.1)"}`,
+                            color: s.hallFeatured ? "#C4B5FD" : "rgba(255,255,255,0.35)",
+                            background: s.hallFeatured ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.03)",
+                            fontFamily: "var(--font-barlow-condensed)",
+                            opacity: featuredBusy ? 0.5 : 1,
+                          }}
+                        >
+                          <Award size={11} /> {s.hallFeatured ? "Öne Çıkan ✓" : "Öne Çıkar"}
+                        </button>
+                        <button
+                          onClick={() => toggleHallFeature(s, "isStudentOfMonth")}
+                          disabled={monthBusy}
+                          className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold tracking-wider transition-colors"
+                          style={{
+                            border: `1px solid ${s.isStudentOfMonth ? "rgba(244,114,182,0.5)" : "rgba(255,255,255,0.1)"}`,
+                            color: s.isStudentOfMonth ? "#F9A8D4" : "rgba(255,255,255,0.35)",
+                            background: s.isStudentOfMonth ? "rgba(244,114,182,0.14)" : "rgba(255,255,255,0.03)",
+                            fontFamily: "var(--font-barlow-condensed)",
+                            opacity: monthBusy ? 0.5 : 1,
+                          }}
+                        >
+                          <Sparkles size={11} /> {s.isStudentOfMonth ? "Ayın Sporcusu ✓" : "Ayın Sporcusu Yap"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Canlı önizleme */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-px flex-1 bg-white/5" />
+                <span className="text-[10px] uppercase tracking-widest text-white/25" style={{ fontFamily:"var(--font-bebas)", letterSpacing:"0.2em" }}>
+                  Canlı Önizleme — Öğrenciler Bunu Görüyor
+                </span>
+                <div className="h-px flex-1 bg-white/5" />
+              </div>
+              {hallEntries.length > 0
+                ? <HallOfFamePremium entries={hallEntries} />
+                : <p className="text-center text-xs text-white/20 py-6" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Henüz sıralanacak öğrenci verisi yok</p>}
             </div>
           </Card>
         </motion.div>

@@ -54,6 +54,9 @@ const ms = (r: any): Student => ({
   weight: r.weight ?? undefined, age: r.age ?? undefined, createdAt: r.created_at ?? "",
   subscriptionType: (r.subscription_type ?? "lesson_pack") as import("./types").SubscriptionType,
   monthlyFee: r.monthly_fee != null ? Number(r.monthly_fee) : undefined,
+  showInHallOfFame: r.show_in_hall_of_fame ?? true,
+  hallFeatured: r.hall_featured ?? false,
+  isStudentOfMonth: r.is_student_of_month ?? false,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,6 +166,9 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.age              !== undefined) r.age                = s.age;
   if (s.subscriptionType !== undefined) r.subscription_type  = s.subscriptionType;
   if (s.monthlyFee       !== undefined) r.monthly_fee        = s.monthlyFee ?? null;
+  if (s.showInHallOfFame !== undefined) r.show_in_hall_of_fame = s.showInHallOfFame;
+  if (s.hallFeatured     !== undefined) r.hall_featured        = s.hallFeatured;
+  if (s.isStudentOfMonth !== undefined) r.is_student_of_month  = s.isStudentOfMonth;
   return r;
 }
 

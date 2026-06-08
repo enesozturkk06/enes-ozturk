@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
@@ -21,11 +22,17 @@ import { tr } from "date-fns/locale";
 
 /* ── Tipler ───────────────────────────────────────────────────────── */
 
+interface ActionLink {
+  label: string;
+  href:  string;
+}
+
 interface Msg {
-  id:   string;
-  role: "ai" | "user";
-  text: string;
-  ts:   number;
+  id:    string;
+  role:  "ai" | "user";
+  text:  string;
+  ts:    number;
+  links?: ActionLink[];
 }
 
 /* ── Kedi SVG ikonu ───────────────────────────────────────────────── */
@@ -183,6 +190,45 @@ function detectIntent(msg: string): Intent {
   if (/hedef|amacım|neden geli|antrenman amac|ne için/.test(msg))                                     return "goal";
   if (/nasıl randevu|nereden randevu|iptal kural|18 saat|paket nasıl|rozet nasıl|uygulama|ne yapabil|ai antrenman|ai diyet|nasıl kullan|ne işe yar/.test(msg)) return "appinfo";
   return "default";
+}
+
+/* ── Yönlendirme butonları ────────────────────────────────────────── */
+
+const ACTION_LINKS: Record<string, ActionLink> = {
+  appointment:   { label: "Randevu Al",       href: "/ogrenci/randevu" },
+  level:         { label: "Seviye Merkezim",  href: "/ogrenci/seviye" },
+  badges:        { label: "Rozetlerim",       href: "/ogrenci/rozetler" },
+  progress:      { label: "Gelişimim",        href: "/ogrenci/gelisim" },
+  training:      { label: "AI Antrenman",     href: "/ogrenci/antrenman" },
+  nutrition:     { label: "AI Diyet",         href: "/ogrenci/saglik" },
+  notifications: { label: "Bildirimler",      href: "/ogrenci/bildirimler" },
+  shop:          { label: "Mağaza",           href: "/magaza" },
+  lessons:       { label: "Kalan Derslerim",  href: "/ogrenci" },
+};
+
+/** İlgili yönlendirme butonlarını intent + mesaj içeriğine göre seç (tekrarsız) */
+function getActionLinks(intent: Intent, msg: string): ActionLink[] {
+  const links: ActionLink[] = [];
+  switch (intent) {
+    case "appointment": links.push(ACTION_LINKS.appointment); break;
+    case "xp":
+    case "badge":
+    case "ranking":     links.push(ACTION_LINKS.level, ACTION_LINKS.badges); break;
+    case "progress":
+    case "technical":   links.push(ACTION_LINKS.progress); break;
+    case "training":    links.push(ACTION_LINKS.training); break;
+    case "nutrition":   links.push(ACTION_LINKS.nutrition); break;
+    case "lesson":      links.push(ACTION_LINKS.lessons); break;
+  }
+  if (/randevu al|randevu oluştur/.test(msg)) links.push(ACTION_LINKS.appointment);
+  if (/mağaza|market|ürün|satın al/.test(msg)) links.push(ACTION_LINKS.shop);
+  if (/bildirim|duyuru/.test(msg)) links.push(ACTION_LINKS.notifications);
+  if (/seviye|level/.test(msg)) links.push(ACTION_LINKS.level);
+  if (/rozet|ödül/.test(msg)) links.push(ACTION_LINKS.badges);
+
+  // tekrarsız hale getir (href bazlı)
+  const seen = new Set<string>();
+  return links.filter(l => (seen.has(l.href) ? false : (seen.add(l.href), true)));
 }
 
 /* ── Intent handler'ları ─────────────────────────────────────────── */
@@ -492,8 +538,12 @@ function handleNutrition(
   const hasGoal   = Boolean(ctx.goal);
 
   if (!hasWeight) {
+    const missing: string[] = ["kilo"];
+    if (!ctx.height) missing.push("boy");
+    if (!ctx.age)    missing.push("yaş");
+    if (!hasGoal)    missing.push("hedef (kilo verme / kilo alma / kondisyon / maç hazırlığı)");
     return {
-      reply: `${name}, sana **kişisel** beslenme planı yapabilmem için birkaç bilgiye ihtiyacım var:\n\n📝 Şunu yaz: **"70 kg, kilo vermek istiyorum"** (kilonu ve hedefini)\n\nYa da: **"75 kg, maça hazırlanıyorum"**\n\nBilgilerinle birlikte kalori, protein ve karbonhidrat hedefini hesaplayacağım!`,
+      reply: `${name}, kafama göre uydurmuş bir diyet vermem — sana **gerçekten kişisel** bir plan yapabilmem için şunlara ihtiyacım var: **${missing.join(", ")}**.\n\n📝 Şöyle yaz: **"70 kg, 175 cm, 17 yaşındayım, kilo vermek istiyorum"**\n\nYa da kısaca: **"75 kg, maça hazırlanıyorum"** — en azından kilo ve hedefini bilmem lazım, gerisini sağlık profilinden tamamlarım.\n\nBunlarla birlikte kalori, protein ve karbonhidrat hedeflerini antrenman durumuna göre hesaplayacağım!`,
       nextPending: "nutrition_profile",
     };
   }
@@ -821,19 +871,22 @@ function aiRespond(
   ctx: StudentContext,
   _history: Msg[],
   pendingIntent: string | null,
-): { reply: string; nextPending?: string } {
+): { reply: string; nextPending?: string; links?: ActionLink[] } {
   const msg    = userMsg.toLowerCase();
   const name   = ctx.name.split(" ")[0];
 
   // Multi-turn: Beslenme sorusu yanıt bekliyor
   if (pendingIntent?.startsWith("nutrition")) {
-    return handleNutrition(name, ctx, pendingIntent, userMsg);
+    const r = handleNutrition(name, ctx, pendingIntent, userMsg);
+    return { ...r, links: getActionLinks("nutrition", msg) };
   }
 
   const intent = detectIntent(msg);
+  const links  = getActionLinks(intent, msg);
 
   if (intent === "nutrition") {
-    return handleNutrition(name, ctx, null, userMsg);
+    const r = handleNutrition(name, ctx, null, userMsg);
+    return { ...r, links };
   }
 
   const reply = (() => {
@@ -856,12 +909,13 @@ function aiRespond(
     }
   })();
 
-  return { reply };
+  return { reply, links: links.length ? links : undefined };
 }
 
 /* ── Mesaj bubble ─────────────────────────────────────────────────── */
 
 function MsgBubble({ msg }: { msg: Msg }) {
+  const router = useRouter();
   const parsed = msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
       ? <strong key={i} style={{ color: "#C4B5FD" }}>{part.slice(2, -2)}</strong>
@@ -880,10 +934,32 @@ function MsgBubble({ msg }: { msg: Msg }) {
           style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)" }}>
           <CatIcon size={20} />
         </div>
-        <div className="max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-          style={{ background:"rgba(139,92,246,0.1)", border:"1px solid rgba(139,92,246,0.2)",
-            color:"rgba(255,255,255,0.85)", fontFamily:"var(--font-inter)", borderRadius:"0 12px 12px 12px" }}>
-          {parsed}
+        <div className="max-w-[85%] flex flex-col gap-2 items-start">
+          <div className="px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
+            style={{ background:"rgba(139,92,246,0.1)", border:"1px solid rgba(139,92,246,0.2)",
+              color:"rgba(255,255,255,0.85)", fontFamily:"var(--font-inter)", borderRadius:"0 12px 12px 12px" }}>
+            {parsed}
+          </div>
+          {msg.links && msg.links.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap">
+              {msg.links.map(link => (
+                <button
+                  key={link.href}
+                  onClick={() => router.push(link.href)}
+                  className="text-[11px] px-3 py-1.5 transition-all duration-200 rounded-md"
+                  style={{
+                    fontFamily: "var(--font-barlow-condensed)",
+                    letterSpacing: "0.06em",
+                    background: "rgba(139,92,246,0.16)",
+                    border: "1px solid rgba(139,92,246,0.4)",
+                    color: "#C4B5FD",
+                  }}
+                >
+                  {link.label} →
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </motion.div>
     );
@@ -1092,9 +1168,9 @@ export default function BlackCatAI() {
     setInput("");
     setTyping(true);
     setTimeout(() => {
-      const { reply, nextPending } = aiRespond(userMsg.text, ctx, msgs, pendingIntent);
+      const { reply, nextPending, links } = aiRespond(userMsg.text, ctx, msgs, pendingIntent);
       setPendingIntent(nextPending ?? null);
-      setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now() }]);
+      setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links }]);
       setTyping(false);
     }, 600 + Math.random() * 800);
   }, [input, ctx, msgs, pendingIntent]);
@@ -1279,9 +1355,9 @@ export default function BlackCatAI() {
                             setMsgs(prev => [...prev, userMsg]);
                             setTyping(true);
                             setTimeout(() => {
-                              const { reply, nextPending: np } = aiRespond(q, ctx, msgs, null);
+                              const { reply, nextPending: np, links } = aiRespond(q, ctx, msgs, null);
                               setPendingIntent(np ?? null);
-                              setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now() }]);
+                              setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links }]);
                               setTyping(false);
                             }, 700 + Math.random() * 600);
                           }}

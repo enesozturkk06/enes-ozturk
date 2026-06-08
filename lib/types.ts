@@ -21,6 +21,12 @@ export interface Student {
   subscriptionType?: SubscriptionType;
   /** Aylık üyelik aylık tutarı */
   monthlyFee?: number;
+  /** Onur Listesi'nde (Hall of Fame) görünmek istiyor mu — default: true */
+  showInHallOfFame?: boolean;
+  /** Admin tarafından Onur Listesi'nde manuel öne çıkarılmış mı */
+  hallFeatured?: boolean;
+  /** Admin tarafından "Ayın Sporcusu" olarak seçilmiş mi */
+  isStudentOfMonth?: boolean;
 }
 
 export interface TimeSlot {
