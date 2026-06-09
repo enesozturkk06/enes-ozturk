@@ -73,6 +73,27 @@ function Avatar({ entry, className = "w-9 h-9 text-[13px]", ringColor }: {
 }) {
   const ps   = premiumStyle(entry);
   const ring = ringColor ?? ps.ring;
+
+  if (entry.avatarUrl) {
+    return (
+      <div
+        className={`relative rounded-full flex-shrink-0 overflow-hidden ${className}`}
+        style={{
+          border:    `2px solid ${ring}`,
+          boxShadow: `0 0 12px ${ring}55`,
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={entry.avatarUrl}
+          alt={entry.name}
+          className="w-full h-full object-cover"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`relative flex items-center justify-center rounded-full flex-shrink-0 font-bold ${className}`}

@@ -100,6 +100,8 @@ export interface HallEntry {
   /* Admin öne çıkarma / ayın sporcusu */
   featured:         boolean;
   studentOfMonth:   boolean;
+  /** Profil fotoğrafı URL (Supabase Storage) */
+  avatarUrl?:       string;
 }
 
 /* ── Premium kategoriler ──────────────────────────────────────────── */

@@ -57,6 +57,7 @@ const ms = (r: any): Student => ({
   showInHallOfFame: r.show_in_hall_of_fame ?? true,
   hallFeatured: r.hall_featured ?? false,
   isStudentOfMonth: r.is_student_of_month ?? false,
+  avatarUrl: r.avatar_url ?? undefined,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,6 +170,7 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.showInHallOfFame !== undefined) r.show_in_hall_of_fame = s.showInHallOfFame;
   if (s.hallFeatured     !== undefined) r.hall_featured        = s.hallFeatured;
   if (s.isStudentOfMonth !== undefined) r.is_student_of_month  = s.isStudentOfMonth;
+  if (s.avatarUrl        !== undefined) r.avatar_url            = s.avatarUrl ?? null;
   return r;
 }
 
@@ -1556,6 +1558,74 @@ export async function getAllXPAdjustments(): Promise<XPAdjustment[]> {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   App Settings
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** Uygulama ayarı oku */
+export async function getAppSetting(key: string): Promise<string | null> {
+  const { data, error } = await db()
+    .from("app_settings")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  if (error) { console.error("[getAppSetting]", error.message); return null; }
+  return data?.value ?? null;
+}
+
+/** Uygulama ayarı güncelle/oluştur */
+export async function setAppSetting(key: string, value: string): Promise<void> {
+  const { error } = await db()
+    .from("app_settings")
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) console.error("[setAppSetting]", error.message);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Profil Fotoğrafı (Supabase Storage)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Öğrenci profil fotoğrafını Supabase Storage'a yükle ve student kaydını güncelle.
+ * @returns Public URL veya null (hata durumunda)
+ */
+export async function uploadStudentAvatar(
+  studentId: string,
+  file: Blob,
+  contentType: string,
+): Promise<string | null> {
+  const client = db();
+  const path   = `${studentId}/avatar.jpg`;
+
+  // Eski fotoğrafı sil (hata yoksa devam et)
+  await client.storage.from("avatars").remove([path]).catch(() => {});
+
+  const { error: upErr } = await client.storage
+    .from("avatars")
+    .upload(path, file, { contentType, upsert: true });
+
+  if (upErr) { console.error("[uploadStudentAvatar]", upErr.message); return null; }
+
+  const { data } = client.storage.from("avatars").getPublicUrl(path);
+  const publicUrl = data.publicUrl + `?v=${Date.now()}`; // cache bust
+
+  // Student tablosuna kaydet
+  const { error: dbErr } = await client
+    .from("students")
+    .update({ avatar_url: publicUrl })
+    .eq("id", studentId);
+  if (dbErr) console.error("[uploadStudentAvatar] DB update:", dbErr.message);
+
+  return publicUrl;
+}
+
+/** Öğrenci profil fotoğrafını sil */
+export async function deleteStudentAvatar(studentId: string): Promise<void> {
+  const client = db();
+  await client.storage.from("avatars").remove([`${studentId}/avatar.jpg`]);
+  await client.from("students").update({ avatar_url: null }).eq("id", studentId);
+}
+
+/* ════════════════════════════════════════════════════════════════════
    Kedi AI Görev Sistemi
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -1620,17 +1690,32 @@ export async function getStudentMissionCompletions(studentId: string): Promise<S
   return new Set((data ?? []).map((r: any) => r.mission_key as string));
 }
 
-/** Görev tamamlama kaydı ekle (UPSERT — çift eklemeyi engeller) */
+/**
+ * Görev tamamlama kaydı ekle.
+ * Çift eklemeyi engellemek için UPSERT + ignoreDuplicates kullanır.
+ * @returns true  → yeni kayıt eklendi (XP & bildirim verilmeli)
+ * @returns false → kayıt zaten vardı (XP & bildirim VERME)
+ */
 export async function recordMissionCompletion(
   studentId: string,
   missionKey: string,
   xpAmount: number,
-): Promise<void> {
-  const { error } = await db().from("kedi_mission_completions").upsert(
-    { student_id: studentId, mission_key: missionKey, xp_amount: xpAmount },
-    { onConflict: "student_id,mission_key" },
-  );
-  if (error) console.error("[recordMissionCompletion]", error.message);
+): Promise<boolean> {
+  // ignoreDuplicates: true → çakışırsa satır güncellenmez, data boş döner
+  const { data, error } = await db()
+    .from("kedi_mission_completions")
+    .upsert(
+      { student_id: studentId, mission_key: missionKey, xp_amount: xpAmount },
+      { onConflict: "student_id,mission_key", ignoreDuplicates: true },
+    )
+    .select("id");
+  if (error) {
+    console.error("[recordMissionCompletion]", error.message);
+    return false; // hata durumunda XP verme
+  }
+  // data.length > 0 → satır yeni eklendi
+  // data.length === 0 → çakışma nedeniyle ignore edildi (zaten vardı)
+  return Array.isArray(data) && data.length > 0;
 }
 
 /* ══════════════════════════════════════════════════════════

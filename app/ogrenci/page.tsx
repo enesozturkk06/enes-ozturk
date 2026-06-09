@@ -11,9 +11,10 @@ import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components
 import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS } from "@/lib/constants";
 import {
   Calendar, Clock, TrendingUp, BookOpen, Bell,
-  CheckCircle, XCircle, ChevronRight, Users, Zap,
+  CheckCircle, XCircle, ChevronRight, Users, Zap, User,
 } from "lucide-react";
 import Link from "next/link";
+import ActivityFeed from "@/app/components/shared/ActivityFeed";
 import { format, parseISO, isFuture, differenceInHours } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -119,6 +120,11 @@ export default function OgrenciDashboard() {
           subtitle={`${student.code} · ${pkg?.name ?? ""} Paketi`}
           accent="Öğrenci Paneli"
         />
+      </motion.div>
+
+      {/* Canlı aktivite akışı */}
+      <motion.div variants={fadeUp}>
+        <ActivityFeed />
       </motion.div>
 
       {/* Bekleyen Düet Davetleri */}
@@ -398,12 +404,13 @@ export default function OgrenciDashboard() {
 
       {/* Hızlı erişim */}
       <motion.div variants={fadeUp}>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { href:"/ogrenci/randevu",   label:"Randevu Al",       icon:<Calendar size={20}/>,   color:"crimson" },
             { href:"/ogrenci/gelisim",   label:"Gelişimim",        icon:<TrendingUp size={20}/>,  color:"gold"    },
             { href:"/ogrenci/antrenman", label:"AI Antrenman",     icon:<BookOpen size={20}/>,    color:"crimson" },
             { href:"/ogrenci/seviye",    label:"Seviye Merkezi",   icon:<Zap size={20}/>,         color:"violet"  },
+            { href:"/ogrenci/profil",    label:"Profilim",         icon:<User size={20}/>,        color:"violet"  },
             { href:"/ogrenci/bildirimler",label:"Bildirimler",     icon:<Bell size={20}/>,        color:"gold"    },
           ].map(({ href, label, icon, color }) => (
             <Link key={href} href={href}>

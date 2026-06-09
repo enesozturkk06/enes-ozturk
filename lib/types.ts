@@ -27,6 +27,8 @@ export interface Student {
   hallFeatured?: boolean;
   /** Admin tarafından "Ayın Sporcusu" olarak seçilmiş mi */
   isStudentOfMonth?: boolean;
+  /** Supabase Storage'daki profil fotoğrafı URL'si */
+  avatarUrl?: string;
 }
 
 export interface TimeSlot {

@@ -20,6 +20,7 @@ import {
   type HallEntry,
 } from "@/lib/hallOfFame";
 import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
+import CircularXP from "@/app/components/shared/CircularXP";
 import { PageHeader } from "@/app/components/ui";
 import { Zap, Crown, Trophy, Gift, Clock, ChevronRight, ChevronDown } from "lucide-react";
 import { triggerConfetti } from "@/app/components/shared/ConfettiEffect";
@@ -177,9 +178,29 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
         </div>
       </div>
 
-      {/* Sezon XP barları */}
-      <div className="space-y-3 mb-4">
-        <XPBar result={seasonResult} label={`Bu sezon XP — ${currentLevel.icon} ${currentLevel.shortName}`} color={currentLevel.colorPrimary} maxThreshold={Math.max(10000, seasonTotal + 1000)} />
+      {/* Sezon XP — dairesel + bar */}
+      <div className="flex items-center gap-4 mb-4">
+        <CircularXP
+          xp={seasonTotal}
+          maxXP={Math.max(10000, seasonTotal + 500)}
+          color={currentLevel.colorPrimary}
+          gradFrom={currentLevel.gradFrom}
+          gradTo={currentLevel.gradTo}
+          size={120}
+        />
+        <div className="flex-1 min-w-0 space-y-3">
+          <XPBar result={seasonResult} label={`${currentLevel.icon} ${currentLevel.shortName}`} color={currentLevel.colorPrimary} maxThreshold={Math.max(10000, seasonTotal + 1000)} />
+          <div className="flex gap-2 flex-wrap">
+            <span className="text-[10px] px-2 py-0.5 rounded"
+              style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", color: seasonTotal >= 5000 ? "#FCD34D" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+              🥇 5K {seasonTotal >= 5000 ? "✓" : `${(5000 - seasonTotal).toLocaleString()} kaldı`}
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded"
+              style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", color: seasonTotal >= 10000 ? "#C4B5FD" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+              💎 10K {seasonTotal >= 10000 ? "✓" : `${(10000 - seasonTotal).toLocaleString()} kaldı`}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* XP dökümü */}
@@ -402,6 +423,7 @@ export default function SeviyeMerkeziPage() {
             giftClaimed:      sGiftRequests.some(g => g.status === "approved"),
             featured:         s.hallFeatured ?? false,
             studentOfMonth:   s.isStudentOfMonth ?? false,
+            avatarUrl:        s.avatarUrl,
           };
           return entry;
         })

@@ -11,6 +11,7 @@ import {
   getGiftLessonRequestsForSeason, createGiftLessonRequest, getAllGiftLessonRequests,
   getAllXPAdjustments, createXPAdjustment, getStudentXPAdjustments, updateStudent,
   getKediMissions, createKediMission, deleteKediMission,
+  getAppSetting, setAppSetting,
 } from "@/lib/db";
 import { getSeasonLabel, computeFullXP, getLevelForXP, getCurrentSeason } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
@@ -104,6 +105,10 @@ export default function AdminDashboard() {
   const [perStudentScores, setPerStudentScores] = useState<Record<string, Record<string, number>>>({});
   const [perStudentNotes,  setPerStudentNotes]  = useState<Record<string, string>>({});
 
+  /* App Settings */
+  const [activityFeedEnabled, setActivityFeedEnabled] = useState(true);
+  const [feedToggleBusy, setFeedToggleBusy] = useState(false);
+
   /* Kedi AI Görevleri */
   const [kediMissions, setKediMissions]       = useState<KediMission[]>([]);
   const [missionTitle, setMissionTitle]       = useState("");
@@ -145,6 +150,9 @@ export default function AdminDashboard() {
       setAllGiftRequests(allGifts as GiftLessonRequest[]);
       setLoading(false);
       getKediMissions().then(m => setKediMissions(m)).catch(() => {});
+      getAppSetting("activity_feed_enabled").then(v => {
+        if (v !== null) setActivityFeedEnabled(v !== "false");
+      }).catch(() => {});
       const unread = n.filter(x => !x.isRead);
       if (unread.length > 0) setLoginToast(unread[0]);
     });
@@ -373,6 +381,7 @@ export default function AdminDashboard() {
           giftClaimed:      myGifts.some(g => g.status === "approved"),
           featured:         s.hallFeatured ?? false,
           studentOfMonth:   s.isStudentOfMonth ?? false,
+          avatarUrl:        s.avatarUrl,
         };
         return entry;
       })
@@ -1032,6 +1041,60 @@ export default function AdminDashboard() {
                 ? <HallOfFamePremium entries={hallEntries} />
                 : <p className="text-center text-xs text-white/20 py-6" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Henüz sıralanacak öğrenci verisi yok</p>}
             </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* ══ Uygulama Ayarları ══ */}
+      {students.length > 0 && (
+        <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.04 }}>
+          <Card className="p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-lg">⚙️</span>
+              <h3 className="text-lg font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                Uygulama Ayarları
+              </h3>
+            </div>
+            {/* Activity Feed toggle */}
+            <button
+              onClick={async () => {
+                if (feedToggleBusy) return;
+                setFeedToggleBusy(true);
+                const next = !activityFeedEnabled;
+                setActivityFeedEnabled(next);
+                await setAppSetting("activity_feed_enabled", next ? "true" : "false").catch(() => {});
+                setFeedToggleBusy(false);
+              }}
+              disabled={feedToggleBusy}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 border transition-all duration-200 disabled:opacity-50"
+              style={{
+                background: "rgba(255,255,255,0.02)",
+                borderColor: activityFeedEnabled ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)",
+                borderRadius: 4,
+              }}
+            >
+              <div className="text-left">
+                <div className="text-sm font-semibold" style={{ color:"rgba(255,255,255,0.8)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Canlı Aktivite Akışı
+                </div>
+                <div className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Öğrenci panelinde XP / hediye ders / lider bandını göster
+                </div>
+              </div>
+              <div
+                className="relative flex-shrink-0 transition-all duration-200"
+                style={{
+                  width: 42, height: 24, borderRadius: 999,
+                  background: activityFeedEnabled ? "linear-gradient(90deg,#7C3AED,#A78BFA)" : "rgba(255,255,255,0.08)",
+                  border: `1px solid ${activityFeedEnabled ? "rgba(167,139,250,0.5)" : "rgba(255,255,255,0.12)"}`,
+                }}
+              >
+                <div
+                  className="absolute top-0.5 w-[18px] h-[18px] rounded-full bg-white transition-all duration-200"
+                  style={{ left: activityFeedEnabled ? 21 : 3 }}
+                />
+              </div>
+            </button>
           </Card>
         </motion.div>
       )}

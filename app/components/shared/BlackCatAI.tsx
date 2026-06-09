@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
@@ -978,8 +979,7 @@ function aiRespond(
 
 /* ── Mesaj bubble ─────────────────────────────────────────────────── */
 
-function MsgBubble({ msg }: { msg: Msg }) {
-  const router = useRouter();
+function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
   const parsed = msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
       ? <strong key={i} style={{ color: "#C4B5FD" }}>{part.slice(2, -2)}</strong>
@@ -1063,22 +1063,27 @@ function MsgBubble({ msg }: { msg: Msg }) {
           )}
 
           {msg.links && msg.links.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
               {msg.links.map(link => (
-                <button
+                <Link
                   key={link.href}
-                  onClick={() => router.push(link.href)}
-                  className="text-[11px] px-3 py-1.5 transition-all duration-200 rounded-md"
+                  href={link.href}
+                  onClick={onNavigate}
+                  className="inline-flex items-center text-[12px] px-4 rounded-lg transition-all duration-150 active:scale-95"
                   style={{
-                    fontFamily: "var(--font-barlow-condensed)",
+                    fontFamily:   "var(--font-barlow-condensed)",
                     letterSpacing: "0.06em",
-                    background: "rgba(139,92,246,0.16)",
-                    border: "1px solid rgba(139,92,246,0.4)",
-                    color: "#C4B5FD",
+                    background:   "rgba(139,92,246,0.18)",
+                    border:       "1px solid rgba(139,92,246,0.45)",
+                    color:        "#C4B5FD",
+                    minHeight:    "36px",
+                    touchAction:  "manipulation",
+                    WebkitTapHighlightColor: "transparent",
+                    textDecoration: "none",
                   }}
                 >
                   {link.label} →
-                </button>
+                </Link>
               ))}
             </div>
           )}
@@ -1134,6 +1139,8 @@ export default function BlackCatAI() {
   const [typing, setTyping]     = useState(false);
   const [loaded, setLoaded]     = useState(false);
   const [minimized, setMin]     = useState(false);
+  // Bu bileşen oturumu boyunca ödül verilmiş görevleri takip eder (remount koruması)
+  const awardedThisSession      = useRef<Set<string>>(new Set());
   const [pendingIntent, setPendingIntent] = useState<string | null>(null);
 
   /* Sesli komut (Web Speech API) */
@@ -1275,14 +1282,23 @@ export default function BlackCatAI() {
       };
       const missions  = computeStudentMissions(missionInput, completions, weekKey, customMissions);
 
-      // Yeni tamamlananlar için XP ödülü (background, best-effort)
+      // Yeni tamamlananlar için XP ödülü — üç katmanlı koruma:
+      // 1) m.xpAwarded → DB'de zaten var (completions set'inden)
+      // 2) awardedThisSession → aynı component oturumunda tekrar tetiklenme
+      // 3) recordMissionCompletion → false döndürürse XP verilmez (DB guard)
       missions.forEach(m => {
-        if (m.completed && !m.xpAwarded) {
-          recordMissionCompletion(student.id, m.key, m.xpReward).catch(() => {});
-          createXPAdjustment(
-            student.id, student.fullName, m.xpReward,
-            "Görev Tamamlama", m.title, "KEDİ AI", season,
-          ).catch(() => {});
+        if (m.completed && !m.xpAwarded && !awardedThisSession.current.has(m.key)) {
+          awardedThisSession.current.add(m.key); // anında işaretle, async bitmesini bekleme
+          recordMissionCompletion(student.id, m.key, m.xpReward)
+            .then(wasNew => {
+              if (wasNew) {
+                createXPAdjustment(
+                  student.id, student.fullName, m.xpReward,
+                  "Görev Tamamlama", m.title, "KEDİ AI", season,
+                ).catch(() => {});
+              }
+            })
+            .catch(() => {});
         }
       });
 
@@ -1535,7 +1551,7 @@ export default function BlackCatAI() {
                     style={{ overscrollBehavior:"contain", WebkitOverflowScrolling:"touch" } as React.CSSProperties}
                   >
                     <AnimatePresence initial={false}>
-                      {msgs.map(m => <MsgBubble key={m.id} msg={m} />)}
+                      {msgs.map(m => <MsgBubble key={m.id} msg={m} onNavigate={() => setOpen(false)} />)}
                       {typing && <TypingIndicator key="typing" />}
                     </AnimatePresence>
                     <div ref={bottomRef} />

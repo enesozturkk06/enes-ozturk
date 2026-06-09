@@ -72,6 +72,7 @@
   0%,100%{opacity:1}  92%{opacity:1}  93%{opacity:0.8}  94%{opacity:1}  96%{opacity:0.75}  97%{opacity:1}
 }
 @keyframes scroll-dot   { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(12px)} }
+@keyframes marquee      { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
 
 /* ── Utilities ─────────────────────────────────────────────── */
 @layer utilities {
@@ -83,6 +84,7 @@
   .animate-spin-reverse { animation: spin-reverse 20s linear infinite; }
   .animate-neon-pulse   { animation: neon-pulse 3s ease-in-out infinite; }
   .animate-neon-flicker { animation: neon-flicker 4s ease-in-out infinite; }
+  .animate-marquee      { animation: marquee 32s linear infinite; }
 
   .delay-100  { animation-delay: 100ms; }
   .delay-200  { animation-delay: 200ms; }
