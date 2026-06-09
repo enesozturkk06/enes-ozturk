@@ -478,6 +478,9 @@ export default function ProfilPage() {
   const gc = stats?.levelColor ?? "#8B5CF6";
   const gf = stats?.levelGradFrom ?? "#8B5CF6";
   const gt = stats?.levelGradTo ?? "#D946EF";
+  // Membership tier overrides avatar border color for sampiyon/efsane
+  const memberColor = student.packageType === "efsane" ? "#C084FC"
+    : student.packageType === "sampiyon" ? "#FBBF24" : null;
 
   const fmtXP = (v: number) => v >= 1000 ? `${(v/1000).toFixed(v%1000===0?0:1)}K` : String(v);
 
@@ -589,8 +592,10 @@ export default function ProfilPage() {
                   style={{
                     background: photoUrl ? "transparent"
                       : `radial-gradient(circle at 35% 30%, ${gc}44, ${gc}0d)`,
-                    border: `3px solid ${gc}`,
-                    boxShadow: `0 0 30px ${gc}55, 0 0 60px ${gc}22, inset 0 0 30px ${gc}11`,
+                    border: `3px solid ${memberColor ?? gc}`,
+                    boxShadow: memberColor
+                      ? `0 0 30px ${memberColor}77, 0 0 60px ${memberColor}33, inset 0 0 30px ${memberColor}22`
+                      : `0 0 30px ${gc}55, 0 0 60px ${gc}22, inset 0 0 30px ${gc}11`,
                     fontSize: 52, fontFamily: "var(--font-bebas)", color: gc,
                     letterSpacing: "0.05em",
                     textShadow: `0 0 20px ${gc}88`,
@@ -684,6 +689,28 @@ export default function ProfilPage() {
                     <span className="text-[11px] font-bold"
                       style={{ color: "#34D399", fontFamily: "var(--font-barlow-condensed)" }}>
                       {stats.badgeCount} Rozet
+                    </span>
+                  </div>
+                )}
+                {student.packageType === "sampiyon" && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+                    style={{ background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.55)", flexShrink: 0, minWidth: 0,
+                      boxShadow: "0 0 10px rgba(251,191,36,0.25)" }}>
+                    <span style={{ fontSize: 11 }}>👑</span>
+                    <span className="text-[11px] font-bold"
+                      style={{ color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.05em" }}>
+                      ALTIN ÜYE
+                    </span>
+                  </div>
+                )}
+                {student.packageType === "efsane" && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+                    style={{ background: "rgba(192,132,252,0.15)", border: "1px solid rgba(192,132,252,0.55)", flexShrink: 0, minWidth: 0,
+                      boxShadow: "0 0 10px rgba(192,132,252,0.25)" }}>
+                    <span style={{ fontSize: 11 }}>💎</span>
+                    <span className="text-[11px] font-bold"
+                      style={{ color: "#E9D5FF", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.05em" }}>
+                      PLATİNUM ÜYE
                     </span>
                   </div>
                 )}

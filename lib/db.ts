@@ -6,7 +6,7 @@ import type {
   Student, Appointment, AppointmentStudent, LessonRecord,
   Notification, NotifType, TimeSlot, Payment, CompleteResult, LessonType,
   DuetPartner, PendingInvite, SalonOwner, SalonOwnerStudent,
-  PackagePurchase, PackageType, PaymentStatus,
+  PackagePurchase, PackageType, PaymentStatus, ArenaDuel,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
@@ -1819,4 +1819,172 @@ export async function notifyWaitlistForSlot(
   // Bildirim gönderildi olarak işaretle
   const ids = entries.map(e => e.id);
   await db().from("waitlist").update({ notified: true }).in("id", ids).then(() => {});
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ARENA DÜELLO SİSTEMİ
+══════════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mDuel = (r: any): ArenaDuel => ({
+  id:             r.id,
+  challengerId:   r.challenger_id,
+  challengerName: r.challenger_name,
+  opponentId:     r.opponent_id,
+  opponentName:   r.opponent_name,
+  wagerXP:        Number(r.wager_xp ?? 0),
+  rewardXP:       r.reward_xp != null ? Number(r.reward_xp) : null,
+  status:         r.status,
+  winnerId:       r.winner_id ?? null,
+  adminNote:      r.admin_note ?? null,
+  createdAt:      r.created_at ?? "",
+  acceptedAt:     r.accepted_at ?? null,
+  completedAt:    r.completed_at ?? null,
+});
+
+/** Bir öğrencinin tüm düellolarını getir (challenger veya opponent) */
+export async function getStudentArenaDuels(studentId: string): Promise<ArenaDuel[]> {
+  const { data, error } = await db()
+    .from("arena_duels")
+    .select("*")
+    .or(`challenger_id.eq.${studentId},opponent_id.eq.${studentId}`)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getStudentArenaDuels]", error.message); return []; }
+  return (data ?? []).map(mDuel);
+}
+
+/** Admin: tüm düelloları getir */
+export async function getAllArenaDuels(): Promise<ArenaDuel[]> {
+  const { data, error } = await db()
+    .from("arena_duels")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("[getAllArenaDuels]", error.message); return []; }
+  return (data ?? []).map(mDuel);
+}
+
+/** Düello daveti oluştur (kendi kendine düello açılamaz, XP kontrolü) */
+export async function createArenaDuel(
+  challengerId:   string,
+  challengerName: string,
+  opponentId:     string,
+  opponentName:   string,
+  wagerXP:        number,
+): Promise<ArenaDuel> {
+  if (challengerId === opponentId) throw new Error("Kendi kendinize düello açamazsınız.");
+  if (wagerXP < 10)                throw new Error("Minimum bahis 10 XP'dir.");
+
+  // Aynı çift arasında aktif bekleyen/aktif düello var mı?
+  const { data: existing } = await db()
+    .from("arena_duels")
+    .select("id")
+    .in("status", ["pending", "accepted", "active"])
+    .or(
+      `and(challenger_id.eq.${challengerId},opponent_id.eq.${opponentId}),` +
+      `and(challenger_id.eq.${opponentId},opponent_id.eq.${challengerId})`,
+    )
+    .maybeSingle();
+  if (existing) throw new Error("Bu öğrenciyle zaten aktif bir düello var.");
+
+  const { data, error } = await db()
+    .from("arena_duels")
+    .insert({
+      challenger_id:   challengerId,
+      challenger_name: challengerName,
+      opponent_id:     opponentId,
+      opponent_name:   opponentName,
+      wager_xp:        wagerXP,
+      status:          "pending",
+    })
+    .select("*")
+    .single();
+  if (error) fail("createArenaDuel", error);
+  return mDuel(data);
+}
+
+/** Düello davetini kabul et veya reddet */
+export async function respondArenaDuel(
+  duelId: string,
+  response: "accepted" | "rejected",
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await db()
+    .from("arena_duels")
+    .update({
+      status:      response === "accepted" ? "active" : "rejected",
+      accepted_at: response === "accepted" ? now : null,
+    })
+    .eq("id", duelId)
+    .eq("status", "pending");
+  if (error) console.error("[respondArenaDuel]", error.message);
+}
+
+/** Admin: Düello sonucunu belirle (çift sonuçlandırma DB trigger ile engellenir) */
+export async function adminResolveDuel(
+  duelId:   string,
+  winnerId: string,
+  winnerName: string,
+  loserName: string,
+  loserId:  string,
+  rewardXP: number,
+  wagerXP:  number,
+  season:   string,
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  // 1) Düelloyu tamamlandı olarak işaretle
+  const { error: duelErr } = await db()
+    .from("arena_duels")
+    .update({
+      status:       "completed",
+      winner_id:    winnerId,
+      reward_xp:    rewardXP,
+      completed_at: now,
+    })
+    .eq("id", duelId)
+    .eq("status", "active");
+
+  if (duelErr) { console.error("[adminResolveDuel] duel update:", duelErr.message); return; }
+
+  // 2) Kazanana XP ekle
+  await db().from("xp_adjustments").insert({
+    student_id:   winnerId,
+    student_name: winnerName,
+    amount:       rewardXP,
+    reason:       "Arena Galibiyeti",
+    note:         `Arena düellosu kazanıldı — +${rewardXP} XP ödülü`,
+    admin_name:   "ARENA",
+    season,
+    created_at:   now,
+  }).then(() => {}, () => {});
+
+  // 3) Kaybedenden XP düş
+  await db().from("xp_adjustments").insert({
+    student_id:   loserId,
+    student_name: loserName,
+    amount:       -wagerXP,
+    reason:       "Arena Mağlubiyeti",
+    note:         `Arena düellosu kaybedildi — -${wagerXP} XP`,
+    admin_name:   "ARENA",
+    season,
+    created_at:   now,
+  }).then(() => {}, () => {});
+
+  // 4) Kazanana bildirim
+  await db().from("notifications").insert({
+    student_id: winnerId,
+    title:      "⚔️ Arena Zaferi! 🏆",
+    message:    `Düelloyu kazandın! +${rewardXP} XP hesabına eklendi.`,
+    type:       "success",
+    is_read:    false,
+  }).then(() => {}, () => {});
+
+  // 5) Kaybedene bildirim
+  await db().from("notifications").insert({
+    student_id: loserId,
+    title:      "⚔️ Arena Düellosu Sonucu",
+    message:    `Düelloyu kaybettin. -${wagerXP} XP düşüldü. Bir daha dene!`,
+    type:       "info",
+    is_read:    false,
+  }).then(() => {}, () => {});
 }

@@ -60,6 +60,13 @@ function premiumStyle(entry: HallEntry): { background: string; border: string; g
   };
 }
 
+/* Üyelik paketi rozet rengi/etiketi */
+function membershipBadge(packageType?: string): { label: string; color: string; border: string } | null {
+  if (packageType === "sampiyon") return { label: "ALTIN ÜYE",    color: "#FBBF24", border: "rgba(251,191,36,0.7)" };
+  if (packageType === "efsane")   return { label: "PLATİNUM ÜYE", color: "#E9D5FF", border: "rgba(192,132,252,0.7)" };
+  return null;
+}
+
 /* Sıra bazlı madalya rengi — altın / gümüş / bronz */
 function rankStyle(rank: number) {
   if (rank === 1) return { border: "rgba(251,191,36,0.65)", glow: "0 0 36px rgba(251,191,36,0.4), 0 0 70px rgba(0,0,0,0.5)", ring: "#FBBF24" };
@@ -71,25 +78,38 @@ function rankStyle(rank: number) {
 function Avatar({ entry, className = "w-9 h-9 text-[13px]", ringColor }: {
   entry: HallEntry; className?: string; ringColor?: string;
 }) {
-  const ps   = premiumStyle(entry);
-  const ring = ringColor ?? ps.ring;
+  const ps  = premiumStyle(entry);
+  const mb  = membershipBadge(entry.packageType);
+  const ring = ringColor ?? (mb ? mb.border : ps.ring);
+  const glow = mb ? `0 0 14px ${mb.color}55` : `0 0 12px ${ring}55`;
+
+  const inner = entry.avatarUrl ? (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={entry.avatarUrl}
+        alt={entry.name}
+        className="w-full h-full object-cover"
+        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+      />
+    </>
+  ) : (
+    <span style={{ fontFamily: "var(--font-bebas)", letterSpacing: "0.05em", color: "#0a0714" }}>
+      {initials(entry.name)}
+    </span>
+  );
 
   if (entry.avatarUrl) {
     return (
-      <div
-        className={`relative rounded-full flex-shrink-0 overflow-hidden ${className}`}
-        style={{
-          border:    `2px solid ${ring}`,
-          boxShadow: `0 0 12px ${ring}55`,
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={entry.avatarUrl}
-          alt={entry.name}
-          className="w-full h-full object-cover"
-          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-        />
+      <div className={`relative rounded-full flex-shrink-0 overflow-hidden ${className}`}
+        style={{ border: `2px solid ${ring}`, boxShadow: glow }}>
+        {inner}
+        {mb && (
+          <div className="absolute bottom-0 left-0 right-0 text-center py-px"
+            style={{ background: `${mb.color}cc`, fontSize: 6, fontFamily: "var(--font-barlow-condensed)", color: "#000", letterSpacing: "0.05em", fontWeight: 700 }}>
+            {mb.label === "ALTIN ÜYE" ? "ALTIN" : "PLAT"}
+          </div>
+        )}
       </div>
     );
   }
@@ -100,7 +120,7 @@ function Avatar({ entry, className = "w-9 h-9 text-[13px]", ringColor }: {
       style={{
         background:  `linear-gradient(135deg, ${entry.level.gradFrom}, ${entry.level.gradTo})`,
         border:      `2px solid ${ring}`,
-        boxShadow:   `0 0 12px ${ring}55`,
+        boxShadow:   glow,
         color:       "#0a0714",
         fontFamily:  "var(--font-bebas)",
         letterSpacing: "0.05em",

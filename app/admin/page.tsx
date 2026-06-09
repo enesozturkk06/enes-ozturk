@@ -382,6 +382,7 @@ export default function AdminDashboard() {
           featured:         s.hallFeatured ?? false,
           studentOfMonth:   s.isStudentOfMonth ?? false,
           avatarUrl:        s.avatarUrl,
+          packageType:      s.packageType,
         };
         return entry;
       })

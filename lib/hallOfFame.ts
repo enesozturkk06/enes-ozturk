@@ -102,6 +102,8 @@ export interface HallEntry {
   studentOfMonth:   boolean;
   /** Profil fotoğrafı URL (Supabase Storage) */
   avatarUrl?:       string;
+  /** Paket tipi — üyelik rozeti için */
+  packageType?:     string;
 }
 
 /* ── Premium kategoriler ──────────────────────────────────────────── */

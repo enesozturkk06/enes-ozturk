@@ -218,6 +218,26 @@ export interface WaitlistEntry {
   createdAt:   string;
 }
 
+/** Arena düello kaydı */
+export interface ArenaDuel {
+  id:             string;
+  challengerId:   string;
+  challengerName: string;
+  opponentId:     string;
+  opponentName:   string;
+  /** Her iki tarafın risk ettiği XP miktarı */
+  wagerXP:        number;
+  /** Admin'in belirlediği ödül XP (null = henüz belirlenmedi) */
+  rewardXP:       number | null;
+  /** pending | accepted | rejected | active | completed | cancelled */
+  status:         "pending" | "accepted" | "rejected" | "active" | "completed" | "cancelled";
+  winnerId:       string | null;
+  adminNote:      string | null;
+  createdAt:      string;
+  acceptedAt:     string | null;
+  completedAt:    string | null;
+}
+
 /** Admin tarafından elle eklenen/düşülen XP kaydı */
 export interface XPAdjustment {
   id:          string;

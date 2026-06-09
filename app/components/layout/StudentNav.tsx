@@ -7,7 +7,7 @@ import Logo from "@/app/components/shared/Logo";
 import {
   LayoutDashboard, Calendar, TrendingUp, Dumbbell,
   Bell, LogOut, Menu, X, ChevronRight, Heart, Award, Zap,
-  FileText, Medal, User,
+  FileText, Medal, User, Swords,
 } from "lucide-react";
 
 const links = [
@@ -18,6 +18,7 @@ const links = [
   { href: "/ogrenci/antrenman",    label: "AI Antrenman",   icon: Dumbbell },
   { href: "/ogrenci/rozetler",     label: "Rozetlerim",     icon: Award },
   { href: "/ogrenci/seviye",       label: "Seviye Merkezi", icon: Zap },
+  { href: "/ogrenci/arena",        label: "Arena",          icon: Swords },
   { href: "/ogrenci/profil",       label: "Profilim",       icon: User },
   { href: "/ogrenci/rapor",        label: "Gelişim Raporu", icon: FileText },
   { href: "/ogrenci/sertifika",    label: "Sertifikalarım", icon: Medal },
