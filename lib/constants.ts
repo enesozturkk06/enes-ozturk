@@ -1,3 +1,10 @@
+/** Ders sayısına göre paket fiyatları (TL) */
+export const LESSON_PRICES: Record<number, number> = {
+  8:  10000,
+  10: 12000,
+  12: 13500,
+};
+
 export const PACKAGES = [
   {
     id: "pkg-1",

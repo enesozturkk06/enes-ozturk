@@ -108,9 +108,18 @@ export interface PackagePurchase {
   createdAt:     string;
 }
 
+export type PaymentRecordStatus = "odendi" | "beklemede" | "gecikti";
+
 export interface Payment {
-  id: string; studentId: string; studentName: string;
-  amount: number; paidAt: string; method: string; notes?: string;
+  id:          string;
+  studentId:   string;
+  studentName: string;
+  amount:      number;
+  paidAt:      string;
+  method:      string;
+  notes?:      string;
+  /** Ödeme kaydının durumu — sadece "odendi" gelir hesabına dahil edilir */
+  status:      PaymentRecordStatus;
 }
 
 export interface WorkoutInput {

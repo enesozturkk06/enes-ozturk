@@ -98,6 +98,7 @@ const mp = (r: any): Payment => ({
   id: r.id, studentId: r.student_id, studentName: r.student_name,
   amount: Number(r.amount), paidAt: r.paid_at, method: r.method ?? "nakit",
   notes: r.notes ?? undefined,
+  status: (r.status ?? "odendi") as Payment["status"],
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1154,27 +1155,77 @@ export async function getPayments(): Promise<Payment[]> {
 export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment> {
   const { data, error } = await db().from("payments").insert({
     student_id: payment.studentId, student_name: payment.studentName,
-    amount: payment.amount, paid_at: payment.paidAt, method: payment.method, notes: payment.notes,
+    amount: payment.amount, paid_at: payment.paidAt, method: payment.method,
+    notes: payment.notes, status: payment.status ?? "odendi",
   }).select().single();
   if (error) fail("addPayment", error);
-  const { data: std } = await db().from("students").select("amount_paid, amount_due").eq("id", payment.studentId).single();
-  if (std) {
-    const newPaid = Number(std.amount_paid) + payment.amount;
-    const newDue  = Math.max(0, Number(std.amount_due) - payment.amount);
-    await db().from("students").update({
-      amount_paid: newPaid, amount_due: newDue,
-      payment_status: newDue === 0 ? "odendi" : newPaid > 0 ? "kismi" : "beklemede",
-    }).eq("id", payment.studentId);
+  // Sadece "odendi" ödemelerde öğrenci bakiyesi güncellenir
+  if ((payment.status ?? "odendi") === "odendi") {
+    const { data: std } = await db().from("students").select("amount_paid, amount_due").eq("id", payment.studentId).single();
+    if (std) {
+      const newPaid = Number(std.amount_paid) + payment.amount;
+      const newDue  = Math.max(0, Number(std.amount_due) - payment.amount);
+      await db().from("students").update({
+        amount_paid: newPaid, amount_due: newDue,
+        payment_status: newDue === 0 ? "odendi" : newPaid > 0 ? "kismi" : "beklemede",
+      }).eq("id", payment.studentId);
+    }
   }
   return mp(data);
 }
 
+export async function updatePayment(
+  id: string,
+  updates: Partial<Pick<Payment, "amount" | "status" | "method" | "notes" | "paidAt">>,
+): Promise<void> {
+  const { data: old, error: e0 } = await db().from("payments")
+    .select("student_id, amount, status").eq("id", id).single();
+  if (e0) fail("updatePayment:get", e0);
+
+  const row: Record<string, unknown> = {};
+  if (updates.amount  !== undefined) row.amount   = updates.amount;
+  if (updates.status  !== undefined) row.status   = updates.status;
+  if (updates.method  !== undefined) row.method   = updates.method;
+  if (updates.notes   !== undefined) row.notes    = updates.notes;
+  if (updates.paidAt  !== undefined) row.paid_at  = updates.paidAt;
+
+  const { error: e1 } = await db().from("payments").update(row).eq("id", id);
+  if (e1) fail("updatePayment:update", e1);
+
+  // Öğrenci bakiyesini güncelle
+  if (old) {
+    const { data: std } = await db().from("students")
+      .select("amount_paid, amount_due").eq("id", old.student_id).single();
+    if (std) {
+      const oldStatus = old.status ?? "odendi";
+      const newStatus = updates.status ?? oldStatus;
+      const oldAmt    = Number(old.amount);
+      const newAmt    = updates.amount ?? oldAmt;
+      let paid = Number(std.amount_paid);
+      let due  = Number(std.amount_due);
+
+      // Eski "odendi" katkısını geri al
+      if (oldStatus === "odendi") { paid -= oldAmt; due += oldAmt; }
+      // Yeni "odendi" katkısını ekle
+      if (newStatus === "odendi") { paid += newAmt; due -= newAmt; }
+      paid = Math.max(0, paid); due = Math.max(0, due);
+
+      await db().from("students").update({
+        amount_paid: paid, amount_due: due,
+        payment_status: due === 0 ? "odendi" : paid > 0 ? "kismi" : "beklemede",
+      }).eq("id", old.student_id);
+    }
+  }
+}
+
 export async function deletePayment(id: string): Promise<void> {
-  const { data: pay, error: e1 } = await db().from("payments").select("student_id, amount").eq("id", id).single();
+  const { data: pay, error: e1 } = await db().from("payments")
+    .select("student_id, amount, status").eq("id", id).single();
   if (e1) fail("deletePayment:get", e1);
   const { error: e2 } = await db().from("payments").delete().eq("id", id);
   if (e2) fail("deletePayment:delete", e2);
-  if (pay) {
+  // Sadece "odendi" ödemelerde öğrenci bakiyesi düzeltilir
+  if (pay && (pay.status ?? "odendi") === "odendi") {
     const { data: std } = await db().from("students").select("amount_paid, amount_due").eq("id", pay.student_id).single();
     if (std) {
       const newPaid = Math.max(0, Number(std.amount_paid) - pay.amount);
