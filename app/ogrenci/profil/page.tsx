@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudentXPAdjustments,
-  uploadStudentAvatar, deleteStudentAvatar,
+  uploadStudentAvatar, deleteStudentAvatar, getStudents,
 } from "@/lib/db";
 import type { LessonRecord, Appointment } from "@/lib/types";
 import {
@@ -12,12 +12,14 @@ import {
 } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
 import { computeTechnicalAverages, countEarnedBadges } from "@/lib/hallOfFame";
-import { PageHeader } from "@/app/components/ui";
-import { Palette, Camera, Upload, Trash2, X } from "lucide-react";
+import {
+  Zap, TrendingUp, BookOpen, Award, Target, Star, Flame, Users,
+  Upload, Trash2, Palette, Camera, Crown, Shield,
+} from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 
-/* ── Avatar renk seçenekleri ─────────────────────────────── */
+/* ── Avatar renk seçenekleri ───────────────────────────────────── */
 const AVATAR_COLORS = [
   { id: "violet",  hex: "#8B5CF6", label: "Mor"     },
   { id: "magenta", hex: "#D946EF", label: "Pembe"   },
@@ -29,7 +31,33 @@ const AVATAR_COLORS = [
   { id: "lime",    hex: "#84CC16", label: "Yeşil"   },
 ];
 
-/* ── Haftalık seri hesapla ───────────────────────────────── */
+/* ── Level tema helper ──────────────────────────────────────────── */
+function levelTheme(levelId: string, gradFrom: string, gradTo: string, levelColor: string) {
+  const isLegend  = levelId === "legend";
+  const isDiamond = levelId === "diamond";
+  const isGold    = levelId === "gold";
+  return {
+    isLegend, isDiamond, isGold,
+    ring1: levelColor,
+    ring2: isLegend  ? "#F0ABFC" :
+           isDiamond ? "#A5F3FC" :
+           isGold    ? "#FDE68A" : gradTo,
+    bgFrom: isLegend  ? "rgba(124,58,237,0.18)" :
+            isDiamond ? "rgba(14,116,163,0.14)" :
+            isGold    ? "rgba(217,119,6,0.14)"  : `${gradFrom}14`,
+    bgTo:   isLegend  ? "rgba(192,132,252,0.08)" :
+            isDiamond ? "rgba(103,232,249,0.06)" :
+            isGold    ? "rgba(251,191,36,0.06)"  : `${gradTo}06`,
+    glow:   isLegend  ? "rgba(192,132,252,0.35)" :
+            isDiamond ? "rgba(103,232,249,0.28)" :
+            isGold    ? "rgba(251,191,36,0.28)"  : `${levelColor}28`,
+    border: isLegend  ? "rgba(192,132,252,0.55)" :
+            isDiamond ? "rgba(103,232,249,0.45)" :
+            isGold    ? "rgba(251,191,36,0.45)"  : `${levelColor}38`,
+  };
+}
+
+/* ── Haftalık seri ──────────────────────────────────────────────── */
 function computeWeekStreak(records: LessonRecord[]): number {
   if (!records.length) return 0;
   const startOfWeek = (d: Date) => {
@@ -53,7 +81,7 @@ function computeWeekStreak(records: LessonRecord[]): number {
   return streak;
 }
 
-/* ── Görsel sıkıştırıcı (canvas) ────────────────────────── */
+/* ── Canvas görsel sıkıştırıcı ──────────────────────────────────── */
 async function compressImage(file: File, maxPx = 400): Promise<Blob> {
   return new Promise(resolve => {
     const img = new Image();
@@ -69,269 +97,24 @@ async function compressImage(file: File, maxPx = 400): Promise<Blob> {
   });
 }
 
-/* ── Stat kart bileşeni ──────────────────────────────────── */
-function StatBox({ label, value, sub, accent = "#8B5CF6" }: {
-  label: string; value: string | number; sub?: string; accent?: string;
-}) {
-  return (
-    <div
-      className="flex flex-col gap-0.5 p-3 sm:p-4"
-      style={{
-        background: "rgba(255,255,255,0.025)",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 4,
-      }}
-    >
-      <span
-        className="text-[10px] uppercase tracking-widest"
-        style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}
-      >
-        {label}
-      </span>
-      <span
-        className="text-xl font-black tabular-nums leading-tight"
-        style={{ fontFamily: "var(--font-bebas)", color: accent, letterSpacing: "0.05em" }}
-      >
-        {value}
-      </span>
-      {sub && (
-        <span
-          className="text-[10px]"
-          style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}
-        >
-          {sub}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/* ── Story card canvas generator ─────────────────────────── */
-function drawStoryCard(
-  canvas: HTMLCanvasElement,
-  opts: {
-    name: string;
-    initials: string;
-    avatarColor: string;
-    levelIcon: string;
-    levelName: string;
-    lifetimeXP: number;
-    seasonXP: number;
-    completedLessons: number;
-    badgeCount: number;
-    techAvg: string;
-    bestScore: string;
-    weekStreak: number;
-    duetCount: number;
-  }
+/* ── roundRect helper ───────────────────────────────────────────── */
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  r: number | [number, number, number, number],
 ) {
-  const W = 1080, H = 1920;
-  canvas.width  = W;
-  canvas.height = H;
-  const ctx = canvas.getContext("2d")!;
-
-  // Background
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0,   "#09090B");
-  bg.addColorStop(0.4, "#0f0f18");
-  bg.addColorStop(1,   "#12091a");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // Glow orbs
-  const glow1 = ctx.createRadialGradient(W * 0.8, H * 0.25, 0, W * 0.8, H * 0.25, 400);
-  glow1.addColorStop(0, "rgba(139,92,246,0.18)");
-  glow1.addColorStop(1, "transparent");
-  ctx.fillStyle = glow1;
-  ctx.fillRect(0, 0, W, H);
-
-  const glow2 = ctx.createRadialGradient(W * 0.15, H * 0.7, 0, W * 0.15, H * 0.7, 320);
-  glow2.addColorStop(0, "rgba(217,70,239,0.14)");
-  glow2.addColorStop(1, "transparent");
-  ctx.fillStyle = glow2;
-  ctx.fillRect(0, 0, W, H);
-
-  // Top border line
-  ctx.strokeStyle = "rgba(139,92,246,0.6)";
-  ctx.lineWidth = 3;
+  const [tl, tr2, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(W, 0);
-  ctx.stroke();
-
-  // Hexagon logo (simplified)
-  const hx = 100, hy = 130, hr = 52;
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (i * Math.PI) / 3 - Math.PI / 6;
-    const px = hx + hr * Math.cos(a);
-    const py = hy + hr * Math.sin(a);
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + w - tr2, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, tr2);
+  ctx.lineTo(x + w, y + h - br);
+  ctx.arcTo(x + w, y + h, x,     y + h, br);
+  ctx.lineTo(x + bl, y + h);
+  ctx.arcTo(x,     y + h, x,     y,     bl);
+  ctx.lineTo(x, y + tl);
+  ctx.arcTo(x,     y,     x + w, y,     tl);
   ctx.closePath();
-  ctx.strokeStyle = "rgba(220,38,38,0.7)";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.fillStyle = "rgba(220,38,38,0.08)";
-  ctx.fill();
-
-  ctx.fillStyle = "rgba(220,38,38,0.85)";
-  ctx.font = "bold 30px Impact, Arial Black, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("EÖ", hx, hy + 11);
-
-  // Brand text
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.font = "bold 36px Impact, Arial Black, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText("ANTRENÖR ENES ÖZTÜRK", 180, 120);
-  ctx.fillStyle = "rgba(220,38,38,0.8)";
-  ctx.font = "22px Arial, sans-serif";
-  ctx.letterSpacing = "4px";
-  ctx.fillText("KİŞİSEL ANTRENÖR", 182, 158);
-
-  // Divider
-  ctx.strokeStyle = "rgba(139,92,246,0.3)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(80, 210);
-  ctx.lineTo(W - 80, 210);
-  ctx.stroke();
-
-  // Avatar circle
-  const avCx = W / 2, avCy = 450, avR = 160;
-  const avGrad = ctx.createRadialGradient(avCx - 40, avCy - 40, 0, avCx, avCy, avR);
-  avGrad.addColorStop(0, opts.avatarColor + "44");
-  avGrad.addColorStop(1, opts.avatarColor + "11");
-  ctx.beginPath();
-  ctx.arc(avCx, avCy, avR, 0, Math.PI * 2);
-  ctx.fillStyle = avGrad;
-  ctx.fill();
-  ctx.strokeStyle = opts.avatarColor;
-  ctx.lineWidth = 4;
-  ctx.stroke();
-  // Outer glow ring
-  ctx.beginPath();
-  ctx.arc(avCx, avCy, avR + 12, 0, Math.PI * 2);
-  ctx.strokeStyle = opts.avatarColor + "40";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Initials
-  ctx.fillStyle = opts.avatarColor;
-  ctx.font = "bold 100px Impact, Arial Black, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(opts.initials, avCx, avCy);
-
-  // Name
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.font = "bold 68px Impact, Arial Black, sans-serif";
-  ctx.textBaseline = "alphabetic";
-  ctx.textAlign = "center";
-  ctx.fillText(opts.name.toUpperCase(), W / 2, 680);
-
-  // Level badge
-  const levelBadgeY = 730;
-  ctx.fillStyle = "rgba(139,92,246,0.25)";
-  roundRect(ctx, W / 2 - 200, levelBadgeY, 400, 70, 35);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(139,92,246,0.5)";
-  ctx.lineWidth = 2;
-  roundRect(ctx, W / 2 - 200, levelBadgeY, 400, 70, 35);
-  ctx.stroke();
-
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.font = "bold 36px Impact, Arial Black, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(`${opts.levelIcon}  ${opts.levelName.toUpperCase()}`, W / 2, levelBadgeY + 44);
-
-  // Divider
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(80, 850);
-  ctx.lineTo(W - 80, 850);
-  ctx.stroke();
-
-  // Stats grid: 2 cols × 4 rows
-  const statsData = [
-    { label: "ÖMÜR BOYU XP",    value: fmtXPCanvas(opts.lifetimeXP), color: "#8B5CF6" },
-    { label: "SEZON XP",         value: fmtXPCanvas(opts.seasonXP),   color: "#D946EF" },
-    { label: "TAMAMLANAN DERS",  value: String(opts.completedLessons), color: "#FBBF24" },
-    { label: "ROZET SAYISI",     value: String(opts.badgeCount),       color: "#34D399" },
-    { label: "TEKNİK ORTALAMA",  value: opts.techAvg,                  color: "#60A5FA" },
-    { label: "EN İYİ SKOR",     value: opts.bestScore,                color: "#F87171" },
-    { label: "HAFTALIK SERİ",   value: `${opts.weekStreak} HAFTA`,    color: "#A78BFA" },
-    { label: "DÜET DERS",       value: String(opts.duetCount),        color: "#FB923C" },
-  ];
-
-  const gridX = 80, gridY = 900;
-  const cellW = (W - 180) / 2, cellH = 170;
-  const gap = 20;
-
-  statsData.forEach((stat, i) => {
-    const col = i % 2, row = Math.floor(i / 2);
-    const x = gridX + col * (cellW + gap);
-    const y = gridY + row * (cellH + gap);
-
-    // Cell bg
-    ctx.fillStyle = "rgba(255,255,255,0.03)";
-    roundRect(ctx, x, y, cellW, cellH, 8);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.07)";
-    ctx.lineWidth = 1;
-    roundRect(ctx, x, y, cellW, cellH, 8);
-    ctx.stroke();
-
-    // Accent top bar
-    ctx.fillStyle = stat.color + "44";
-    roundRect(ctx, x, y, cellW, 5, [8, 8, 0, 0]);
-    ctx.fill();
-
-    // Label
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.font = "18px Arial, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(stat.label, x + 24, y + 44);
-
-    // Value
-    ctx.fillStyle = stat.color;
-    ctx.font = "bold 52px Impact, Arial Black, sans-serif";
-    ctx.fillText(stat.value, x + 24, y + 120);
-  });
-
-  // Bottom divider
-  const footerY = gridY + 4 * (cellH + gap) + 30;
-  ctx.strokeStyle = "rgba(139,92,246,0.25)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(80, footerY);
-  ctx.lineTo(W - 80, footerY);
-  ctx.stroke();
-
-  // Footer
-  ctx.fillStyle = "rgba(139,92,246,0.7)";
-  ctx.font = "bold 42px Arial, sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("@p.t.enesozturk", W / 2, footerY + 70);
-
-  ctx.fillStyle = "rgba(255,255,255,0.2)";
-  ctx.font = "26px Arial, sans-serif";
-  ctx.fillText(
-    format(new Date(), "dd MMMM yyyy", { locale: tr }),
-    W / 2,
-    footerY + 120,
-  );
-
-  // Bottom border
-  ctx.strokeStyle = "rgba(217,70,239,0.5)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, H);
-  ctx.lineTo(W, H);
-  ctx.stroke();
 }
 
 function fmtXPCanvas(v: number): string {
@@ -340,56 +123,276 @@ function fmtXPCanvas(v: number): string {
   return String(v);
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number,
-  r: number | [number, number, number, number],
+/* ── Story Card Canvas ──────────────────────────────────────────── */
+function drawStoryCard(
+  canvas: HTMLCanvasElement,
+  opts: {
+    name: string; initials: string; avatarColor: string;
+    levelIcon: string; levelName: string; levelId: string;
+    levelGradFrom: string; levelGradTo: string; levelColor: string;
+    lifetimeXP: number; seasonXP: number; completedLessons: number;
+    badgeCount: number; techAvg: string; bestScore: string;
+    weekStreak: number; duetCount: number; hofRank: number;
+  }
 ) {
-  const [tl, tr, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
+  const W = 1080, H = 1920;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  const isLegend = opts.levelId === "legend";
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0,   isLegend ? "#0d0818" : "#09090B");
+  bg.addColorStop(0.5, isLegend ? "#110b1f" : "#0f0f18");
+  bg.addColorStop(1,   isLegend ? "#160d1e" : "#12091a");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Level glow orbs
+  const gc = opts.levelColor;
+  const g1 = ctx.createRadialGradient(W * 0.85, H * 0.2, 0, W * 0.85, H * 0.2, 480);
+  g1.addColorStop(0, gc + "30"); g1.addColorStop(1, "transparent");
+  ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
+  const g2 = ctx.createRadialGradient(W * 0.1, H * 0.65, 0, W * 0.1, H * 0.65, 380);
+  g2.addColorStop(0, gc + "20"); g2.addColorStop(1, "transparent");
+  ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+
+  // Top accent line
+  const topLine = ctx.createLinearGradient(0, 0, W, 0);
+  topLine.addColorStop(0, "transparent");
+  topLine.addColorStop(0.3, opts.levelGradFrom);
+  topLine.addColorStop(0.7, opts.levelGradTo);
+  topLine.addColorStop(1, "transparent");
+  ctx.strokeStyle = topLine; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(0, 3); ctx.lineTo(W, 3); ctx.stroke();
+
+  // Brand header
+  const hx = 108, hy = 140, hr = 60;
   ctx.beginPath();
-  ctx.moveTo(x + tl, y);
-  ctx.lineTo(x + w - tr, y);
-  ctx.arcTo(x + w, y,     x + w, y + h,  tr);
-  ctx.lineTo(x + w, y + h - br);
-  ctx.arcTo(x + w, y + h, x,     y + h,  br);
-  ctx.lineTo(x + bl, y + h);
-  ctx.arcTo(x,     y + h, x,     y,      bl);
-  ctx.lineTo(x, y + tl);
-  ctx.arcTo(x,     y,     x + w, y,      tl);
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3 - Math.PI / 6;
+    const px = hx + hr * Math.cos(a), py = hy + hr * Math.sin(a);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
   ctx.closePath();
+  ctx.strokeStyle = "rgba(220,38,38,0.8)"; ctx.lineWidth = 4; ctx.stroke();
+  ctx.fillStyle = "rgba(220,38,38,0.1)"; ctx.fill();
+  ctx.fillStyle = "rgba(220,38,38,0.9)";
+  ctx.font = "bold 38px Impact,Arial Black,sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("EÖ", hx, hy);
+
+  ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.font = "bold 42px Impact,Arial Black,sans-serif";
+  ctx.fillText("ANTRENÖR ENES ÖZTÜRK", 208, 128);
+  ctx.fillStyle = "rgba(220,38,38,0.85)";
+  ctx.font = "28px Arial,sans-serif";
+  ctx.fillText("KİŞİSEL ANTRENÖR  ·  @p.t.enesozturk", 210, 172);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(80, 230); ctx.lineTo(W - 80, 230); ctx.stroke();
+
+  // Avatar
+  const avCx = W / 2, avCy = 520, avR = 190;
+  // Outer glow
+  for (let r = avR + 50; r > avR; r -= 10) {
+    const alpha = ((avR + 50 - r) / 50) * 0.15;
+    ctx.beginPath(); ctx.arc(avCx, avCy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = gc + Math.round(alpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = 1; ctx.stroke();
+  }
+  // Double ring
+  ctx.beginPath(); ctx.arc(avCx, avCy, avR + 14, 0, Math.PI * 2);
+  ctx.strokeStyle = gc + "40"; ctx.lineWidth = 3; ctx.stroke();
+  ctx.beginPath(); ctx.arc(avCx, avCy, avR + 4, 0, Math.PI * 2);
+  ctx.strokeStyle = gc; ctx.lineWidth = 4; ctx.stroke();
+  // Fill
+  const avG = ctx.createRadialGradient(avCx - 60, avCy - 60, 0, avCx, avCy, avR);
+  avG.addColorStop(0, gc + "33"); avG.addColorStop(1, gc + "0d");
+  ctx.beginPath(); ctx.arc(avCx, avCy, avR, 0, Math.PI * 2);
+  ctx.fillStyle = avG; ctx.fill();
+  // Initials
+  ctx.fillStyle = gc;
+  ctx.font = `bold 120px Impact,Arial Black,sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(opts.initials, avCx, avCy + 6);
+
+  // Legend crown
+  if (isLegend) {
+    ctx.font = "100px serif";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("👑", avCx - 50, avCy - avR - 20);
+  }
+
+  // Name
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.font = "bold 86px Impact,Arial Black,sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(opts.name.toUpperCase(), W / 2, 800);
+
+  // Level pill
+  const lbY = 840;
+  ctx.fillStyle = gc + "22";
+  roundRect(ctx, W / 2 - 240, lbY, 480, 80, 40);
+  ctx.fill();
+  ctx.strokeStyle = gc + "66"; ctx.lineWidth = 2;
+  roundRect(ctx, W / 2 - 240, lbY, 480, 80, 40);
+  ctx.stroke();
+  ctx.fillStyle = gc;
+  ctx.font = "bold 44px Impact,Arial Black,sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`${opts.levelIcon}  ${opts.levelName.toUpperCase()}`, W / 2, lbY + 52);
+
+  // HoF rank badge
+  if (opts.hofRank > 0) {
+    const rankX = W - 240, rankY = 840;
+    ctx.fillStyle = "rgba(251,191,36,0.15)";
+    roundRect(ctx, rankX, rankY, 180, 80, 12);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(251,191,36,0.5)"; ctx.lineWidth = 2;
+    roundRect(ctx, rankX, rankY, 180, 80, 12);
+    ctx.stroke();
+    ctx.fillStyle = "#FBBF24";
+    ctx.font = "bold 42px Impact,Arial Black,sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`#${opts.hofRank}`, rankX + 90, rankY + 52);
+  }
+
+  // Divider
+  ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(80, 980); ctx.lineTo(W - 80, 980); ctx.stroke();
+
+  // Stats grid
+  const statsData = [
+    { label: "ÖMÜR BOYU XP",  value: fmtXPCanvas(opts.lifetimeXP),    color: "#8B5CF6" },
+    { label: "SEZON XP",       value: fmtXPCanvas(opts.seasonXP),       color: "#D946EF" },
+    { label: "TAMAMLANAN DERS",value: String(opts.completedLessons),    color: "#FBBF24" },
+    { label: "ROZET SAYISI",   value: String(opts.badgeCount),          color: "#34D399" },
+    { label: "TEKNİK ORT.",    value: opts.techAvg,                     color: "#60A5FA" },
+    { label: "EN İYİ SKOR",   value: opts.bestScore,                   color: "#F87171" },
+    { label: "HAFTALIK SERİ", value: `${opts.weekStreak}HFT`,          color: "#A78BFA" },
+    { label: "DÜET DERS",     value: String(opts.duetCount),           color: "#FB923C" },
+  ];
+  const gx = 80, gy = 1020, cw = (W - 200) / 2, ch = 175, gap = 20;
+  statsData.forEach((s, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = gx + col * (cw + gap), y = gy + row * (ch + gap);
+    ctx.fillStyle = "rgba(255,255,255,0.03)";
+    roundRect(ctx, x, y, cw, ch, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 1;
+    roundRect(ctx, x, y, cw, ch, 10); ctx.stroke();
+    ctx.fillStyle = s.color + "55";
+    roundRect(ctx, x, y, cw, 6, [10, 10, 0, 0]); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.font = "22px Arial,sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(s.label, x + 28, y + 52);
+    ctx.fillStyle = s.color;
+    ctx.font = "bold 64px Impact,Arial Black,sans-serif";
+    ctx.fillText(s.value, x + 28, y + 136);
+  });
+
+  // Footer
+  const footY = gy + 4 * (ch + gap) + 40;
+  ctx.strokeStyle = gc + "40"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(80, footY); ctx.lineTo(W - 80, footY); ctx.stroke();
+  ctx.fillStyle = gc;
+  ctx.font = "bold 52px Arial,sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("@p.t.enesozturk", W / 2, footY + 80);
+  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.font = "30px Arial,sans-serif";
+  ctx.fillText(format(new Date(), "dd MMMM yyyy", { locale: tr }), W / 2, footY + 130);
+
+  // Bottom accent line
+  const botLine = ctx.createLinearGradient(0, 0, W, 0);
+  botLine.addColorStop(0, "transparent");
+  botLine.addColorStop(0.3, opts.levelGradFrom);
+  botLine.addColorStop(0.7, opts.levelGradTo);
+  botLine.addColorStop(1, "transparent");
+  ctx.strokeStyle = botLine; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(0, H - 3); ctx.lineTo(W, H - 3); ctx.stroke();
 }
 
-/* ── Ana sayfa bileşeni ──────────────────────────────────── */
+/* ── Stat Icon Box ──────────────────────────────────────────────── */
+function StatCard({
+  icon, label, value, sub, accent,
+}: {
+  icon: React.ReactNode; label: string; value: string | number; sub?: string; accent: string;
+}) {
+  return (
+    <motion.div
+      whileHover={{ scale: 1.03, y: -2 }}
+      transition={{ duration: 0.18 }}
+      className="relative flex flex-col gap-2 p-4 overflow-hidden cursor-default"
+      style={{
+        background: `linear-gradient(135deg, ${accent}0d, rgba(0,0,0,0))`,
+        border: `1px solid ${accent}22`,
+        borderRadius: 8,
+      }}
+    >
+      {/* Top accent bar */}
+      <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-lg"
+        style={{ background: `linear-gradient(90deg, ${accent}88, ${accent}22)` }} />
+      {/* Glow on hover — CSS-only */}
+      <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-lg"
+        style={{ boxShadow: `inset 0 0 40px ${accent}12` }} />
 
+      <div className="flex items-center justify-between">
+        <span
+          className="text-[10px] uppercase tracking-widest leading-none"
+          style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}
+        >
+          {label}
+        </span>
+        <div style={{ color: accent, opacity: 0.6 }}>{icon}</div>
+      </div>
+      <div
+        className="text-2xl sm:text-3xl font-black tabular-nums leading-none"
+        style={{ fontFamily: "var(--font-bebas)", color: accent, letterSpacing: "0.04em" }}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div className="text-[10px] leading-none truncate"
+          style={{ color: "rgba(255,255,255,0.22)", fontFamily: "var(--font-barlow-condensed)" }}>
+          {sub}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+/* ── Ana Sayfa ──────────────────────────────────────────────────── */
 export default function ProfilPage() {
   const { student } = useAuth();
-  const [loading, setLoading]         = useState(true);
-  const [avatarColor, setAvatarColor]  = useState("#8B5CF6");
-  const [photoUrl, setPhotoUrl]        = useState<string | null>(null);
+  const [loading, setLoading]              = useState(true);
+  const [avatarColor, setAvatarColor]      = useState("#8B5CF6");
+  const [photoUrl, setPhotoUrl]            = useState<string | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [generating, setGenerating]    = useState(false);
-  const [uploading, setUploading]      = useState(false);
-  const [uploadErr, setUploadErr]      = useState<string | null>(null);
+  const [generating, setGenerating]        = useState(false);
+  const [uploading, setUploading]          = useState(false);
+  const [uploadErr, setUploadErr]          = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
 
-  // Computed stats
   const [stats, setStats] = useState<{
-    lifetimeXP:      number;
-    seasonXP:        number;
-    levelIcon:       string;
-    levelName:       string;
-    levelColor:      string;
-    levelGradFrom:   string;
-    levelGradTo:     string;
-    completedLessons:number;
-    badgeCount:      number;
-    techAvg:         string;
-    bestScore:       string;
-    weekStreak:      number;
-    duetCount:       number;
-    trainingHours:   number;
-    seasonLabel:     string;
+    lifetimeXP:       number;
+    seasonXP:         number;
+    levelId:          string;
+    levelIcon:        string;
+    levelName:        string;
+    levelColor:       string;
+    levelGradFrom:    string;
+    levelGradTo:      string;
+    completedLessons: number;
+    badgeCount:       number;
+    techAvg:          string;
+    bestScore:        string;
+    weekStreak:       number;
+    duetCount:        number;
+    seasonLabel:      string;
+    hofRank:          number;
   } | null>(null);
 
   useEffect(() => {
@@ -397,7 +400,6 @@ export default function ProfilPage() {
     if (saved) setAvatarColor(saved);
   }, []);
 
-  // Supabase'den kayıtlı fotoğrafı yükle
   useEffect(() => {
     if (student?.avatarUrl) setPhotoUrl(student.avatarUrl);
   }, [student]);
@@ -409,46 +411,41 @@ export default function ProfilPage() {
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
       getStudentXPAdjustments(student.id),
-    ]).then(([apts, recs, xpAdj]) => {
+      getStudents().catch(() => []),
+    ]).then(([apts, recs, xpAdj, allStudents]) => {
       const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
-      const xpSummary = computeFullXP(
-        student.completedLessons, apts, sorted, season, xpAdj,
-      );
+      const xpSummary = computeFullXP(student.completedLessons, apts, sorted, season, xpAdj);
       const lifetimeXP = xpSummary.lifetimeResult.breakdown.total;
       const seasonXP   = xpSummary.seasonResult.breakdown.total;
       const level      = xpSummary.lifetimeResult.level.current;
       const manualXP   = sumManualXP(xpAdj);
       const badges     = computeBadges(student, apts, sorted, {}, manualXP);
       const tech       = computeTechnicalAverages(sorted);
+      const avgNum     = tech ? (tech.punch + tech.kick + tech.defense + tech.conditioning) / 4 : null;
 
-      const avgNum = tech
-        ? ((tech.punch + tech.kick + tech.defense + tech.conditioning) / 4)
-        : null;
-      const techAvg   = avgNum !== null ? `${avgNum.toFixed(1)}/10` : "—";
-      const bestScore = sorted.length
-        ? `${Math.max(...sorted.map(r => r.overall))}/10`
-        : "—";
-      const weekStreak = computeWeekStreak(sorted);
-      const duetCount  = apts.filter(
-        a => a.lessonType === "duet" && a.status === "onaylandi",
-      ).length;
+      // HoF rank: sıralama completedLessons'a göre (en hızlı proxy)
+      const hofRank = allStudents
+        .filter(s => s.isActive && s.showInHallOfFame)
+        .sort((a, b) => b.completedLessons - a.completedLessons)
+        .findIndex(s => s.id === student.id) + 1;
 
       setStats({
         lifetimeXP,
         seasonXP,
-        levelIcon:       level.icon,
-        levelName:       level.name,
-        levelColor:      level.colorPrimary,
-        levelGradFrom:   level.gradFrom,
-        levelGradTo:     level.gradTo,
-        completedLessons:student.completedLessons,
-        badgeCount:      countEarnedBadges(badges),
-        techAvg,
-        bestScore,
-        weekStreak,
-        duetCount,
-        trainingHours:   student.completedLessons,
-        seasonLabel:     getSeasonLabel(season),
+        levelId:          level.id,
+        levelIcon:        level.icon,
+        levelName:        level.name,
+        levelColor:       level.colorPrimary,
+        levelGradFrom:    level.gradFrom,
+        levelGradTo:      level.gradTo,
+        completedLessons: student.completedLessons,
+        badgeCount:       countEarnedBadges(badges),
+        techAvg:          avgNum !== null ? `${avgNum.toFixed(1)}/10` : "—",
+        bestScore:        sorted.length ? `${Math.max(...sorted.map(r => r.overall))}/10` : "—",
+        weekStreak:       computeWeekStreak(sorted),
+        duetCount:        apts.filter(a => a.lessonType === "duet" && a.status === "onaylandi").length,
+        seasonLabel:      getSeasonLabel(season),
+        hofRank:          hofRank > 0 ? hofRank : 0,
       });
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -467,16 +464,12 @@ export default function ProfilPage() {
       setUploadErr("Sadece görsel dosyalar kabul edilir.");
       return;
     }
-    setUploading(true);
-    setUploadErr(null);
+    setUploading(true); setUploadErr(null);
     try {
       const compressed = await compressImage(file, 400);
       const url = await uploadStudentAvatar(student.id, compressed, "image/jpeg");
-      if (url) {
-        setPhotoUrl(url);
-      } else {
-        setUploadErr("Yükleme başarısız. Supabase Storage ayarlarını kontrol edin.");
-      }
+      if (url) setPhotoUrl(url);
+      else setUploadErr("Yükleme başarısız. Supabase Storage ayarlarını kontrol edin.");
     } catch {
       setUploadErr("Beklenmedik bir hata oluştu.");
     } finally {
@@ -496,27 +489,22 @@ export default function ProfilPage() {
   const handleGenerateCard = useCallback(async () => {
     if (!student || !stats || !canvasRef.current) return;
     setGenerating(true);
-    const parts = student.fullName.trim().split(" ");
+    const parts    = student.fullName.trim().split(" ");
     const initials = parts.map(p => p[0]).join("").slice(0, 2).toUpperCase();
-
     try {
       drawStoryCard(canvasRef.current, {
-        name:             student.fullName,
-        initials,
-        avatarColor,
-        levelIcon:        stats.levelIcon,
-        levelName:        stats.levelName,
-        lifetimeXP:       stats.lifetimeXP,
-        seasonXP:         stats.seasonXP,
-        completedLessons: stats.completedLessons,
-        badgeCount:       stats.badgeCount,
-        techAvg:          stats.techAvg,
-        bestScore:        stats.bestScore,
-        weekStreak:       stats.weekStreak,
-        duetCount:        stats.duetCount,
+        name: student.fullName, initials, avatarColor,
+        levelId: stats.levelId, levelIcon: stats.levelIcon, levelName: stats.levelName,
+        levelGradFrom: stats.levelGradFrom, levelGradTo: stats.levelGradTo,
+        levelColor: stats.levelColor,
+        lifetimeXP: stats.lifetimeXP, seasonXP: stats.seasonXP,
+        completedLessons: stats.completedLessons, badgeCount: stats.badgeCount,
+        techAvg: stats.techAvg, bestScore: stats.bestScore,
+        weekStreak: stats.weekStreak, duetCount: stats.duetCount,
+        hofRank: stats.hofRank,
       });
       const link = document.createElement("a");
-      link.download = `${student.fullName.replace(/\s+/g, "_")}_story.png`;
+      link.download = `${student.fullName.replace(/\s+/g, "_")}_fight_card.png`;
       link.href = canvasRef.current.toDataURL("image/png");
       link.click();
     } finally {
@@ -524,383 +512,414 @@ export default function ProfilPage() {
     }
   }, [student, stats, avatarColor]);
 
+  /* ── Loading ── */
   if (!student || loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex items-center justify-center min-h-[70vh]">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="w-8 h-8 rounded-full border-2"
-          style={{ borderColor: "rgba(139,92,246,0.4)", borderTopColor: "transparent" }}
+          className="w-10 h-10 rounded-full border-2"
+          style={{ borderColor: "rgba(139,92,246,0.4)", borderTopColor: "#8B5CF6" }}
         />
       </div>
     );
   }
 
-  const parts    = student.fullName.trim().split(" ");
-  const initials = parts.map(p => p[0]).join("").slice(0, 2).toUpperCase();
-  const firstName = parts[0];
+  const parts     = student.fullName.trim().split(" ");
+  const initials  = parts.map(p => p[0]).join("").slice(0, 2).toUpperCase();
+  const theme     = stats
+    ? levelTheme(stats.levelId, stats.levelGradFrom, stats.levelGradTo, stats.levelColor)
+    : null;
+
+  const fmtXP = (v: number) =>
+    v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}K` : String(v);
 
   return (
     <>
       <canvas ref={canvasRef} style={{ display: "none" }} />
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="max-w-2xl mx-auto space-y-5 pb-24"
-      >
-        <PageHeader
-          title="Savaşçı Profili"
-          subtitle="Kimliğini oluştur, istatistiklerini paylaş"
-        />
+      <input ref={fileInputRef} type="file" accept="image/*"
+        className="hidden" onChange={handlePhotoUpload} />
 
-        {/* ── Avatar + isim ────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className="max-w-2xl mx-auto pb-28 space-y-3"
+      >
+
+        {/* ═══════════════════════════════════════════════════════
+            HERO SECTION — tam genişlik, seviye teması
+        ══════════════════════════════════════════════════════════ */}
         <div
-          className="p-5 sm:p-7 flex flex-col sm:flex-row items-center gap-5 relative overflow-hidden"
+          className="relative overflow-hidden rounded-xl"
           style={{
-            background: stats
-              ? `linear-gradient(135deg, ${stats.levelGradFrom}18, rgba(0,0,0,0) 60%), rgba(255,255,255,0.025)`
-              : "rgba(255,255,255,0.025)",
-            border: `1px solid ${stats ? stats.levelGradFrom + "44" : "rgba(255,255,255,0.08)"}`,
-            borderRadius: 4,
-            boxShadow: stats
-              ? `0 0 40px ${stats.levelGradFrom}22`
-              : "none",
+            background: theme
+              ? `linear-gradient(160deg, ${theme.bgFrom} 0%, ${theme.bgTo} 60%, rgba(0,0,0,0) 100%), rgba(255,255,255,0.02)`
+              : "rgba(255,255,255,0.02)",
+            border: `1px solid ${theme ? theme.border : "rgba(255,255,255,0.08)"}`,
+            boxShadow: theme ? `0 0 60px ${theme.glow}, 0 0 120px ${theme.glow}55` : "none",
           }}
         >
-          {stats && (
-            <div
-              className="absolute top-0 left-0 right-0 h-0.5"
+          {/* Top accent line */}
+          {theme && (
+            <div className="absolute top-0 left-0 right-0 h-0.5"
               style={{
-                background: `linear-gradient(90deg, transparent, ${stats.levelGradFrom}, ${stats.levelGradTo}, transparent)`,
-              }}
-            />
+                background: `linear-gradient(90deg, transparent 0%, ${stats!.levelGradFrom} 30%, ${stats!.levelGradTo} 70%, transparent 100%)`,
+              }} />
           )}
 
-          {/* Gizli dosya input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePhotoUpload}
-          />
-
-          {/* Avatar */}
-          <div className="relative flex-shrink-0">
-            {/* Fotoğraf ya da initials */}
-            <div
-              className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden flex items-center justify-center text-3xl font-black select-none"
-              style={{
-                background: photoUrl ? "transparent" : `radial-gradient(circle, ${avatarColor}33, ${avatarColor}11)`,
-                border: `3px solid ${photoUrl ? "rgba(255,255,255,0.3)" : avatarColor}`,
-                boxShadow: `0 0 24px ${photoUrl ? "rgba(255,255,255,0.15)" : avatarColor + "55"}, 0 0 8px ${avatarColor}33`,
-                fontFamily: "var(--font-bebas)",
-                color: avatarColor,
-                fontSize: 36,
-                letterSpacing: "0.05em",
-              }}
-            >
-              {photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photoUrl} alt="Profil" className="w-full h-full object-cover" />
-              ) : (
-                uploading ? (
-                  <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : initials
-              )}
-            </div>
-
-            {/* Fotoğraf yükle butonu */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-50"
-              style={{
-                background: "#6D28D9",
-                boxShadow: "0 0 10px rgba(109,40,217,0.7)",
-              }}
-              title="Fotoğraf yükle"
-            >
-              <Upload size={13} className="text-white" />
-            </button>
-
-            {/* Fotoğraf sil butonu */}
-            {photoUrl && (
-              <button
-                onClick={handlePhotoDelete}
-                disabled={uploading}
-                className="absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center transition-all disabled:opacity-50"
+          {/* Efsane: arka plan efekti */}
+          {theme?.isLegend && (
+            <>
+              <div className="absolute inset-0 pointer-events-none"
                 style={{
-                  background: "rgba(239,68,68,0.8)",
-                  boxShadow: "0 0 8px rgba(239,68,68,0.4)",
-                }}
-                title="Fotoğrafı sil"
+                  background: "radial-gradient(ellipse at 50% 0%, rgba(192,132,252,0.12) 0%, transparent 70%)",
+                }} />
+              <div className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: "radial-gradient(ellipse at 20% 80%, rgba(124,58,237,0.1) 0%, transparent 60%)",
+                }} />
+            </>
+          )}
+
+          {/* ── İçerik ── */}
+          <div className="relative z-10 flex flex-col items-center pt-8 pb-7 px-4 sm:px-8">
+
+            {/* Efsane seviye: animasyonlu taç */}
+            {theme?.isLegend && (
+              <motion.div
+                animate={{ y: [0, -4, 0], scale: [1, 1.08, 1] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                className="mb-1 text-4xl select-none"
+                style={{ filter: "drop-shadow(0 0 12px rgba(251,191,36,0.8))" }}
               >
-                <X size={10} className="text-white" />
-              </button>
+                👑
+              </motion.div>
             )}
 
-            {/* Color picker button */}
-            <button
-              onClick={() => setShowColorPicker(p => !p)}
-              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center transition-all"
-              style={{
-                background: avatarColor,
-                boxShadow: `0 0 12px ${avatarColor}88`,
-              }}
-              title="Renk seç"
-            >
-              <Palette size={14} className="text-white" />
-            </button>
-          </div>
-
-          {/* Color picker popover */}
-          {showColorPicker && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="absolute left-4 top-28 sm:top-auto sm:left-40 z-30 p-3 rounded-2xl"
-              style={{
-                background: "rgba(17,17,20,0.97)",
-                border: "1px solid rgba(139,92,246,0.3)",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-              }}
-            >
-              <div className="text-[10px] uppercase tracking-widest mb-2.5 text-center"
-                style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
-                Avatar Rengi
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                {AVATAR_COLORS.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => handleColorSelect(c.hex)}
-                    className="w-9 h-9 rounded-full transition-transform active:scale-90"
-                    style={{
-                      background: c.hex,
-                      boxShadow: avatarColor === c.hex
-                        ? `0 0 0 2px white, 0 0 12px ${c.hex}`
-                        : `0 0 8px ${c.hex}55`,
-                      transform: avatarColor === c.hex ? "scale(1.15)" : "scale(1)",
-                    }}
-                    title={c.label}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {/* Yükleme hatası */}
-          {uploadErr && (
-            <div className="absolute bottom-2 left-2 right-2 text-[10px] px-2 py-1 rounded text-center"
-              style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", color:"#FCA5A5", fontFamily:"var(--font-barlow-condensed)" }}>
-              {uploadErr}
-            </div>
-          )}
-
-          {/* Name + level */}
-          <div className="text-center sm:text-left">
-            <div
-              className="text-2xl sm:text-3xl font-black tracking-wide"
-              style={{
-                fontFamily: "var(--font-bebas)",
-                letterSpacing: "0.1em",
-                background: stats
-                  ? `linear-gradient(90deg, ${stats.levelGradFrom}, ${stats.levelGradTo})`
-                  : "white",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              {student.fullName.toUpperCase()}
-            </div>
+            {/* Seviye rozeti (üstte) */}
             {stats && (
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-1.5">
-                <span
-                  className="text-xs px-3 py-1 rounded-full font-semibold"
-                  style={{
-                    background: `${stats.levelGradFrom}22`,
-                    border: `1px solid ${stats.levelGradFrom}55`,
-                    color: stats.levelColor,
-                    fontFamily: "var(--font-barlow-condensed)",
-                  }}
-                >
-                  {stats.levelIcon} {stats.levelName}
-                </span>
+              <div
+                className="mb-4 px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase flex items-center gap-2"
+                style={{
+                  background: `${stats.levelColor}18`,
+                  border: `1px solid ${stats.levelColor}44`,
+                  color: stats.levelColor,
+                  fontFamily: "var(--font-barlow-condensed)",
+                  letterSpacing: "0.15em",
+                  boxShadow: `0 0 16px ${stats.levelColor}22`,
+                }}
+              >
+                <span>{stats.levelIcon}</span>
+                <span>{stats.levelName.toUpperCase()}</span>
               </div>
             )}
-            <div
-              className="text-xs mt-2"
-              style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}
-            >
-              {student.code}
-            </div>
-            <div className="flex items-center gap-2 mt-3 justify-center sm:justify-start flex-wrap">
+
+            {/* ── Avatar ── */}
+            <div className="relative mb-5">
+              {/* Outer glow rings */}
+              {theme && (
+                <>
+                  <div className="absolute inset-0 rounded-full pointer-events-none"
+                    style={{
+                      border: `2px solid ${theme.ring2}22`,
+                      borderRadius: "50%",
+                      transform: "scale(1.22)",
+                    }} />
+                  <div className="absolute inset-0 rounded-full pointer-events-none"
+                    style={{
+                      border: `2px solid ${theme.ring1}44`,
+                      borderRadius: "50%",
+                      transform: "scale(1.12)",
+                    }} />
+                </>
+              )}
+
+              {/* Avatar circle */}
+              <div
+                className="w-32 h-32 sm:w-40 sm:h-40 rounded-full overflow-hidden flex items-center justify-center relative"
+                style={{
+                  background: photoUrl
+                    ? "transparent"
+                    : `radial-gradient(circle at 35% 35%, ${avatarColor}44, ${avatarColor}11)`,
+                  border: `3px solid ${theme ? theme.ring1 : avatarColor}`,
+                  boxShadow: `0 0 0 1px ${theme ? theme.ring2 + "33" : avatarColor + "22"}, 0 0 40px ${theme ? theme.glow : avatarColor + "44"}`,
+                  fontSize: 52,
+                  fontFamily: "var(--font-bebas)",
+                  color: avatarColor,
+                  letterSpacing: "0.05em",
+                }}
+              >
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photoUrl} alt="Profil" className="w-full h-full object-cover" />
+                ) : uploading ? (
+                  <div className="w-7 h-7 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  initials
+                )}
+              </div>
+
+              {/* Upload button */}
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg transition-all disabled:opacity-50 active:scale-95"
+                className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-semibold transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap"
                 style={{
-                  background: "rgba(109,40,217,0.2)",
-                  border: "1px solid rgba(139,92,246,0.35)",
-                  color: "#C4B5FD",
+                  background: "rgba(109,40,217,0.85)",
+                  border: "1px solid rgba(139,92,246,0.6)",
+                  color: "white",
                   fontFamily: "var(--font-barlow-condensed)",
+                  boxShadow: "0 0 12px rgba(109,40,217,0.5)",
                 }}
               >
-                <Upload size={12} />
-                {uploading ? "Yükleniyor…" : photoUrl ? "Fotoğrafı Değiştir" : "Fotoğraf Yükle"}
+                <Upload size={10} />
+                {uploading ? "Yükleniyor…" : photoUrl ? "Değiştir" : "Fotoğraf"}
               </button>
+
+              {/* Delete button */}
               {photoUrl && (
                 <button
                   onClick={handlePhotoDelete}
                   disabled={uploading}
-                  className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg transition-all disabled:opacity-50 active:scale-95"
+                  className="absolute -top-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center transition-all disabled:opacity-50 active:scale-90"
                   style={{
-                    background: "rgba(239,68,68,0.1)",
-                    border: "1px solid rgba(239,68,68,0.25)",
-                    color: "#FCA5A5",
-                    fontFamily: "var(--font-barlow-condensed)",
+                    background: "rgba(239,68,68,0.85)",
+                    border: "1px solid rgba(239,68,68,0.5)",
+                    boxShadow: "0 0 8px rgba(239,68,68,0.4)",
                   }}
                 >
-                  <Trash2 size={12} />
-                  Sil
+                  <Trash2 size={11} className="text-white" />
                 </button>
               )}
             </div>
+
+            {/* ── İsim ── */}
+            <div
+              className="text-3xl sm:text-4xl font-black tracking-wide text-center leading-none mb-1"
+              style={{
+                fontFamily: "var(--font-bebas)",
+                letterSpacing: "0.1em",
+                background: theme
+                  ? `linear-gradient(90deg, ${stats!.levelGradFrom}, ${stats!.levelGradTo})`
+                  : "white",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                filter: theme ? `drop-shadow(0 0 12px ${stats!.levelColor}66)` : "none",
+              }}
+            >
+              {student.fullName.toUpperCase()}
+            </div>
+            <div
+              className="text-[11px] mb-4"
+              style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}
+            >
+              {student.code}
+            </div>
+
+            {/* ── Kimlik şeridi ── */}
+            {stats && (
+              <div className="w-full grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+                {/* XP */}
+                <div className="flex flex-col items-center gap-0.5 py-2.5 rounded-lg"
+                  style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}>
+                  <Zap size={14} color="#8B5CF6" />
+                  <div className="text-lg font-black tabular-nums leading-none"
+                    style={{ fontFamily: "var(--font-bebas)", color: "#8B5CF6", letterSpacing: "0.05em" }}>
+                    {fmtXP(stats.lifetimeXP)}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-widest"
+                    style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    Toplam XP
+                  </div>
+                </div>
+
+                {/* HoF Sırası */}
+                <div className="flex flex-col items-center gap-0.5 py-2.5 rounded-lg"
+                  style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.22)" }}>
+                  <Crown size={14} color="#FBBF24" />
+                  <div className="text-lg font-black leading-none"
+                    style={{ fontFamily: "var(--font-bebas)", color: "#FBBF24", letterSpacing: "0.05em" }}>
+                    {stats.hofRank > 0 ? `#${stats.hofRank}` : "—"}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-widest"
+                    style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    HoF Sırası
+                  </div>
+                </div>
+
+                {/* Seri */}
+                <div className="flex flex-col items-center gap-0.5 py-2.5 rounded-lg"
+                  style={{ background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.2)" }}>
+                  <Flame size={14} color="#FB923C" />
+                  <div className="text-lg font-black leading-none"
+                    style={{ fontFamily: "var(--font-bebas)", color: "#FB923C", letterSpacing: "0.05em" }}>
+                    {stats.weekStreak}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-widest"
+                    style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    Haftalık Seri
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Alt butonlar ── */}
+            <div className="flex items-center gap-3 flex-wrap justify-center">
+              {/* Renk seçici */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowColorPicker(p => !p)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] transition-all active:scale-95"
+                  style={{
+                    background: avatarColor + "22",
+                    border: `1px solid ${avatarColor}55`,
+                    color: avatarColor,
+                    fontFamily: "var(--font-barlow-condensed)",
+                  }}
+                >
+                  <Palette size={12} />
+                  Renk
+                </button>
+
+                <AnimatePresence>
+                  {showColorPicker && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.88, y: 6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.88, y: 6 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 p-3 rounded-2xl"
+                      style={{
+                        background: "rgba(12,12,16,0.97)",
+                        border: "1px solid rgba(139,92,246,0.3)",
+                        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+                        minWidth: 160,
+                      }}
+                    >
+                      <div className="text-[9px] uppercase tracking-widest mb-2 text-center"
+                        style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+                        Avatar Rengi
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {AVATAR_COLORS.map(c => (
+                          <button key={c.id} onClick={() => handleColorSelect(c.hex)}
+                            className="w-8 h-8 rounded-full transition-all active:scale-90"
+                            style={{
+                              background: c.hex,
+                              boxShadow: avatarColor === c.hex
+                                ? `0 0 0 2px white, 0 0 12px ${c.hex}`
+                                : `0 0 6px ${c.hex}55`,
+                              transform: avatarColor === c.hex ? "scale(1.18)" : "scale(1)",
+                            }}
+                            title={c.label}
+                          />
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Hikaye paylaş */}
+              <button
+                onClick={handleGenerateCard}
+                disabled={!stats || generating}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all active:scale-95 disabled:opacity-50"
+                style={{
+                  background: "linear-gradient(90deg, rgba(139,92,246,0.75), rgba(217,70,239,0.65))",
+                  border: "1px solid rgba(139,92,246,0.5)",
+                  color: "white",
+                  fontFamily: "var(--font-barlow-condensed)",
+                  boxShadow: "0 0 16px rgba(139,92,246,0.3)",
+                }}
+              >
+                <Camera size={12} />
+                {generating ? "Oluşturuluyor…" : "Hikaye Olarak Paylaş"}
+              </button>
+            </div>
+
+            {/* Upload error */}
+            {uploadErr && (
+              <div className="mt-3 text-[10px] px-3 py-1.5 rounded-lg text-center"
+                style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", color: "#FCA5A5", fontFamily: "var(--font-barlow-condensed)" }}>
+                {uploadErr}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ── Stats grid ───────────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════════
+            STATİSTİK KARTLARI
+        ══════════════════════════════════════════════════════════ */}
         {stats && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+          <>
+            {/* Bölüm başlığı */}
+            <div className="flex items-center gap-2 px-1 pt-2">
+              <Shield size={13} style={{ color: "rgba(255,255,255,0.15)" }} />
               <span
-                className="text-[11px] uppercase tracking-widest px-3"
-                style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}
+                className="text-[11px] uppercase tracking-[0.22em]"
+                style={{ color: "rgba(255,255,255,0.18)", fontFamily: "var(--font-bebas)" }}
               >
                 Savaşçı İstatistikleri
               </span>
-              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.05)" }} />
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <StatBox
-                label="Ömür Boyu XP"
-                value={stats.lifetimeXP >= 1000
-                  ? `${(stats.lifetimeXP / 1000).toFixed(stats.lifetimeXP % 1000 === 0 ? 0 : 1)}K`
-                  : stats.lifetimeXP}
-                sub="toplam puan"
-                accent="#8B5CF6"
-              />
-              <StatBox
-                label="Sezon XP"
-                value={stats.seasonXP >= 1000
-                  ? `${(stats.seasonXP / 1000).toFixed(1)}K`
-                  : stats.seasonXP}
-                sub={stats.seasonLabel}
-                accent="#D946EF"
-              />
-              <StatBox
-                label="Tamamlanan Ders"
-                value={stats.completedLessons}
-                sub={`${stats.trainingHours} saat antrenman`}
-                accent="#FBBF24"
-              />
-              <StatBox
-                label="Rozet Sayısı"
-                value={stats.badgeCount}
-                sub="kazanılan"
-                accent="#34D399"
-              />
-              <StatBox
-                label="Teknik Ortalama"
-                value={stats.techAvg}
-                sub="yumruk+tekme+savunma+kondisyon"
-                accent="#60A5FA"
-              />
-              <StatBox
-                label="En İyi Skor"
-                value={stats.bestScore}
-                sub="genel değerlendirme"
-                accent="#F87171"
-              />
-              <StatBox
-                label="Haftalık Seri"
-                value={`${stats.weekStreak} hafta`}
-                sub="üst üste devam"
-                accent="#A78BFA"
-              />
-              <StatBox
-                label="Düet Ders"
-                value={stats.duetCount}
-                sub="partner egzersizi"
-                accent="#FB923C"
-              />
+              <StatCard icon={<Zap size={14} />}      label="Ömür Boyu XP"     accent="#8B5CF6"
+                value={fmtXP(stats.lifetimeXP)} sub="toplam puan" />
+              <StatCard icon={<TrendingUp size={14} />} label="Sezon XP"        accent="#D946EF"
+                value={fmtXP(stats.seasonXP)} sub={stats.seasonLabel} />
+              <StatCard icon={<BookOpen size={14} />}  label="Tamamlanan Ders"  accent="#FBBF24"
+                value={stats.completedLessons} sub="ders birimi" />
+              <StatCard icon={<Award size={14} />}     label="Rozet Sayısı"     accent="#34D399"
+                value={stats.badgeCount} sub="kazanılan rozet" />
+              <StatCard icon={<Target size={14} />}    label="Teknik Ortalama"  accent="#60A5FA"
+                value={stats.techAvg} sub="yumruk · tekme · savunma · kondisyon" />
+              <StatCard icon={<Star size={14} />}      label="En İyi Skor"      accent="#F87171"
+                value={stats.bestScore} sub="genel değerlendirme" />
+              <StatCard icon={<Flame size={14} />}     label="Haftalık Seri"    accent="#A78BFA"
+                value={`${stats.weekStreak} hafta`} sub="üst üste devam" />
+              <StatCard icon={<Users size={14} />}     label="Düet Ders"        accent="#FB923C"
+                value={stats.duetCount} sub="partner egzersizi" />
             </div>
-          </div>
+          </>
         )}
 
-        {/* ── Instagram Story Card ─────────────────────────── */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-            <span
-              className="text-[11px] uppercase tracking-widest px-3"
-              style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}
-            >
-              Paylaş
-            </span>
-            <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-          </div>
-
-          <div
-            className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4"
+        {/* ═══════════════════════════════════════════════════════
+            Efsane Sporcu özel banner
+        ══════════════════════════════════════════════════════════ */}
+        {theme?.isLegend && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="relative overflow-hidden rounded-xl p-4 text-center"
             style={{
-              background: "rgba(139,92,246,0.05)",
-              border: "1px solid rgba(139,92,246,0.2)",
-              borderRadius: 4,
+              background: "linear-gradient(135deg, rgba(124,58,237,0.2), rgba(192,132,252,0.08))",
+              border: "1px solid rgba(192,132,252,0.4)",
+              boxShadow: "0 0 40px rgba(192,132,252,0.15), inset 0 0 40px rgba(192,132,252,0.04)",
             }}
           >
-            <div className="flex-1 min-w-0">
-              <div
-                className="text-sm font-semibold text-white mb-1"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}
-              >
-                Instagram Story Kartı
-              </div>
-              <p
-                className="text-xs leading-relaxed"
-                style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}
-              >
-                Tüm istatistiklerini içeren 1080×1920 PNG kartını oluştur ve Instagram Story&apos;nde paylaş.
-              </p>
+            <div className="absolute top-0 left-0 right-0 h-0.5"
+              style={{ background: "linear-gradient(90deg, transparent, #C084FC, #F0ABFC, transparent)" }} />
+            <div className="text-2xl mb-1">👑</div>
+            <div className="text-sm font-black tracking-widest uppercase mb-1"
+              style={{ fontFamily: "var(--font-bebas)", color: "#C084FC", letterSpacing: "0.2em" }}>
+              Efsane Sporcu
             </div>
-            <button
-              onClick={handleGenerateCard}
-              disabled={!stats || generating}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm disabled:opacity-50 transition-all active:scale-95 flex-shrink-0"
-              style={{
-                background: "linear-gradient(90deg, rgba(139,92,246,0.7), rgba(217,70,239,0.6))",
-                border: "1px solid rgba(139,92,246,0.5)",
-                color: "white",
-                fontFamily: "var(--font-barlow-condensed)",
-                letterSpacing: "0.04em",
-              }}
-            >
-              <Camera size={16} />
-              {generating ? "Oluşturuluyor…" : "PNG İndir"}
-            </button>
-          </div>
-        </div>
+            <div className="text-[11px]"
+              style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+              Bu seviye sadece en disiplinli sporcular içindir. Artık Onur Listesi&apos;ndesin.
+            </div>
+          </motion.div>
+        )}
 
         {/* Footer hint */}
-        <p
-          className="text-center text-[10px] pb-2"
-          style={{ color: "rgba(255,255,255,0.15)", fontFamily: "var(--font-barlow-condensed)" }}
-        >
+        <p className="text-center text-[10px] pb-2"
+          style={{ color: "rgba(255,255,255,0.12)", fontFamily: "var(--font-barlow-condensed)" }}>
           Avatar rengi yalnızca bu cihazda kaydedilir.
         </p>
       </motion.div>
