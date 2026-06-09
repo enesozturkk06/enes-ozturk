@@ -250,7 +250,7 @@ export default function ArenaPage() {
 
   const badges     = computeArenaBadges(duels, student.id);
   const pending    = duels.filter(d => d.status === "pending" && d.opponentId === student.id);
-  const active     = duels.filter(d => d.status === "active" || (d.status === "pending" && d.challengerId === student.id));
+  const active     = duels.filter(d => d.status === "active" || d.status === "accepted" || (d.status === "pending" && d.challengerId === student.id));
   const history    = duels.filter(d => ["completed","rejected","cancelled"].includes(d.status));
   const wins       = duels.filter(d => d.status === "completed" && d.winnerId === student.id).length;
   const losses     = duels.filter(d => d.status === "completed" && d.winnerId !== null && d.winnerId !== student.id).length;

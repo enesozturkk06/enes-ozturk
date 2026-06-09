@@ -1911,12 +1911,22 @@ export async function respondArenaDuel(
   const { error } = await db()
     .from("arena_duels")
     .update({
-      status:      response === "accepted" ? "active" : "rejected",
+      status:      response === "accepted" ? "accepted" : "rejected",
       accepted_at: response === "accepted" ? now : null,
     })
     .eq("id", duelId)
     .eq("status", "pending");
   if (error) console.error("[respondArenaDuel]", error.message);
+}
+
+/** Admin: Kabul edilmiş düelloyu aktifleştir (accepted → active) */
+export async function approveArenaDuel(duelId: string): Promise<void> {
+  const { error } = await db()
+    .from("arena_duels")
+    .update({ status: "active" })
+    .eq("id", duelId)
+    .eq("status", "accepted");
+  if (error) console.error("[approveArenaDuel]", error.message);
 }
 
 /** Admin: Düello sonucunu belirle (çift sonuçlandırma DB trigger ile engellenir) */

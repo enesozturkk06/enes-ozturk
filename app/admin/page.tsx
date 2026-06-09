@@ -12,6 +12,7 @@ import {
   getAllXPAdjustments, createXPAdjustment, getStudentXPAdjustments, updateStudent,
   getKediMissions, createKediMission, deleteKediMission,
   getAppSetting, setAppSetting,
+  getAllArenaDuels, adminResolveDuel, approveArenaDuel,
 } from "@/lib/db";
 import { getSeasonLabel, computeFullXP, getLevelForXP, getCurrentSeason } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
@@ -20,10 +21,10 @@ import {
   type HallEntry,
 } from "@/lib/hallOfFame";
 import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
-import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord, XPAdjustment, KediMission } from "@/lib/types";
+import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord, XPAdjustment, KediMission, ArenaDuel } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea, Input, Select } from "@/app/components/ui";
 import { STATUS_LABELS, TRAINER_NAME } from "@/lib/constants";
-import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap, Plus, Minus, History, Crown, Award, Sparkles } from "lucide-react";
+import { Users, Calendar, TrendingUp, Bell, CheckCircle, XCircle, UserCheck, UserX, X, ChevronRight, Zap, Plus, Minus, History, Crown, Award, Sparkles, Swords } from "lucide-react";
 import { useToast } from "@/app/components/shared/Toast";
 
 const XP_REASONS = [
@@ -109,6 +110,13 @@ export default function AdminDashboard() {
   const [activityFeedEnabled, setActivityFeedEnabled] = useState(true);
   const [feedToggleBusy, setFeedToggleBusy] = useState(false);
 
+  /* Arena Düello Yönetimi */
+  const [arenaduels, setArenaduels]             = useState<ArenaDuel[]>([]);
+  const [arenaResolveBusy, setArenaResolveBusy] = useState<string | null>(null);
+  const [arenaResolveModal, setArenaResolveModal] = useState<ArenaDuel | null>(null);
+  const [arenaWinnerId, setArenaWinnerId]       = useState("");
+  const [arenaRewardXP, setArenaRewardXP]       = useState("");
+
   /* Kedi AI Görevleri */
   const [kediMissions, setKediMissions]       = useState<KediMission[]>([]);
   const [missionTitle, setMissionTitle]       = useState("");
@@ -150,6 +158,7 @@ export default function AdminDashboard() {
       setAllGiftRequests(allGifts as GiftLessonRequest[]);
       setLoading(false);
       getKediMissions().then(m => setKediMissions(m)).catch(() => {});
+      getAllArenaDuels().then(d => setArenaduels(d)).catch(() => {});
       getAppSetting("activity_feed_enabled").then(v => {
         if (v !== null) setActivityFeedEnabled(v !== "false");
       }).catch(() => {});
@@ -1218,6 +1227,193 @@ export default function AdminDashboard() {
           </Card>
         </motion.div>
       )}
+
+      {/* ══ Arena Düello Yönetimi ══ */}
+      {arenaduels.length > 0 && (
+        <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.05 }}>
+          <Card className="p-4 sm:p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Swords size={18} style={{ color:"#F87171" }} />
+              <h3 className="text-lg sm:text-xl font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                Arena Düello Yönetimi
+              </h3>
+              <span className="text-xs text-white/30 ml-auto" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {arenaduels.filter(d => d.status === "accepted").length} onay bekliyor
+              </span>
+            </div>
+
+            {/* Onay bekleyen düellolar (accepted → admin onaylar → active) */}
+            {arenaduels.filter(d => d.status === "accepted").length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  Admin Onayı Bekleyen
+                </p>
+                <div className="space-y-2">
+                  {arenaduels.filter(d => d.status === "accepted").map(d => (
+                    <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 border"
+                      style={{ background:"rgba(220,38,38,0.06)", borderColor:"rgba(220,38,38,0.2)", borderRadius:4 }}>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-white truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          {d.challengerName} <span style={{ color:"#F87171" }}>vs</span> {d.opponentName}
+                        </div>
+                        <div className="text-[10px] mt-0.5" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                          Bahis: {d.wagerXP} XP · {new Date(d.createdAt).toLocaleDateString("tr")}
+                        </div>
+                      </div>
+                      <button
+                        disabled={arenaResolveBusy === d.id + "approve"}
+                        onClick={async () => {
+                          setArenaResolveBusy(d.id + "approve");
+                          await approveArenaDuel(d.id);
+                          const fresh = await getAllArenaDuels().catch(() => arenaduels);
+                          setArenaduels(fresh);
+                          setArenaResolveBusy(null);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold transition-all"
+                        style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.35)", color:"#4ADE80", fontFamily:"var(--font-barlow-condensed)", borderRadius:4 }}>
+                        <CheckCircle size={12} /> Onayla (Aktifleştir)
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Aktif düellolar — kazanan seç */}
+            {arenaduels.filter(d => d.status === "active").length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  Aktif — Kazanan Seçilecek
+                </p>
+                <div className="space-y-2">
+                  {arenaduels.filter(d => d.status === "active").map(d => (
+                    <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 border"
+                      style={{ background:"rgba(124,58,237,0.06)", borderColor:"rgba(124,58,237,0.2)", borderRadius:4 }}>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-white truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          {d.challengerName} <span style={{ color:"#DC2626" }}>⚔️</span> {d.opponentName}
+                        </div>
+                        <div className="text-[10px] mt-0.5" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                          Bahis: {d.wagerXP} XP
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => { setArenaResolveModal(d); setArenaWinnerId(d.challengerId); setArenaRewardXP(String(d.wagerXP * 2)); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold"
+                        style={{ background:"rgba(220,38,38,0.15)", border:"1px solid rgba(220,38,38,0.35)", color:"#F87171", fontFamily:"var(--font-barlow-condensed)", borderRadius:4 }}>
+                        <Crown size={12} /> Kazananı Seç
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tamamlanan geçmiş */}
+            {arenaduels.filter(d => d.status === "completed").length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  Tamamlananlar
+                </p>
+                <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
+                  {arenaduels.filter(d => d.status === "completed").map(d => {
+                    const winner = d.winnerId === d.challengerId ? d.challengerName : d.opponentName;
+                    return (
+                      <div key={d.id} className="flex items-center justify-between gap-3 px-3 py-2 border"
+                        style={{ background:"rgba(52,211,153,0.04)", borderColor:"rgba(52,211,153,0.15)", borderRadius:4 }}>
+                        <div className="text-xs text-white/60 truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          {d.challengerName} vs {d.opponentName}
+                        </div>
+                        <div className="text-[10px] flex-shrink-0 font-semibold" style={{ color:"#34D399", fontFamily:"var(--font-barlow-condensed)" }}>
+                          🏆 {winner}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Arena Kazanan Seç Modalı */}
+      <Modal open={!!arenaResolveModal} onClose={() => !arenaResolveBusy && setArenaResolveModal(null)}
+        title="Arena Kazananını Belirle" maxWidth="max-w-md">
+        {arenaResolveModal && (
+          <div className="space-y-4">
+            <div className="p-3 border text-center"
+              style={{ background:"rgba(220,38,38,0.06)", borderColor:"rgba(220,38,38,0.2)", borderRadius:4 }}>
+              <div className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                {arenaResolveModal.challengerName} <span style={{ color:"#F87171" }}>vs</span> {arenaResolveModal.opponentName}
+              </div>
+              <div className="text-[11px] mt-1" style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
+                Her biri {arenaResolveModal.wagerXP} XP bahis koydu
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-white/30 mb-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Kazanan</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: arenaResolveModal.challengerId, name: arenaResolveModal.challengerName },
+                  { id: arenaResolveModal.opponentId,   name: arenaResolveModal.opponentName },
+                ].map(p => (
+                  <button key={p.id} onClick={() => setArenaWinnerId(p.id)}
+                    className="py-3 text-sm font-semibold transition-all"
+                    style={{
+                      border: `1px solid ${arenaWinnerId === p.id ? "rgba(251,191,36,0.6)" : "rgba(255,255,255,0.1)"}`,
+                      background: arenaWinnerId === p.id ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
+                      color: arenaWinnerId === p.id ? "#FBBF24" : "rgba(255,255,255,0.4)",
+                      fontFamily: "var(--font-barlow-condensed)", borderRadius:4,
+                    }}>
+                    {arenaWinnerId === p.id ? "👑 " : ""}{p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-white/30 mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                Kazanana verilecek XP (bahis × 2 varsayılan)
+              </p>
+              <input
+                type="number" min="0"
+                value={arenaRewardXP}
+                onChange={e => setArenaRewardXP(e.target.value)}
+                className="w-full px-3 py-2 text-sm outline-none"
+                style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.8)", fontFamily:"var(--font-barlow-condensed)", borderRadius:4 }}
+              />
+            </div>
+
+            <button
+              disabled={!arenaWinnerId || !!arenaResolveBusy}
+              onClick={async () => {
+                if (!arenaResolveModal || !arenaWinnerId) return;
+                const d = arenaResolveModal;
+                const reward = parseInt(arenaRewardXP, 10) || d.wagerXP * 2;
+                const isChallWinner = arenaWinnerId === d.challengerId;
+                const winnerName = isChallWinner ? d.challengerName : d.opponentName;
+                const loserName  = isChallWinner ? d.opponentName  : d.challengerName;
+                const loserId    = isChallWinner ? d.opponentId    : d.challengerId;
+                const season     = getCurrentSeason();
+                setArenaResolveBusy(d.id);
+                try {
+                  await adminResolveDuel(d.id, arenaWinnerId, winnerName, loserName, loserId, reward, d.wagerXP, season);
+                  const fresh = await getAllArenaDuels().catch(() => arenaduels);
+                  setArenaduels(fresh);
+                  setArenaResolveModal(null);
+                } finally {
+                  setArenaResolveBusy(null);
+                }
+              }}
+              className="w-full py-3 text-sm font-semibold tracking-wider uppercase transition-all disabled:opacity-40"
+              style={{ background:"linear-gradient(90deg,rgba(220,38,38,0.8),rgba(124,58,237,0.7))", border:"1px solid rgba(220,38,38,0.4)", color:"white", fontFamily:"var(--font-barlow-condensed)", borderRadius:4 }}>
+              {arenaResolveBusy ? "Kaydediliyor…" : "⚔️ Sonucu Kaydet"}
+            </button>
+          </div>
+        )}
+      </Modal>
 
       {/* ══ Manuel XP Ekle / Düş Modalı ══ */}
       <Modal open={!!xpAdjModal} onClose={() => !xpAdjBusy && setXpAdjModal(null)}
