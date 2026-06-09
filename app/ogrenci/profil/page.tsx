@@ -569,9 +569,15 @@ export default function ProfilPage() {
                   fontSize: 11, letterSpacing: "0.18em",
                   color: gc, textTransform: "uppercase" as const,
                   boxShadow: `0 0 18px ${gc}22`,
+                  /* mobile overflow fix */
+                  maxWidth: "calc(100vw - 64px)",
+                  overflow: "hidden",
+                  whiteSpace: "nowrap" as const,
+                  textOverflow: "ellipsis",
+                  flexShrink: 0,
                 }}>
-                <span className="text-base">{stats.levelIcon}</span>
-                <span className="font-bold">{stats.levelName}</span>
+                <span className="text-base flex-shrink-0">{stats.levelIcon}</span>
+                <span className="font-bold truncate">{stats.levelName}</span>
               </div>
             )}
 
@@ -636,30 +642,47 @@ export default function ProfilPage() {
 
             {/* Badge strip: HoF | Streak | Badges */}
             {stats && (
-              <div className="flex items-center gap-2 mb-5 flex-wrap justify-center">
+              <div
+                className="flex items-center gap-2 mb-5 flex-wrap justify-center"
+                style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
+              >
                 {stats.hofRank > 0 && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-                    style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)" }}>
-                    <Crown size={12} color="#FBBF24" />
-                    <span className="text-[11px] font-bold" style={{ color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
+                    style={{
+                      background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)",
+                      flexShrink: 0, minWidth: 0,
+                      maxWidth: "calc(100vw - 80px)",
+                      overflow: "hidden",
+                    }}>
+                    <Crown size={12} color="#FBBF24" className="flex-shrink-0" />
+                    <span className="text-[11px] font-bold truncate"
+                      style={{ color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
                       #{stats.hofRank} Onur Listesi
                     </span>
                   </div>
                 )}
                 {stats.weekStreak > 0 && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-                    style={{ background: "rgba(251,146,60,0.12)", border: "1px solid rgba(251,146,60,0.35)" }}>
-                    <Flame size={12} color="#FB923C" />
-                    <span className="text-[11px] font-bold" style={{ color: "#FB923C", fontFamily: "var(--font-barlow-condensed)" }}>
+                    style={{
+                      background: "rgba(251,146,60,0.12)", border: "1px solid rgba(251,146,60,0.35)",
+                      flexShrink: 0, minWidth: 0,
+                    }}>
+                    <Flame size={12} color="#FB923C" className="flex-shrink-0" />
+                    <span className="text-[11px] font-bold"
+                      style={{ color: "#FB923C", fontFamily: "var(--font-barlow-condensed)" }}>
                       {stats.weekStreak} Hafta Serisi
                     </span>
                   </div>
                 )}
                 {stats.badgeCount > 0 && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-                    style={{ background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)" }}>
-                    <Award size={12} color="#34D399" />
-                    <span className="text-[11px] font-bold" style={{ color: "#34D399", fontFamily: "var(--font-barlow-condensed)" }}>
+                    style={{
+                      background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)",
+                      flexShrink: 0, minWidth: 0,
+                    }}>
+                    <Award size={12} color="#34D399" className="flex-shrink-0" />
+                    <span className="text-[11px] font-bold"
+                      style={{ color: "#34D399", fontFamily: "var(--font-barlow-condensed)" }}>
                       {stats.badgeCount} Rozet
                     </span>
                   </div>
