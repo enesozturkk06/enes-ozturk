@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
+import { refreshStudent } from "@/lib/auth";
 import {
   getStudentAppointments, getLessonRecords, getStudentXPAdjustments,
   uploadStudentAvatar, deleteStudentAvatar, getStudents,
@@ -160,7 +161,7 @@ async function compressImage(file: File, maxPx = 400): Promise<Blob> {
    ANA SAYFA
 ══════════════════════════════════════════════════════════ */
 export default function ProfilPage() {
-  const { student } = useAuth();
+  const { student, setStudent } = useAuth();
   const [loading, setLoading]               = useState(true);
   const [avatarColor, setAvatarColor]       = useState("#8B5CF6");
   const [photoUrl, setPhotoUrl]             = useState<string | null>(null);
@@ -261,8 +262,12 @@ export default function ProfilPage() {
     try {
       const compressed = await compressImage(file, 400);
       const url = await uploadStudentAvatar(student.id, compressed, "image/jpeg");
-      if (url) setPhotoUrl(url);
-      else setUploadErr("Yükleme başarısız — Supabase Storage ayarlarını kontrol et.");
+      if (url) {
+        setPhotoUrl(url);
+        const updated = { ...student, avatarUrl: url };
+        setStudent(updated);
+        refreshStudent(updated);
+      } else setUploadErr("Yükleme başarısız — Supabase Storage ayarlarını kontrol et.");
     } catch { setUploadErr("Beklenmedik hata."); }
     finally { setUploading(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
   };
@@ -270,7 +275,11 @@ export default function ProfilPage() {
   const handlePhotoDelete = async () => {
     if (!student) return; setUploading(true);
     await deleteStudentAvatar(student.id).catch(() => {});
-    setPhotoUrl(null); setUploading(false);
+    setPhotoUrl(null);
+    const updated = { ...student, avatarUrl: undefined };
+    setStudent(updated);
+    refreshStudent(updated);
+    setUploading(false);
   };
 
   /* ── Loading ── */

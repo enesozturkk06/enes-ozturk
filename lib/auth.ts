@@ -20,6 +20,7 @@ function mapStudent(row: any): Student {
     packageStartDate: row.package_start_date ?? "", packageEndDate: row.package_end_date ?? "",
     notes: row.notes ?? undefined, isActive: row.is_active ?? true,
     weight: row.weight ?? undefined, age: row.age ?? undefined, createdAt: row.created_at ?? "",
+    avatarUrl: row.avatar_url ?? undefined,
   };
 }
 
