@@ -6,8 +6,9 @@ import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartne
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { getPackages, getActivePackages, type LessonPackage } from "@/lib/packages";
 import type { Student, PackagePurchase } from "@/lib/types";
-import { PAYMENT_LABELS, LEVEL_LABELS } from "@/lib/constants";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History } from "lucide-react";
+import { PAYMENT_LABELS, LEVEL_LABELS, LESSON_DURATIONS } from "@/lib/constants";
+import { getPackageDurationDays, calcPackageEndDate, getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
+import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History, CalendarClock } from "lucide-react";
 import { useToast } from "@/app/components/shared/Toast";
 import { format } from "date-fns";
 
@@ -95,6 +96,7 @@ export default function OgrencilerPage() {
   const [aMonthlyFee, setAMonthlyFee] = useState("");
   const [aPackageId, setAPackageId] = useState(""); // ← Paket ID
   const [aTotalLessons, setATL]   = useState("8");
+  const [aDurationDays, setADurationDays] = useState("45");
   const [aAmountPaid, setAAP]     = useState("");
   const [aAmountDue, setAAD]      = useState(""); // paket fiyatı (otomatik)
   const [aCustomPrice, setACustom] = useState(""); // indirimli fiyat
@@ -111,6 +113,8 @@ export default function OgrencilerPage() {
   const [eMonthlyFee, setEMonthlyFee] = useState("");
   const [eRL, setERL]             = useState("");
   const [eTL, setETL]             = useState("");
+  const [eStartDate, setEStartDate] = useState("");
+  const [eEndDate, setEEndDate]   = useState("");
   const [eAP, setEAP]             = useState("");
   const [eAD, setEAD]             = useState("");
   const [ePS, setEPS]             = useState("beklemede");
@@ -173,9 +177,9 @@ export default function OgrencilerPage() {
     setRSaving(true);
     try {
       const today = new Date();
-      const end   = new Date(today);
-      end.setDate(end.getDate() + selPkg.durationDays);
       const fmt = (d: Date) => d.toISOString().split("T")[0];
+      const durationDays = LESSON_DURATIONS[selPkg.lessonCount] ?? selPkg.durationDays;
+      const end = calcPackageEndDate(today, durationDays);
       const paid = Number(rPaidAmount) || 0;
 
       const { newRemaining } = await renewStudentPackage({
@@ -188,7 +192,7 @@ export default function OgrencilerPage() {
         paidAmount:    paid,
         paymentStatus: rPayStatus as "odendi" | "kismi" | "beklemede",
         startDate:     fmt(today),
-        endDate:       fmt(end),
+        endDate:       end,
         notes:         rNotes || undefined,
       });
 
@@ -274,12 +278,21 @@ export default function OgrencilerPage() {
     setATL(String(pkg.lessonCount));
     setAAD(String(pkg.price));  // standart fiyat → borç
     setACustom("");              // indirim sıfırla
+    setADurationDays(String(pkg.durationDays)); // paket süresi
+  };
+
+  /* Ders sayısı değişince paket süresini öner (manuel paket seçilmediyse) */
+  const handleTotalLessonsChange = (v: string) => {
+    setATL(v);
+    if (!aPackageId) {
+      setADurationDays(String(getPackageDurationDays(Number(v) || 0, "lesson_pack")));
+    }
   };
 
   const openAdd = () => {
     const seq = genCodeSequential(students);
     setACode(seq); setAName(""); setAPhone(""); setAEmail(""); setALevel("baslangic");
-    setAPackageId(""); setATL("8"); setAAP(""); setAAD(""); setACustom("");
+    setAPackageId(""); setATL("8"); setADurationDays(String(LESSON_DURATIONS[8])); setAAP(""); setAAD(""); setACustom("");
     setAPayStatus("beklemede"); setANotes("");
     setAddOpen(true);
   };
@@ -297,15 +310,13 @@ export default function OgrencilerPage() {
     setASaving(true);
     try {
       const today = new Date().toISOString().split("T")[0];
-      const pkg = packages.find(p => p.id === aPackageId);
       const totalLessons = Number(aTotalLessons) || 8;
       const customPrice  = aCustomPrice ? Number(aCustomPrice) : undefined;
       // Borç: indirimli fiyat varsa onu, yoksa standart borç alanını kullan
       const amountDue = customPrice !== undefined ? customPrice : (Number(aAmountDue) || 0);
-      // Bitiş tarihi: paket varsa durationDays, yoksa standart
-      const endDate = pkg
-        ? new Date(Date.now() + pkg.durationDays * 86400000).toISOString().split("T")[0]
-        : today;
+      // Bitiş tarihi: paket süresi alanına göre hesaplanır
+      const durationDays = Number(aDurationDays) || getPackageDurationDays(totalLessons, "lesson_pack");
+      const endDate = calcPackageEndDate(today, durationDays);
 
       await createStudent({
         code:             finalCode,
@@ -343,6 +354,7 @@ export default function OgrencilerPage() {
     setESubType(s.subscriptionType ?? "lesson_pack");
     setEMonthlyFee(s.monthlyFee ? String(s.monthlyFee) : "");
     setERL(String(s.remainingLessons)); setETL(String(s.totalLessons));
+    setEStartDate(s.packageStartDate || ""); setEEndDate(s.packageEndDate || "");
     setEAP(String(s.amountPaid)); setEAD(String(s.amountDue));
     setEPS(s.paymentStatus); setENotes(s.notes ?? "");
     setEditSt(s);
@@ -360,6 +372,8 @@ export default function OgrencilerPage() {
         monthlyFee:       eSubType === "monthly" && eMonthlyFee ? Number(eMonthlyFee) : undefined,
         remainingLessons: Number(eRL),
         totalLessons:     Number(eTL),
+        packageStartDate: eStartDate,
+        packageEndDate:   eEndDate,
         amountPaid:       Number(eAP),
         amountDue:        Number(eAD),
         paymentStatus:    ePS as Student["paymentStatus"],
@@ -547,7 +561,7 @@ export default function OgrencilerPage() {
                     <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                       Toplam Ders *
                     </label>
-                    <input type="number" min="1" value={aTotalLessons} onChange={e => setATL(e.target.value)}
+                    <input type="number" min="1" value={aTotalLessons} onChange={e => handleTotalLessonsChange(e.target.value)}
                       className="w-full bg-steel/60 border-2 border-gold/30 focus:border-gold text-gold-bright px-3 py-2.5 text-lg outline-none"
                       style={{ fontFamily:"var(--font-bebas)" }} />
                   </div>
@@ -559,6 +573,22 @@ export default function OgrencilerPage() {
                     <input type="number" min="0" value={aAmountDue} onChange={e => setAAD(e.target.value)} placeholder="Paket fiyatı"
                       className="w-full bg-steel/60 border-2 border-white/15 focus:border-white/30 text-white/70 px-3 py-2.5 text-lg outline-none"
                       style={{ fontFamily:"var(--font-bebas)" }} />
+                  </div>
+                </div>
+                {/* Paket geçerlilik süresi */}
+                <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      Paket Geçerlilik Süresi (gün)
+                    </label>
+                    <input type="number" min="1" value={aDurationDays} onChange={e => setADurationDays(e.target.value)}
+                      className="w-full bg-steel/60 border-2 border-violet/30 focus:border-violet text-white px-3 py-2.5 text-lg outline-none"
+                      style={{ fontFamily:"var(--font-bebas)" }} />
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <p className="text-xs text-white/20" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      Bugün başlar, {format(new Date(calcPackageEndDate(new Date(), Number(aDurationDays) || 0)), "dd MMMM yyyy")} tarihinde sona erer.
+                    </p>
                   </div>
                 </div>
                 {/* İndirimli fiyat */}
@@ -640,7 +670,7 @@ export default function OgrencilerPage() {
           <table className="w-full" style={{ minWidth: 640 }}>
             <thead>
               <tr className="border-b border-white/5 bg-steel/30">
-                {["Öğrenci","Kod","Kalan / Toplam","Ödenen","Borç","Ödeme","İşlem"].map(h => (
+                {["Öğrenci","Kod","Kalan / Toplam","Paket Süresi","Ödenen","Borç","Ödeme","İşlem"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs text-white/30 tracking-widest uppercase whitespace-nowrap"
                     style={{ fontFamily: "var(--font-barlow-condensed)" }}>{h}</th>
                 ))}
@@ -648,7 +678,7 @@ export default function OgrencilerPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-12 text-white/30 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yükleniyor...</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-white/30 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yükleniyor...</td></tr>
               ) : (
                 <AnimatePresence>
                   {filtered.map((s, i) => (
@@ -671,6 +701,19 @@ export default function OgrencilerPage() {
                       <td className="px-4 py-3">
                         <span className={`text-lg font-display ${s.remainingLessons <= 2 ? "text-crimson" : "text-white"}`} style={{ fontFamily: "var(--font-bebas)" }}>{s.remainingLessons}</span>
                         <span className="text-sm text-white/25 font-display" style={{ fontFamily: "var(--font-bebas)" }}>/{s.totalLessons}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const days = getDaysRemaining(s.packageEndDate);
+                          if (days === null) return <span className="text-xs text-white/20" style={{ fontFamily: "var(--font-barlow-condensed)" }}>—</span>;
+                          const u = getPackageUrgency(days);
+                          return (
+                            <span className={`text-xs px-2 py-0.5 rounded ${u.color}`}
+                              style={{ background: u.bg, border: `1px solid ${u.border}`, fontFamily: "var(--font-barlow-condensed)" }}>
+                              {days < 0 ? "Süresi Doldu" : `${days} gün`}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3"><span className="text-sm text-green-400 font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.amountPaid > 0 ? `₺${s.amountPaid.toLocaleString("tr-TR")}` : "—"}</span></td>
                       <td className="px-4 py-3"><span className={`text-sm font-semibold ${s.amountDue > 0 ? "text-crimson" : "text-white/25"}`} style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.amountDue > 0 ? `₺${s.amountDue.toLocaleString("tr-TR")}` : "✓"}</span></td>
@@ -802,6 +845,52 @@ export default function OgrencilerPage() {
                       style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: {editSt.totalLessons}</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Paket süresi */}
+              <div className="p-4 bg-steel/30 border border-violet/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-violet tracking-widest uppercase"
+                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Paket Süresi</div>
+                  {(() => {
+                    const days = getDaysRemaining(eEndDate);
+                    if (days === null) return null;
+                    const u = getPackageUrgency(days);
+                    return (
+                      <span className={`text-xs px-2 py-0.5 rounded ${u.color}`}
+                        style={{ background: u.bg, border: `1px solid ${u.border}`, fontFamily: "var(--font-barlow-condensed)" }}>
+                        {days < 0 ? "Süresi Doldu" : `${days} gün kaldı`}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Başlangıç Tarihi</label>
+                    <input type="date" value={eStartDate} onChange={e => setEStartDate(e.target.value)}
+                      className="w-full bg-carbon border-2 border-white/15 focus:border-violet/50 text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily: "var(--font-inter)" }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Bitiş Tarihi</label>
+                    <input type="date" value={eEndDate} onChange={e => setEEndDate(e.target.value)}
+                      className="w-full bg-carbon border-2 border-white/15 focus:border-violet/50 text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily: "var(--font-inter)" }} />
+                  </div>
+                </div>
+                <button type="button"
+                  onClick={() => {
+                    const start = new Date().toISOString().split("T")[0];
+                    const duration = getPackageDurationDays(Number(eTL) || editSt.totalLessons, eSubType);
+                    setEStartDate(start);
+                    setEEndDate(calcPackageEndDate(start, duration));
+                  }}
+                  className="flex items-center justify-center gap-2 w-full border border-violet/30 text-violet hover:bg-violet/10 text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
+                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  <CalendarClock size={13} />Süreyi Bugünden Başlat ve Yenile
+                </button>
               </div>
 
               <div className="p-4 bg-steel/30 border border-crimson/10 space-y-3">

@@ -5,6 +5,31 @@ export const LESSON_PRICES: Record<number, number> = {
   12: 13500,
 };
 
+/** Ders sayısına göre paket geçerlilik süresi (gün) */
+export const LESSON_DURATIONS: Record<number, number> = {
+  8:  45,
+  10: 60,
+  12: 75,
+};
+
+/** Aylık sınırsız üyelik geçerlilik süresi (gün) */
+export const MONTHLY_DURATION_DAYS = 30;
+
+/** Eşleşme bulunamazsa kullanılacak varsayılan paket süresi (gün) */
+export const DEFAULT_DURATION_DAYS = 45;
+
+/** Paket süresi uyarı eşikleri (gün) */
+export const PACKAGE_WARNING_DAYS = 14;
+export const PACKAGE_URGENT_DAYS = 6;
+
+/** Randevu sayfasındaki bilgi ikonu açıklaması */
+export const PACKAGE_DURATION_INFO_TEXT =
+  "Ders paketleri belirlenen süre içinde kullanılmalıdır. Bunun sebebi antrenman düzenini korumak, gelişimi aksatmamak ve program yoğunluğunu adil şekilde yönetmektir. Paket süresi dolmadan randevularını planlamanı öneririz.";
+
+/** Paket süresi dolduğunda gösterilecek mesaj */
+export const PACKAGE_EXPIRED_TEXT =
+  "Paket süren doldu. Yeni paket için antrenörünle iletişime geç.";
+
 export const PACKAGES = [
   {
     id: "pkg-1",

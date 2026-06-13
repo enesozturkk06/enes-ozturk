@@ -8,7 +8,8 @@ import {
 } from "@/lib/db";
 import type { Appointment, LessonRecord, Notification, PendingInvite } from "@/lib/types";
 import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components/ui";
-import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS } from "@/lib/constants";
+import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT } from "@/lib/constants";
+import { getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
 import {
   Calendar, Clock, TrendingUp, BookOpen, Bell,
   CheckCircle, XCircle, ChevronRight, Users, Zap, User,
@@ -238,7 +239,7 @@ export default function OgrenciDashboard() {
                 style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                 {student.subscriptionType === "monthly"
                   ? `${student.monthlyFee ? `₺${student.monthlyFee.toLocaleString("tr-TR")} / ay` : "Aylık ödeme"}`
-                  : `Bitiş: ${format(parseISO(student.packageEndDate || new Date().toISOString().split("T")[0]), "dd MMMM yyyy", { locale: tr })}`}
+                  : `${totalLessons} ders paketi`}
               </p>
             </div>
             <Badge color={student.paymentStatus === "odendi" ? "green" : student.paymentStatus === "kismi" ? "gold" : "red"}>
@@ -262,6 +263,35 @@ export default function OgrenciDashboard() {
                 style={{ fontFamily:"var(--font-barlow-condensed)" }}>{progressPct}% tamamlandı</div>
             </>
           )}
+
+          {/* Paket süresi */}
+          {(() => {
+            const daysRemaining = getDaysRemaining(student.packageEndDate);
+            if (daysRemaining === null) return null;
+            const urgency = getPackageUrgency(daysRemaining);
+            return (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <span className="text-xs text-white/30 tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    Paket Süresi
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${urgency.color}`}
+                    style={{ background: urgency.bg, border: `1px solid ${urgency.border}`, fontFamily:"var(--font-barlow-condensed)" }}>
+                    {daysRemaining < 0 ? "Süresi Doldu" : `${daysRemaining} gün kaldı`}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <span>Başlangıç: {student.packageStartDate ? format(parseISO(student.packageStartDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
+                  <span>Bitiş: {student.packageEndDate ? format(parseISO(student.packageEndDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
+                </div>
+                {daysRemaining < 0 && (
+                  <p className="text-xs text-red-400 mt-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    {PACKAGE_EXPIRED_TEXT}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </Card>
       </motion.div>
 

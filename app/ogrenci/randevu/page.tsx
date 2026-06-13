@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { format, addDays, parseISO, differenceInHours, isFuture } from "date-fns";
 import { tr } from "date-fns/locale";
+import PackageExpiryBanner from "@/app/components/shared/PackageExpiryBanner";
 
 const V = "#8B5CF6";
 
@@ -213,6 +214,9 @@ export default function RandevuPage() {
     // w-full + max-w-full → hiçbir zaman parent'ı aşmaz
     <div className="w-full max-w-5xl mx-auto" style={{ minWidth: 0 }}>
       <PageHeader title="Randevu Al" subtitle="Ders tipini seç, saat seç, randevu oluştur" accent="Özel Ders" />
+
+      {/* Paket süresi uyarısı */}
+      <PackageExpiryBanner endDate={student?.packageEndDate} />
 
       {/* Kalan ders uyarısı */}
       {student && student.remainingLessons === 0 && (
