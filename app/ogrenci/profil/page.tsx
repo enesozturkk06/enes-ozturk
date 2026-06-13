@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
@@ -13,12 +13,11 @@ import {
 import { computeBadges } from "@/lib/badges";
 import { computeTechnicalAverages, countEarnedBadges } from "@/lib/hallOfFame";
 import CircularXP from "@/app/components/shared/CircularXP";
+import Link from "next/link";
 import {
   Zap, TrendingUp, BookOpen, Award, Target, Star, Flame, Users,
-  Upload, Trash2, Palette, Camera, Crown, Sparkles, Shield, ChevronRight,
+  Upload, Trash2, Palette, CreditCard, Crown, Sparkles, Shield, ChevronRight,
 } from "lucide-react";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
 
 /* ══════════════════════════════════════════════════════════
    AVATAR RENK SEÇENEKLERİ
@@ -158,165 +157,6 @@ async function compressImage(file: File, maxPx = 400): Promise<Blob> {
 }
 
 /* ══════════════════════════════════════════════════════════
-   CANVAS YARDIMCISI
-══════════════════════════════════════════════════════════ */
-function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number | number[]) {
-  const [tl, tr2, br, bl] = Array.isArray(r) ? r : [r, r, r, r];
-  ctx.beginPath();
-  ctx.moveTo(x + tl, y); ctx.lineTo(x + w - tr2, y); ctx.arcTo(x+w, y, x+w, y+h, tr2);
-  ctx.lineTo(x+w, y+h-br); ctx.arcTo(x+w, y+h, x, y+h, br);
-  ctx.lineTo(x+bl, y+h); ctx.arcTo(x, y+h, x, y, bl);
-  ctx.lineTo(x, y+tl); ctx.arcTo(x, y, x+w, y, tl); ctx.closePath();
-}
-function fmtC(v: number) { return v >= 1000 ? `${Math.round(v/1000)}K` : String(v); }
-
-/* ══════════════════════════════════════════════════════════
-   STORY CARD CANVAS
-══════════════════════════════════════════════════════════ */
-function drawStoryCard(canvas: HTMLCanvasElement, o: {
-  name: string; initials: string; avatarColor: string;
-  levelIcon: string; levelName: string; levelId: string;
-  levelGradFrom: string; levelGradTo: string; levelColor: string;
-  lifetimeXP: number; seasonXP: number; completedLessons: number;
-  badgeCount: number; techAvg: string; bestScore: string;
-  weekStreak: number; duetCount: number; hofRank: number;
-  progressPct: number; xpToNext: number;
-}) {
-  const W = 1080, H = 1920;
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext("2d")!;
-  const isL = o.levelId === "legend";
-  const gc  = o.levelColor;
-
-  // BG
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, isL ? "#0c0818" : "#09090B");
-  bg.addColorStop(1, isL ? "#150d20" : "#12091a");
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-  // Glow orbs
-  [[W*.85, H*.2, 500], [W*.1, H*.65, 360]].forEach(([x, y, r]) => {
-    const g = ctx.createRadialGradient(x,y,0,x,y,r);
-    g.addColorStop(0, gc+"28"); g.addColorStop(1, "transparent");
-    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  });
-  // Top accent
-  const tl = ctx.createLinearGradient(0,0,W,0);
-  tl.addColorStop(0,"transparent"); tl.addColorStop(.3,o.levelGradFrom);
-  tl.addColorStop(.7,o.levelGradTo); tl.addColorStop(1,"transparent");
-  ctx.strokeStyle=tl; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(0,3); ctx.lineTo(W,3); ctx.stroke();
-
-  // Brand
-  const hx=108,hy=140,hr=60;
-  ctx.beginPath();
-  for(let i=0;i<6;i++){const a=(i*Math.PI)/3-Math.PI/6;const px=hx+hr*Math.cos(a),py=hy+hr*Math.sin(a);i?ctx.lineTo(px,py):ctx.moveTo(px,py);}
-  ctx.closePath(); ctx.strokeStyle="rgba(220,38,38,.8)"; ctx.lineWidth=4; ctx.stroke();
-  ctx.fillStyle="rgba(220,38,38,.1)"; ctx.fill();
-  ctx.fillStyle="rgba(220,38,38,.9)"; ctx.font="bold 38px Impact,sans-serif";
-  ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("EÖ",hx,hy);
-  ctx.textBaseline="alphabetic"; ctx.textAlign="left";
-  ctx.fillStyle="rgba(255,255,255,.92)"; ctx.font="bold 42px Impact,sans-serif";
-  ctx.fillText("ANTRENÖR ENES ÖZTÜRK",208,128);
-  ctx.fillStyle="rgba(220,38,38,.8)"; ctx.font="26px Arial,sans-serif";
-  ctx.fillText("KİŞİSEL ANTRENÖR  ·  @p.t.enesozturk",210,170);
-  ctx.strokeStyle="rgba(255,255,255,.07)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(80,225); ctx.lineTo(W-80,225); ctx.stroke();
-
-  // Legend crown
-  if(isL){ctx.font="90px serif"; ctx.textAlign="center"; ctx.fillText("👑",W/2,340);}
-
-  // Avatar
-  const avCx=W/2, avCy=isL?570:530, avR=180;
-  // Outer glow rings
-  for(let ri=avR+60;ri>avR;ri-=12){
-    const a=((avR+60-ri)/60)*.14;
-    ctx.beginPath(); ctx.arc(avCx,avCy,ri,0,Math.PI*2);
-    ctx.strokeStyle=gc+Math.round(a*255).toString(16).padStart(2,"0");
-    ctx.lineWidth=1; ctx.stroke();
-  }
-  ctx.beginPath(); ctx.arc(avCx,avCy,avR+16,0,Math.PI*2);
-  ctx.strokeStyle=gc+"33"; ctx.lineWidth=3; ctx.stroke();
-  ctx.beginPath(); ctx.arc(avCx,avCy,avR+4,0,Math.PI*2);
-  ctx.strokeStyle=gc; ctx.lineWidth=5; ctx.stroke();
-  // Progress arc on canvas
-  const arcR=avR+30, arcC=2*Math.PI*arcR;
-  ctx.beginPath(); ctx.arc(avCx,avCy,arcR,0,Math.PI*2);
-  ctx.strokeStyle="rgba(255,255,255,.06)"; ctx.lineWidth=8; ctx.stroke();
-  const pAng=-Math.PI/2+(o.progressPct/100)*2*Math.PI;
-  ctx.beginPath(); ctx.arc(avCx,avCy,arcR,-Math.PI/2,pAng);
-  ctx.strokeStyle=gc; ctx.lineWidth=8; ctx.stroke();
-  void arcC;
-  // Fill
-  const avG=ctx.createRadialGradient(avCx-60,avCy-60,0,avCx,avCy,avR);
-  avG.addColorStop(0,gc+"44"); avG.addColorStop(1,gc+"0d");
-  ctx.beginPath(); ctx.arc(avCx,avCy,avR,0,Math.PI*2);
-  ctx.fillStyle=avG; ctx.fill();
-  ctx.fillStyle=gc; ctx.font=`bold 120px Impact,sans-serif`;
-  ctx.textAlign="center"; ctx.textBaseline="middle";
-  ctx.fillText(o.initials,avCx,avCy+6);
-
-  // Name
-  const nameY = isL ? 840 : 800;
-  ctx.textBaseline="alphabetic";
-  ctx.fillStyle="rgba(255,255,255,.96)";
-  ctx.font="bold 86px Impact,sans-serif"; ctx.textAlign="center";
-  ctx.fillText(o.name.toUpperCase(),W/2,nameY);
-
-  // Level + HoF pills
-  const plY = nameY + 38;
-  ctx.fillStyle=gc+"22"; rr(ctx,W/2-240,plY,480,78,39); ctx.fill();
-  ctx.strokeStyle=gc+"66"; ctx.lineWidth=2; rr(ctx,W/2-240,plY,480,78,39); ctx.stroke();
-  ctx.fillStyle=gc; ctx.font="bold 44px Impact,sans-serif"; ctx.textAlign="center";
-  ctx.fillText(`${o.levelIcon}  ${o.levelName.toUpperCase()}`,W/2,plY+50);
-  if(o.hofRank>0){
-    ctx.fillStyle="rgba(251,191,36,.15)"; rr(ctx,W-270,plY,190,78,12); ctx.fill();
-    ctx.strokeStyle="rgba(251,191,36,.5)"; ctx.lineWidth=2; rr(ctx,W-270,plY,190,78,12); ctx.stroke();
-    ctx.fillStyle="#FBBF24"; ctx.font="bold 44px Impact,sans-serif"; ctx.textAlign="center";
-    ctx.fillText(`#${o.hofRank}`,W-175,plY+50);
-  }
-
-  // Divider
-  ctx.strokeStyle="rgba(255,255,255,.07)"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(80,nameY+140); ctx.lineTo(W-80,nameY+140); ctx.stroke();
-
-  // Stats
-  const sd=[
-    {l:"ÖMÜR BOYU XP",v:fmtC(o.lifetimeXP),c:"#8B5CF6"},
-    {l:"SEZON XP",v:fmtC(o.seasonXP),c:"#D946EF"},
-    {l:"TAMAMLANAN DERS",v:String(o.completedLessons),c:"#FBBF24"},
-    {l:"ROZET",v:String(o.badgeCount),c:"#34D399"},
-    {l:"TEKNİK ORT.",v:o.techAvg,c:"#60A5FA"},
-    {l:"EN İYİ SKOR",v:o.bestScore,c:"#F87171"},
-    {l:"HAFTALIK SERİ",v:`${o.weekStreak}HFT`,c:"#A78BFA"},
-    {l:"DÜET",v:String(o.duetCount),c:"#FB923C"},
-  ];
-  const gy=nameY+170, cw=(W-200)/2, ch=170, gap2=20;
-  sd.forEach((s,i)=>{
-    const col=i%2, row=Math.floor(i/2);
-    const x=80+col*(cw+gap2), y=gy+row*(ch+gap2);
-    ctx.fillStyle="rgba(255,255,255,.03)"; rr(ctx,x,y,cw,ch,10); ctx.fill();
-    ctx.strokeStyle="rgba(255,255,255,.07)"; ctx.lineWidth=1; rr(ctx,x,y,cw,ch,10); ctx.stroke();
-    ctx.fillStyle=s.c+"55"; rr(ctx,x,y,cw,6,[10,10,0,0]); ctx.fill();
-    ctx.fillStyle="rgba(255,255,255,.3)"; ctx.font="22px Arial,sans-serif"; ctx.textAlign="left";
-    ctx.fillText(s.l,x+28,y+52);
-    ctx.fillStyle=s.c; ctx.font="bold 64px Impact,sans-serif"; ctx.fillText(s.v,x+28,y+136);
-  });
-
-  // Footer
-  const fy = gy+4*(ch+gap2)+50;
-  ctx.strokeStyle=gc+"44"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(80,fy); ctx.lineTo(W-80,fy); ctx.stroke();
-  ctx.fillStyle=gc; ctx.font="bold 52px Arial,sans-serif"; ctx.textAlign="center";
-  ctx.fillText("@p.t.enesozturk",W/2,fy+78);
-  ctx.fillStyle="rgba(255,255,255,.2)"; ctx.font="30px Arial,sans-serif";
-  ctx.fillText(format(new Date(),"dd MMMM yyyy",{locale:tr}),W/2,fy+128);
-  const bl2=ctx.createLinearGradient(0,0,W,0);
-  bl2.addColorStop(0,"transparent"); bl2.addColorStop(.3,o.levelGradFrom);
-  bl2.addColorStop(.7,o.levelGradTo); bl2.addColorStop(1,"transparent");
-  ctx.strokeStyle=bl2; ctx.lineWidth=6;
-  ctx.beginPath(); ctx.moveTo(0,H-3); ctx.lineTo(W,H-3); ctx.stroke();
-}
-
-/* ══════════════════════════════════════════════════════════
    ANA SAYFA
 ══════════════════════════════════════════════════════════ */
 export default function ProfilPage() {
@@ -325,11 +165,9 @@ export default function ProfilPage() {
   const [avatarColor, setAvatarColor]       = useState("#8B5CF6");
   const [photoUrl, setPhotoUrl]             = useState<string | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [generating, setGenerating]         = useState(false);
   const [uploading, setUploading]           = useState(false);
   const [uploadErr, setUploadErr]           = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
 
   const [stats, setStats] = useState<{
     lifetimeXP: number; seasonXP: number;
@@ -435,29 +273,6 @@ export default function ProfilPage() {
     setPhotoUrl(null); setUploading(false);
   };
 
-  const handleGenerateCard = useCallback(async () => {
-    if (!student || !stats || !canvasRef.current) return;
-    setGenerating(true);
-    const parts = student.fullName.trim().split(" ");
-    const initials = parts.map(p => p[0]).join("").slice(0, 2).toUpperCase();
-    try {
-      drawStoryCard(canvasRef.current, {
-        name: student.fullName, initials, avatarColor,
-        levelId: stats.levelId, levelIcon: stats.levelIcon, levelName: stats.levelName,
-        levelGradFrom: stats.levelGradFrom, levelGradTo: stats.levelGradTo,
-        levelColor: stats.levelColor,
-        lifetimeXP: stats.lifetimeXP, seasonXP: stats.seasonXP,
-        completedLessons: stats.completedLessons, badgeCount: stats.badgeCount,
-        techAvg: stats.techAvg, bestScore: stats.bestScore,
-        weekStreak: stats.weekStreak, duetCount: stats.duetCount,
-        hofRank: stats.hofRank, progressPct: stats.progressPct, xpToNext: stats.xpToNext,
-      });
-      const link = document.createElement("a");
-      link.download = `${student.fullName.replace(/\s+/g,"_")}_fight_card.png`;
-      link.href = canvasRef.current.toDataURL("image/png"); link.click();
-    } finally { setGenerating(false); }
-  }, [student, stats, avatarColor]);
-
   /* ── Loading ── */
   if (!student || loading) {
     return (
@@ -524,7 +339,6 @@ export default function ProfilPage() {
 
   return (
     <>
-      <canvas ref={canvasRef} style={{ display: "none" }} />
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -748,13 +562,13 @@ export default function ProfilPage() {
                 </AnimatePresence>
               </div>
 
-              <button onClick={handleGenerateCard} disabled={!stats||generating}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all active:scale-95 disabled:opacity-50"
+              <Link href="/ogrenci/fight-card"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all active:scale-95"
                 style={{ background: "linear-gradient(90deg,rgba(139,92,246,.8),rgba(217,70,239,.7))", border: "1px solid rgba(139,92,246,.5)",
                   color: "white", fontFamily: "var(--font-barlow-condensed)", boxShadow: "0 0 18px rgba(139,92,246,.35)" }}>
-                <Camera size={12} />
-                {generating ? "Oluşturuluyor…" : "Hikaye Paylaş"}
-              </button>
+                <CreditCard size={12} />
+                Fight Card
+              </Link>
             </div>
 
             {uploadErr && (
