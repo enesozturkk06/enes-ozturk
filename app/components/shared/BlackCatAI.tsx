@@ -23,6 +23,8 @@ import {
   getLevelForXP, sumManualXP, type XPResult, type SeasonXPSummary,
 } from "@/lib/xp";
 import { computeBadges, type Badge } from "@/lib/badges";
+import { isPackageExpired } from "@/lib/packageDuration";
+import { PACKAGE_EXPIRED_AI_TEXT } from "@/lib/constants";
 import { X, Send, ChevronDown, Mic, MicOff } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -99,6 +101,7 @@ interface StudentContext {
   waterGlasses:     number;
   waterTarget:      number;
   subscriptionType?: string;
+  packageEndDate?: string;
   /* Sağlık profili */
   weight?:          number;
   age?:             number;
@@ -352,6 +355,11 @@ function handleLesson(name: string, ctx: StudentContext): string {
 /* ── Randevu intent handler ──────────────────────────────────────── */
 
 function handleAppointment(name: string, ctx: StudentContext): string {
+  // Paket süresi dolmuşsa randevu alınamaz — önce bunu bildir
+  if (isPackageExpired(ctx.packageEndDate)) {
+    return PACKAGE_EXPIRED_AI_TEXT;
+  }
+
   // Sadece onaylı + gelecek randevular (tarih+saat bazlı)
   const upcoming = ctx.appointments
     .filter(a => a.status === "onaylandi" && isUpcomingApt(a))
@@ -1314,6 +1322,7 @@ export default function BlackCatAI() {
         waterGlasses:     water?.glasses ?? 0,
         waterTarget:      8,
         subscriptionType: student.subscriptionType,
+        packageEndDate:   student.packageEndDate,
         weight:           health?.weight ?? student.weight,
         age:              health?.age    ?? student.age,
         height:           health?.height,

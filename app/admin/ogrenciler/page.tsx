@@ -6,9 +6,9 @@ import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartne
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { getPackages, getActivePackages, type LessonPackage } from "@/lib/packages";
 import type { Student, PackagePurchase } from "@/lib/types";
-import { PAYMENT_LABELS, LEVEL_LABELS, LESSON_DURATIONS } from "@/lib/constants";
-import { getPackageDurationDays, calcPackageEndDate, getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History, CalendarClock } from "lucide-react";
+import { PAYMENT_LABELS, LEVEL_LABELS, LESSON_DURATIONS, MONTHLY_DURATION_DAYS } from "@/lib/constants";
+import { getPackageDurationDays, calcPackageEndDate, getDaysRemaining, getPackageUrgency, isPackageExpired } from "@/lib/packageDuration";
+import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History, CalendarClock, Infinity as InfinityIcon } from "lucide-react";
 import { useToast } from "@/app/components/shared/Toast";
 import { format } from "date-fns";
 
@@ -268,6 +268,46 @@ export default function OgrencilerPage() {
       : filter === "low"      ? s.remainingLessons <= 2 : true;
     return match && filt;
   });
+
+  /* ── Süresi dolan öğrenciler ────────────────────────────────────── */
+  const expiredStudents = students.filter(s => isPackageExpired(s.packageEndDate));
+  const [expiredBusy, setExpiredBusy] = useState<string | null>(null);
+
+  const handleExtendPackage = async (s: Student) => {
+    setExpiredBusy(s.id);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const duration = getPackageDurationDays(s.totalLessons, s.subscriptionType);
+      await updateStudent(s.id, {
+        packageStartDate: today,
+        packageEndDate: calcPackageEndDate(today, duration),
+      });
+      await reload();
+      toast(`${s.fullName} için paket süresi uzatıldı.`, "success");
+    } catch (err) {
+      toast("Hata: " + (err instanceof Error ? err.message : String(err)), "error");
+    } finally {
+      setExpiredBusy(null);
+    }
+  };
+
+  const handleMakeUnlimited = async (s: Student) => {
+    setExpiredBusy(s.id);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      await updateStudent(s.id, {
+        subscriptionType: "monthly",
+        packageStartDate: today,
+        packageEndDate: calcPackageEndDate(today, MONTHLY_DURATION_DAYS),
+      });
+      await reload();
+      toast(`${s.fullName} sınırsız üyeliğe geçirildi.`, "success");
+    } catch (err) {
+      toast("Hata: " + (err instanceof Error ? err.message : String(err)), "error");
+    } finally {
+      setExpiredBusy(null);
+    }
+  };
 
   /* ── Ekle ───────────────────────────────────────────────────────── */
   /* Paket seçilince otomatik doldur */
@@ -663,6 +703,55 @@ export default function OgrencilerPage() {
           ))}
         </div>
       </div>
+
+      {/* ── SÜRESİ DOLAN ÖĞRENCİLER ──────────────────────────────── */}
+      {expiredStudents.length > 0 && (
+        <div className="bg-carbon border border-crimson/30 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
+          <div className="p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={16} className="text-crimson" />
+              <h2 className="text-base font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>
+                SÜRESİ DOLAN ÖĞRENCİLER ({expiredStudents.length})
+              </h2>
+            </div>
+            <div className="space-y-2">
+              {expiredStudents.map(s => {
+                const days = getDaysRemaining(s.packageEndDate);
+                const busy = expiredBusy === s.id;
+                return (
+                  <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl"
+                    style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)" }}>
+                    <div className="min-w-0">
+                      <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.fullName}</div>
+                      <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        {s.code} · {days !== null ? `${Math.abs(days)} gün önce doldu` : "—"} · {s.remainingLessons} ders kaldı
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={() => handleExtendPackage(s)} disabled={busy}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg disabled:opacity-40 transition-all"
+                        style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)", color: "#A855F7", fontFamily: "var(--font-barlow-condensed)" }}>
+                        <CalendarClock size={12} />Süre Uzat
+                      </button>
+                      <button onClick={() => openRenewModal(s)} disabled={busy}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg disabled:opacity-40 transition-all"
+                        style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
+                        <PackageIcon size={12} />Yeni Paket Ata
+                      </button>
+                      <button onClick={() => handleMakeUnlimited(s)} disabled={busy}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg disabled:opacity-40 transition-all"
+                        style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", color: "#22c55e", fontFamily: "var(--font-barlow-condensed)" }}>
+                        <InfinityIcon size={12} />Sınırsız Yap
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tablo */}
       <div className="bg-carbon border border-white/6 overflow-hidden">

@@ -18,17 +18,33 @@ export const MONTHLY_DURATION_DAYS = 30;
 /** Eşleşme bulunamazsa kullanılacak varsayılan paket süresi (gün) */
 export const DEFAULT_DURATION_DAYS = 45;
 
-/** Paket süresi uyarı eşikleri (gün) */
-export const PACKAGE_WARNING_DAYS = 14;
-export const PACKAGE_URGENT_DAYS = 6;
+/** Paket süresi uyarı eşikleri (gün) — sarı/turuncu/kırmızı */
+export const PACKAGE_WARNING_DAYS = 15;  // ≤15 gün → sarı
+export const PACKAGE_URGENT_DAYS = 7;    // ≤7 gün → turuncu
+export const PACKAGE_CRITICAL_DAYS = 3;  // ≤3 gün → kırmızı
 
 /** Randevu sayfasındaki bilgi ikonu açıklaması */
 export const PACKAGE_DURATION_INFO_TEXT =
   "Ders paketleri belirlenen süre içinde kullanılmalıdır. Bunun sebebi antrenman düzenini korumak, gelişimi aksatmamak ve program yoğunluğunu adil şekilde yönetmektir. Paket süresi dolmadan randevularını planlamanı öneririz.";
 
-/** Paket süresi dolduğunda gösterilecek mesaj */
+/** Paket süresi dolduğunda öğrenci paneli/dashboard'da gösterilecek kısa mesaj */
 export const PACKAGE_EXPIRED_TEXT =
   "Paket süren doldu. Yeni paket için antrenörünle iletişime geç.";
+
+/** Randevu alma sayfasındaki kırmızı uyarı kutusunda gösterilecek detaylı mesaj */
+export const PACKAGE_EXPIRED_BOOKING_TEXT =
+  "Paket süreniz dolmuştur. Derslerinizi belirlenen süre içinde tamamlamadığınız için mevcut paketinizle derslere katılım hakkınız kalmamıştır. Antrenörünüz ile görüşerek paketinizi yeniden satın alabilir veya süre uzatma talebinde bulunabilirsiniz.";
+
+/** Paket süresi dolduğunda gönderilen bildirimin metni */
+export const PACKAGE_EXPIRED_NOTIFICATION_TEXT =
+  "Paket süren doldu. Derslere devam etmek için antrenörünle iletişime geç.";
+
+/** KEDİ AI — öğrenci "randevu al" derse ve paket süresi dolmuşsa verilecek yanıt */
+export const PACKAGE_EXPIRED_AI_TEXT =
+  "Paket süren dolduğu için şu anda randevu alamazsın. Devam etmek için antrenörünle görüşmen gerekiyor.";
+
+/** Kalan ders var ama paket süresi dolduğunda gösterilecek not */
+export const PACKAGE_EXPIRED_LESSONS_NOTE = "Süre dolduğu için kullanılamaz";
 
 export const PACKAGES = [
   {

@@ -1,7 +1,7 @@
 import type { SubscriptionType } from "./types";
 import {
   LESSON_DURATIONS, MONTHLY_DURATION_DAYS, DEFAULT_DURATION_DAYS,
-  PACKAGE_WARNING_DAYS, PACKAGE_URGENT_DAYS,
+  PACKAGE_WARNING_DAYS, PACKAGE_URGENT_DAYS, PACKAGE_CRITICAL_DAYS,
 } from "./constants";
 
 /** Ders sayısı / üyelik tipine göre paket geçerlilik süresi (gün) */
@@ -28,7 +28,7 @@ export function getDaysRemaining(endDate?: string): number | null {
   return Math.round((end.getTime() - today.getTime()) / 86400000);
 }
 
-export type PackageUrgencyLevel = "normal" | "warning" | "urgent" | "expired";
+export type PackageUrgencyLevel = "normal" | "warning" | "urgent" | "critical" | "expired";
 
 export interface PackageUrgencyInfo {
   level: PackageUrgencyLevel;
@@ -38,7 +38,7 @@ export interface PackageUrgencyInfo {
   label: string;
 }
 
-/** Kalan gün sayısına göre uyarı seviyesi ve renk bilgisi döner */
+/** Kalan gün sayısına göre uyarı seviyesi ve renk bilgisi döner (sarı → turuncu → kırmızı → süresi doldu) */
 export function getPackageUrgency(daysRemaining: number | null): PackageUrgencyInfo {
   if (daysRemaining === null) {
     return { level: "normal", color: "text-white/40", bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.08)", label: "—" };
@@ -46,11 +46,20 @@ export function getPackageUrgency(daysRemaining: number | null): PackageUrgencyI
   if (daysRemaining < 0) {
     return { level: "expired", color: "text-red-400", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", label: "Süresi Doldu" };
   }
+  if (daysRemaining <= PACKAGE_CRITICAL_DAYS) {
+    return { level: "critical", color: "text-red-400", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", label: "Kritik" };
+  }
   if (daysRemaining <= PACKAGE_URGENT_DAYS) {
-    return { level: "urgent", color: "text-red-400", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", label: "Acil" };
+    return { level: "urgent", color: "text-orange-400", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.2)", label: "Acil" };
   }
   if (daysRemaining <= PACKAGE_WARNING_DAYS) {
     return { level: "warning", color: "text-yellow-400", bg: "rgba(234,179,8,0.08)", border: "rgba(234,179,8,0.2)", label: "Uyarı" };
   }
   return { level: "normal", color: "text-green-400", bg: "rgba(34,197,94,0.08)", border: "rgba(34,197,94,0.2)", label: "Normal" };
+}
+
+/** Paket süresi dolmuş mu? (bitiş tarihi geçmişse true → randevu alma kapanır) */
+export function isPackageExpired(endDate?: string): boolean {
+  const days = getDaysRemaining(endDate);
+  return days !== null && days < 0;
 }

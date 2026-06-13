@@ -11,7 +11,7 @@ export default function PackageExpiryBanner({ endDate }: { endDate?: string }) {
   const [infoOpen, setInfoOpen] = useState(false);
   const daysRemaining = getDaysRemaining(endDate);
 
-  if (daysRemaining === null || daysRemaining > 14) return null;
+  if (daysRemaining === null || daysRemaining > 15) return null;
 
   const urgency = getPackageUrgency(daysRemaining);
   const message = daysRemaining < 0

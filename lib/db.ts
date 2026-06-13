@@ -9,6 +9,8 @@ import type {
   PackagePurchase, PackageType, PaymentStatus, ArenaDuel,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { isPackageExpired } from "./packageDuration";
+import { PACKAGE_EXPIRED_NOTIFICATION_TEXT } from "./constants";
 
 /* ── Hata yönetimi ─────────────────────────────────────────── */
 function isSchemaError(e: { message?: string; code?: string }): boolean {
@@ -1140,6 +1142,33 @@ export async function markNotificationRead(id: string): Promise<void> {
 export async function markAllAdminNotificationsRead(): Promise<void> {
   await db().from("notifications").update({ is_read: true })
     .is("student_id", null).eq("is_read", false);
+}
+
+const PACKAGE_EXPIRED_NOTIF_TITLE = "Paket Süresi Doldu";
+
+/**
+ * Öğrencinin paket süresi dolmuşsa bildirim gönderir.
+ * Aynı paket dönemi için (packageStartDate sonrası) tekrar bildirim göndermez.
+ */
+export async function checkPackageExpiryNotification(student: Student): Promise<void> {
+  if (!isPackageExpired(student.packageEndDate)) return;
+
+  const { data, error } = await db()
+    .from("notifications").select("id")
+    .eq("student_id", student.id)
+    .eq("title", PACKAGE_EXPIRED_NOTIF_TITLE)
+    .gte("created_at", student.packageStartDate)
+    .limit(1);
+  if (error) { console.warn("[checkPackageExpiryNotification] kontrol hatası:", error.message); return; }
+  if (data && data.length > 0) return; // bu dönem için zaten gönderildi
+
+  await db().from("notifications").insert({
+    student_id: student.id,
+    title:      PACKAGE_EXPIRED_NOTIF_TITLE,
+    message:    PACKAGE_EXPIRED_NOTIFICATION_TEXT,
+    type:       "warning" as NotifType,
+    is_read:    false,
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════

@@ -5,11 +5,12 @@ import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudentNotifications,
   getPendingInvites, respondToInvite, cancelAppointment, createAdminNotification,
+  checkPackageExpiryNotification,
 } from "@/lib/db";
 import type { Appointment, LessonRecord, Notification, PendingInvite } from "@/lib/types";
 import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components/ui";
-import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT } from "@/lib/constants";
-import { getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
+import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT, PACKAGE_EXPIRED_LESSONS_NOTE } from "@/lib/constants";
+import { getDaysRemaining, getPackageUrgency, isPackageExpired } from "@/lib/packageDuration";
 import {
   Calendar, Clock, TrendingUp, BookOpen, Bell,
   CheckCircle, XCircle, ChevronRight, Users, Zap, User,
@@ -40,6 +41,7 @@ export default function OgrenciDashboard() {
 
   const reload = async () => {
     if (!student) return;
+    await checkPackageExpiryNotification(student).catch(() => {});
     const [apts, recs, notifs, invites] = await Promise.all([
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
@@ -195,7 +197,11 @@ export default function OgrenciDashboard() {
         <StatCard
           label={student.subscriptionType === "monthly" ? "Üyelik" : "Kalan Ders"}
           value={student.subscriptionType === "monthly" ? "∞" : student.remainingLessons}
-          sub={student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${student.completedLessons} ders tamamlandı`}
+          sub={student.subscriptionType === "monthly"
+            ? "Aylık Üyelik"
+            : (student.remainingLessons > 0 && isPackageExpired(student.packageEndDate))
+              ? PACKAGE_EXPIRED_LESSONS_NOTE
+              : `${student.completedLessons} ders tamamlandı`}
           color="red"
           icon={<BookOpen size={17}/>}
           onClick={() => document.getElementById("paket-kartı")?.scrollIntoView({ behavior:"smooth" })}

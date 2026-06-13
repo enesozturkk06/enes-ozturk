@@ -10,7 +10,8 @@ import {
 } from "@/lib/db";
 import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry } from "@/lib/types";
 import { PageHeader } from "@/app/components/ui";
-import { TRAINER_NAME, TRAINER_WHATSAPP, CANCEL_LIMIT_HOURS } from "@/lib/constants";
+import { TRAINER_NAME, TRAINER_WHATSAPP, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_BOOKING_TEXT } from "@/lib/constants";
+import { isPackageExpired } from "@/lib/packageDuration";
 import {
   Calendar, Clock, CheckCircle, XCircle, AlertTriangle,
   Users, User, Bell, Clock3,
@@ -69,6 +70,7 @@ function InfoRow({ label, val }: { label: string; val: string }) {
    ═══════════════════════════════════════════════════════════════ */
 export default function RandevuPage() {
   const { student } = useAuth();
+  const packageExpired = isPackageExpired(student?.packageEndDate);
 
   const [selectedDate, setSelectedDate]     = useState(format(new Date(), "yyyy-MM-dd"));
   const [slots, setSlots]                   = useState<TimeSlot[]>([]);
@@ -149,6 +151,7 @@ export default function RandevuPage() {
       return;
     }
 
+    if (packageExpired) { setBookError("Paket süreniz dolduğu için randevu oluşturamazsınız."); return; }
     if (student.remainingLessons <= 0) { setBookError("Paketinizde ders kalmadı."); return; }
     if (lessonType === "duet" && !partner) {
       setBookError("Düet partneriniz henüz tanımlanmamış. Antrenörünüzle iletişime geçin."); return;
@@ -218,8 +221,19 @@ export default function RandevuPage() {
       {/* Paket süresi uyarısı */}
       <PackageExpiryBanner endDate={student?.packageEndDate} />
 
+      {/* Paket süresi dolmuş — randevu alma kapalı */}
+      {packageExpired && (
+        <div className="flex items-start gap-3 p-4 rounded-xl mb-4"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+          <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-300 min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            {PACKAGE_EXPIRED_BOOKING_TEXT}
+          </p>
+        </div>
+      )}
+
       {/* Kalan ders uyarısı */}
-      {student && student.remainingLessons === 0 && (
+      {student && student.remainingLessons === 0 && !packageExpired && (
         <div className="flex items-start gap-3 p-4 rounded-xl mb-4"
           style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
           <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
@@ -458,22 +472,23 @@ export default function RandevuPage() {
                   {slots.map(slot => {
                     const taken    = !slot.isAvailable || !!myAptOnDate;
                     const blocked  = slot.isBlocked;
-                    const canWait  = taken && !blocked && !myAptOnDate && student && student.remainingLessons > 0;
+                    const canWait  = taken && !blocked && !myAptOnDate && !packageExpired && student && student.remainingLessons > 0;
                     const wlKey    = `${slot.date ?? selectedDate}-${slot.startTime}`;
                     const inWl     = waitlist.some(w => w.date === (slot.date ?? selectedDate) && w.startTime === slot.startTime);
                     const wlBusy   = waitlistBusy === wlKey;
 
+                    const disabled = taken || packageExpired;
                     return (
                       <div key={slot.id} className="flex flex-col gap-1">
-                        <button disabled={taken} onClick={() => handleSlotClick(slot)}
+                        <button disabled={disabled} onClick={() => handleSlotClick(slot)}
                           className="p-3 rounded-xl text-center transition-all w-full"
                           style={{
-                            background: taken ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.06)",
-                            border: taken
+                            background: disabled ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.06)",
+                            border: disabled
                               ? `1px solid rgba(255,255,255,${blocked ? "0.02" : "0.04"})`
                               : `1px solid ${V}25`,
-                            cursor: taken ? "not-allowed" : "pointer",
-                            opacity: blocked ? 0.2 : taken ? 0.6 : 1,
+                            cursor: disabled ? "not-allowed" : "pointer",
+                            opacity: blocked ? 0.2 : disabled ? 0.6 : 1,
                           }}>
                           <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
                             {slot.startTime}
@@ -665,7 +680,7 @@ export default function RandevuPage() {
                     style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
                     Vazgeç
                   </button>
-                  <button onClick={confirmBook} disabled={saving}
+                  <button onClick={confirmBook} disabled={saving || packageExpired}
                     className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50"
                     style={{ background: "linear-gradient(135deg,#8B5CF6,#A855F7)", fontFamily: "var(--font-barlow-condensed)" }}>
                     {saving ? "Oluşturuluyor..." : "Onayla"}
