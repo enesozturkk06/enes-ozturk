@@ -41,7 +41,7 @@ const FIGHT_CARD_THEMES: Record<string, FightCardTheme> = {
     accent: "#D1D5DB",
   },
   bronze: {
-    bgFrom: "#2b1c0d", bgVia: "#170f06", bgTo: "#0a0603",
+    bgFrom: "#3a2310", bgVia: "#170f06", bgTo: "#0a0603",
     frameFrom: "#7C4A1E", frameTo: "#F0B27A",
     ringFrom: "#92400E", ringTo: "#F0B27A",
     glow: "#CD7F32",
@@ -49,7 +49,7 @@ const FIGHT_CARD_THEMES: Record<string, FightCardTheme> = {
     accent: "#E8A35C",
   },
   silver: {
-    bgFrom: "#2b2e36", bgVia: "#15171c", bgTo: "#090a0d",
+    bgFrom: "#3a3f4a", bgVia: "#15171c", bgTo: "#090a0d",
     frameFrom: "#6B7280", frameTo: "#FFFFFF",
     ringFrom: "#9CA3AF", ringTo: "#FFFFFF",
     glow: "#E2E8F0",
@@ -57,7 +57,7 @@ const FIGHT_CARD_THEMES: Record<string, FightCardTheme> = {
     accent: "#E5E7EB",
   },
   gold: {
-    bgFrom: "#2b2007", bgVia: "#171204", bgTo: "#0a0700",
+    bgFrom: "#3d2c06", bgVia: "#171204", bgTo: "#0a0700",
     frameFrom: "#B45309", frameTo: "#FDE68A",
     ringFrom: "#B45309", ringTo: "#FFD700",
     glow: "#FBBF24",
@@ -66,7 +66,7 @@ const FIGHT_CARD_THEMES: Record<string, FightCardTheme> = {
     effect: "gold",
   },
   diamond: {
-    bgFrom: "#0a1628", bgVia: "#071122", bgTo: "#020611",
+    bgFrom: "#0c1d35", bgVia: "#071122", bgTo: "#020611",
     frameFrom: "#0EA5E9", frameTo: "#67E8F9",
     ringFrom: "#0EA5E9", ringTo: "#67E8F9",
     glow: "#38BDF8",
@@ -75,7 +75,7 @@ const FIGHT_CARD_THEMES: Record<string, FightCardTheme> = {
     effect: "neon",
   },
   legend: {
-    bgFrom: "#170c28", bgVia: "#0b0512", bgTo: "#040207",
+    bgFrom: "#1f0f35", bgVia: "#0b0512", bgTo: "#040207",
     frameFrom: "#7C3AED", frameTo: "#FBBF24",
     ringFrom: "#7C3AED", ringTo: "#FBBF24",
     glow: "#C084FC",
@@ -84,6 +84,9 @@ const FIGHT_CARD_THEMES: Record<string, FightCardTheme> = {
     effect: "legend",
   },
 };
+
+/** EA FC Ultimate Team tarzı kart dış hattı — dikdörtgen değil: belirgin kesik üst köşeler + alta doğru daralan kalkan formu */
+const FIGHT_CARD_CLIP = "polygon(12% 0%, 88% 0%, 100% 4%, 100% 91%, 86% 100%, 14% 100%, 0% 91%, 0% 4%)";
 
 /* ══════════════════════════════════════════════════════════
    YARDIMCI FONKSİYONLAR
@@ -124,27 +127,49 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.lineTo(x, y + tl); ctx.arcTo(x, y, x + w, y, tl); ctx.closePath();
 }
 
-/** Hafif kickboks dövüşçüsü silüeti — yüksek tekme pozisyonu */
+/** FIGHT_CARD_CLIP ile aynı EA FC Ultimate Team kart hattı — dikdörtgen değil, kalkan formu */
+function fightCardOutline(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.12, y);
+  ctx.lineTo(x + w * 0.88, y);
+  ctx.lineTo(x + w, y + h * 0.04);
+  ctx.lineTo(x + w, y + h * 0.91);
+  ctx.lineTo(x + w * 0.86, y + h);
+  ctx.lineTo(x + w * 0.14, y + h);
+  ctx.lineTo(x, y + h * 0.91);
+  ctx.lineTo(x, y + h * 0.04);
+  ctx.closePath();
+}
+
+/** Gerçekçi kickboksçu silüeti — gard + yüksek tekme pozisyonu (dolgulu, insan formuna yakın) */
+const FIGHTER_SHAPES: [number, number, number, number, number?][] = [
+  [0.02, -0.93, 0.135, 0.135],          // kafa
+  [0.04, -0.78, 0.075, 0.06],           // boyun
+  [0.06, -0.52, 0.18, 0.27, -6],        // gövde
+  [0.09, -0.22, 0.15, 0.11],            // kalça
+  [-0.10, -0.66, 0.17, 0.065, -40],     // sol pazı (gard)
+  [-0.20, -0.84, 0.15, 0.06, 55],       // sol ön kol
+  [-0.24, -0.95, 0.075, 0.075],         // sol yumruk
+  [0.23, -0.60, 0.18, 0.065, 22],       // sağ pazı (gard)
+  [0.40, -0.76, 0.16, 0.06, -38],       // sağ ön kol
+  [0.49, -0.88, 0.07, 0.07],            // sağ yumruk
+  [0.14, 0.06, 0.16, 0.30, 8],          // destek uyluk
+  [0.19, 0.58, 0.13, 0.34, 4],          // destek baldır
+  [0.21, 0.95, 0.17, 0.065],            // destek ayak
+  [-0.19, -0.16, 0.24, 0.14, -25],      // tekme uyluğu
+  [-0.58, -0.44, 0.26, 0.105, -55],     // tekme baldırı
+  [-0.86, -0.65, 0.14, 0.075, -55],     // tekme ayağı
+];
+
 function drawFighterSilhouette(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number, color: string, alpha: number) {
-  const pts = (arr: [number, number][]) => arr.map(([x, y]) => [cx + x * scale, cy + y * scale] as [number, number]);
-  const stroke = (arr: [number, number][]) => {
-    const p = pts(arr);
-    ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
-    for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
-    ctx.stroke();
-  };
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = color; ctx.fillStyle = color;
-  ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ctx.lineWidth = 0.16 * scale;
-  const head = pts([[0, -1]])[0];
-  ctx.beginPath(); ctx.arc(head[0], head[1], 0.14 * scale, 0, Math.PI * 2); ctx.fill();
-  stroke([[0, -0.86], [0.05, -0.35]]);                      // gövde
-  stroke([[-0.05, -0.8], [-0.28, -0.6], [-0.18, -0.4]]);     // sol kol (gard)
-  stroke([[0.05, -0.8], [0.3, -0.55], [0.4, -0.32]]);        // sağ kol
-  stroke([[0.08, -0.35], [0.12, 0.05], [0.06, 0.5]]);        // destek bacağı
-  stroke([[-0.02, -0.35], [-0.35, -0.55], [-0.7, -0.78]]);   // tekme bacağı
+  ctx.fillStyle = color;
+  for (const [x, y, rx, ry, rotDeg] of FIGHTER_SHAPES) {
+    ctx.beginPath();
+    ctx.ellipse(cx + x * scale, cy + y * scale, rx * scale, ry * scale, ((rotDeg ?? 0) * Math.PI) / 180, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -270,61 +295,83 @@ function drawFightStoryCard(canvas: HTMLCanvasElement, o: StoryCardData) {
   }
   if (isDiamond || isLegend || isGold) {
     ctx.save(); ctx.shadowColor = theme.glow; ctx.shadowBlur = 70;
-    rr(ctx, cardX, cardY, cardW, cardH, 36); ctx.fillStyle = frameGrad; ctx.fill();
+    fightCardOutline(ctx, cardX, cardY, cardW, cardH); ctx.fillStyle = frameGrad; ctx.fill();
     ctx.restore();
   }
-  rr(ctx, cardX, cardY, cardW, cardH, 36); ctx.fillStyle = frameGrad; ctx.fill();
+  fightCardOutline(ctx, cardX, cardY, cardW, cardH); ctx.fillStyle = frameGrad; ctx.fill();
 
   // İç kart gövdesi
   const ix = cardX + bw, iy = cardY + bw, iw = cardW - bw * 2, ih = cardH - bw * 2;
   const innerBg = ctx.createLinearGradient(ix, iy, ix, iy + ih);
   innerBg.addColorStop(0, theme.bgFrom); innerBg.addColorStop(0.6, theme.bgVia); innerBg.addColorStop(1, theme.bgTo);
-  rr(ctx, ix, iy, iw, ih, 32); ctx.fillStyle = innerBg; ctx.fill();
+  fightCardOutline(ctx, ix, iy, iw, ih); ctx.fillStyle = innerBg; ctx.fill();
 
   // İç ışık efekti
   ctx.save();
-  rr(ctx, ix, iy, iw, ih, 32); ctx.clip();
+  fightCardOutline(ctx, ix, iy, iw, ih); ctx.clip();
   const ig = ctx.createRadialGradient(ix + iw * .85, iy + ih * .04, 0, ix + iw * .85, iy + ih * .04, 620);
   ig.addColorStop(0, theme.glow + "22"); ig.addColorStop(1, "transparent");
   ctx.fillStyle = ig; ctx.fillRect(ix, iy, iw, ih);
 
-  // Hafif kickboks dövüşçüsü silüeti (arka plan)
-  drawFighterSilhouette(ctx, ix + iw * 0.5, iy + ih * 0.56, ih * 0.62, "#ffffff", (isDiamond || isLegend || theme.effect === "gold") ? 0.05 : 0.035);
+  // Kickboks dövüşçüsü silüeti (arka plan) — seviye rengiyle
+  drawFighterSilhouette(ctx, ix + iw * 0.5, iy + ih * 0.56, ih * 0.62, theme.accent, theme.effect ? 0.16 : 0.12);
   ctx.restore();
 
   const pad = 50;
   const cx0 = ix + pad, cy0 = iy + pad, innerW = iw - pad * 2;
 
-  // OVR (çok büyük) + seviye adı (sol üst)
-  const ovrGrad = ctx.createLinearGradient(cx0, cy0, cx0 + 280, cy0 + 280);
+  // OVR (kartın en baskın öğesi) + seviye adı (sol üst)
+  const ovrGrad = ctx.createLinearGradient(cx0, cy0, cx0 + 355, cy0 + 355);
   ovrGrad.addColorStop(0, theme.textFrom); ovrGrad.addColorStop(1, theme.textTo);
-  ctx.fillStyle = ovrGrad; ctx.font = "bold 195px Impact,sans-serif";
+  ctx.fillStyle = ovrGrad; ctx.font = "bold 250px Impact,sans-serif";
   ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  ctx.shadowColor = theme.glow + "aa"; ctx.shadowBlur = 36;
-  ctx.fillText(String(o.ovr), cx0, cy0 + 165);
+  ctx.shadowColor = theme.glow + "cc"; ctx.shadowBlur = 48;
+  ctx.fillText(String(o.ovr), cx0, cy0 + 195);
   ctx.shadowBlur = 0;
-  ctx.fillStyle = theme.accent; ctx.font = "bold 46px Arial,sans-serif";
-  ctx.fillText(`${o.levelIcon}  ${o.levelShortName.toUpperCase()}`, cx0, cy0 + 222);
+  ctx.fillStyle = theme.accent; ctx.font = "bold 50px Arial,sans-serif";
+  ctx.fillText(`${o.levelIcon}  ${o.levelShortName.toUpperCase()}`, cx0, cy0 + 250);
 
-  // Sağ sütun: Onur Listesi sırası (büyük) / Rozet / Haftalık seri
+  // Sağ sütun: Onur Listesi sırası (altın madalyon) / Rozet / Haftalık seri
   const riX = cx0 + innerW;
-  let riY = cy0 + 45;
+  let riY = cy0;
   if (o.hofRank > 0) {
-    ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = "#FBBF24"; ctx.font = "bold 78px Impact,sans-serif";
-    ctx.shadowColor = "#FBBF2499"; ctx.shadowBlur = 28;
-    ctx.fillText(`#${o.hofRank}`, riX, riY + 70);
-    ctx.shadowBlur = 0;
-    ctx.font = "bold 26px Arial,sans-serif"; ctx.fillStyle = "rgba(251,191,36,.85)";
-    ctx.fillText("🏆 ONUR LİSTESİ", riX, riY + 102);
-    riY += 130;
+    const medR = 80;
+    const medCx = riX - medR, medCy = cy0 + medR + 10;
+    ctx.save();
+    ctx.shadowColor = "rgba(251,191,36,0.6)"; ctx.shadowBlur = 35;
+    const medGrad = ctx.createRadialGradient(medCx - medR * .32, medCy - medR * .28, medR * .1, medCx, medCy, medR);
+    medGrad.addColorStop(0, "#FFFBEB"); medGrad.addColorStop(.48, "#FBBF24"); medGrad.addColorStop(1, "#92400E");
+    ctx.beginPath(); ctx.arc(medCx, medCy, medR, 0, Math.PI * 2); ctx.fillStyle = medGrad; ctx.fill();
+    ctx.restore();
+    ctx.lineWidth = 5; ctx.strokeStyle = "#FDE68A";
+    ctx.beginPath(); ctx.arc(medCx, medCy, medR, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.font = "44px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🏆", medCx, medCy - medR * .38);
+    ctx.fillStyle = "#78350F"; ctx.font = "bold 56px Impact,sans-serif";
+    ctx.fillText(`#${o.hofRank}`, medCx, medCy + medR * .28);
+    ctx.textBaseline = "alphabetic";
+
+    const ribbonText = "ONUR LİSTESİ";
+    ctx.font = "bold 22px Arial,sans-serif";
+    const ribbonTextW = ctx.measureText(ribbonText).width;
+    const ribbonW = ribbonTextW + 50, ribbonH = 38;
+    const ribbonX = medCx - ribbonW / 2, ribbonY = medCy + medR + 14;
+    const ribbonGrad = ctx.createLinearGradient(ribbonX, ribbonY, ribbonX + ribbonW, ribbonY);
+    ribbonGrad.addColorStop(0, "#92400E"); ribbonGrad.addColorStop(1, "#FBBF24");
+    rr(ctx, ribbonX, ribbonY, ribbonW, ribbonH, ribbonH / 2); ctx.fillStyle = ribbonGrad; ctx.fill();
+    ctx.fillStyle = "#1F1300"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(ribbonText, medCx, ribbonY + ribbonH / 2 + 1);
+    ctx.textBaseline = "alphabetic";
+
+    riY = ribbonY + ribbonH + 30;
   }
   const sideItems: [string, string, string][] = [
     ["🎖️", String(o.badgeCount), "#34D399"],
     ["🔥", String(o.weekStreak), "#FB923C"],
   ];
   sideItems.forEach(([icon, val, color], i) => {
-    const y = riY + 30 + i * 88;
+    const y = riY + 40 + i * 88;
     ctx.font = "bold 54px Arial,sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
     ctx.fillStyle = color; ctx.fillText(val, riX, y);
     const valW = ctx.measureText(val).width;
@@ -334,9 +381,9 @@ function drawFightStoryCard(canvas: HTMLCanvasElement, o: StoryCardData) {
   ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
 
   // Profil fotoğrafı + seviyeye göre çerçeve — kartın baskın merkez öğesi
-  const avR = 235;
+  const avR = 330;
   const avCx = ix + iw / 2;
-  const avCy = cy0 + 310 + avR;
+  const avCy = cy0 + 170 + avR;
 
   for (let ri = avR + 50; ri > avR + 8; ri -= 10) {
     const a = ((avR + 50 - ri) / 50) * .15;
@@ -376,7 +423,7 @@ function drawFightStoryCard(canvas: HTMLCanvasElement, o: StoryCardData) {
   }
 
   // İsim
-  const nameY = avCy + avR + 80;
+  const nameY = avCy + avR + 60;
   const nameGrad = ctx.createLinearGradient(ix + pad, nameY - 70, ix + iw - pad, nameY);
   nameGrad.addColorStop(0, theme.textFrom); nameGrad.addColorStop(1, theme.textTo);
   ctx.fillStyle = nameGrad; ctx.font = "bold 78px Impact,sans-serif"; ctx.textAlign = "center";
@@ -385,7 +432,7 @@ function drawFightStoryCard(canvas: HTMLCanvasElement, o: StoryCardData) {
   ctx.shadowBlur = 0;
 
   // "Antrenör Enes Öztürk Resmi Sporcusu" etiketi
-  const tagY = nameY + 55;
+  const tagY = nameY + 50;
   ctx.font = "bold 28px Arial,sans-serif";
   const tagText = "ANTRENÖR ENES ÖZTÜRK RESMİ SPORCUSU";
   const tagTextW = ctx.measureText(tagText).width;
@@ -405,27 +452,28 @@ function drawFightStoryCard(canvas: HTMLCanvasElement, o: StoryCardData) {
     { l: "XP",  v: String(o.xp),  c: theme.accent, pct: Math.min(1, o.xp / 10000) },
     { l: "DRS", v: String(o.drs), c: "#A78BFA", pct: Math.min(1, o.drs / 100) },
   ];
-  const gridY = tagY + 55, gap = 16, cols = 3;
-  const cellW = (innerW - gap * (cols - 1)) / cols, cellH = 175;
+  const gridY = tagY + 50, gap = 14, cols = 3;
+  const gpad = 14, gx0 = ix + gpad;
+  const cellW = (iw - gpad * 2 - gap * (cols - 1)) / cols, cellH = 160;
   sd.forEach((s, i) => {
     const col = i % cols, row = Math.floor(i / cols);
-    const x = cx0 + col * (cellW + gap), y = gridY + row * (cellH + gap);
+    const x = gx0 + col * (cellW + gap), y = gridY + row * (cellH + gap);
     ctx.fillStyle = "rgba(255,255,255,.03)"; rr(ctx, x, y, cellW, cellH, 14); ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.lineWidth = 1; rr(ctx, x, y, cellW, cellH, 14); ctx.stroke();
     ctx.fillStyle = s.c + "55"; rr(ctx, x, y, cellW, 6, [14, 14, 0, 0]); ctx.fill();
-    ctx.fillStyle = s.c; ctx.font = "bold 62px Impact,sans-serif"; ctx.textAlign = "center";
-    ctx.fillText(s.v, x + cellW / 2, y + 92);
-    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.font = "bold 26px Arial,sans-serif";
-    ctx.fillText(s.l, x + cellW / 2, y + 135);
+    ctx.fillStyle = s.c; ctx.font = "bold 66px Impact,sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(s.v, x + cellW / 2, y + 82);
+    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.font = "bold 28px Arial,sans-serif";
+    ctx.fillText(s.l, x + cellW / 2, y + 116);
     // ilerleme çubuğu
-    const barX = x + 24, barW = cellW - 48, barY = y + cellH - 26, barH = 10;
+    const barX = x + 24, barW = cellW - 48, barY = y + cellH - 22, barH = 10;
     ctx.fillStyle = "rgba(255,255,255,.08)"; rr(ctx, barX, barY, barW, barH, 5); ctx.fill();
     ctx.fillStyle = s.c; rr(ctx, barX, barY, Math.max(8, barW * s.pct), barH, 5); ctx.fill();
   });
 
   // Kart içi marka altlığı
   const gridBottom = gridY + 2 * cellH + gap;
-  const footY = gridBottom + 64;
+  const footY = gridBottom + 50;
   ctx.strokeStyle = theme.accent + "33"; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(cx0, footY - 34); ctx.lineTo(cx0 + innerW, footY - 34); ctx.stroke();
   ctx.fillStyle = theme.accent; ctx.font = "bold 34px Impact,sans-serif"; ctx.textAlign = "center";
@@ -459,31 +507,27 @@ function SideStat({ icon: Icon, value, color }: { icon: IconType; value: string 
 
 function StatCell({ label, value, color, pct, divider }: { label: string; value: string | number; color: string; pct: number; divider?: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center py-3.5 gap-1.5" style={divider ? { borderRight: `1px solid ${color}1a` } : undefined}>
-      <div className="font-black tabular-nums leading-none" style={{ fontFamily: "var(--font-bebas)", fontSize: 26, color, textShadow: `0 0 10px ${color}55` }}>
+    <div className="flex flex-col items-center justify-center py-4 sm:py-5 gap-2" style={divider ? { borderRight: `1px solid ${color}1a` } : undefined}>
+      <div className="font-black tabular-nums leading-none" style={{ fontFamily: "var(--font-bebas)", fontSize: 32, color, textShadow: `0 0 12px ${color}66` }}>
         {value}
       </div>
-      <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+      <div className="text-[10px] uppercase tracking-[0.25em]" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
         {label}
       </div>
-      <div className="w-10 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+      <div className="w-3/5 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
         <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(4, pct * 100))}%`, background: color }} />
       </div>
     </div>
   );
 }
 
-/** Kart arka planındaki hafif kickboks dövüşçüsü silüeti (yüksek tekme pozisyonu) */
-function FighterSilhouette({ className, style }: { className?: string; style?: React.CSSProperties }) {
+/** Kart arka planındaki gerçekçi kickboksçu silüeti (gard + yüksek tekme pozisyonu) */
+function FighterSilhouette({ className, style, color = "#ffffff" }: { className?: string; style?: React.CSSProperties; color?: string }) {
   return (
-    <svg viewBox="-1 -1.1 2 2.2" className={className} style={style} preserveAspectRatio="xMidYMid slice"
-      fill="none" stroke="white" strokeWidth={0.16} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="0" cy="-1" r="0.14" fill="white" stroke="none" />
-      <path d="M0,-0.86 L0.05,-0.35" />
-      <path d="M-0.05,-0.8 L-0.28,-0.6 L-0.18,-0.4" />
-      <path d="M0.05,-0.8 L0.3,-0.55 L0.4,-0.32" />
-      <path d="M0.08,-0.35 L0.12,0.05 L0.06,0.5" />
-      <path d="M-0.02,-0.35 L-0.35,-0.55 L-0.7,-0.78" />
+    <svg viewBox="-1.1 -1.15 2.2 2.3" className={className} style={style} preserveAspectRatio="xMidYMid slice" fill={color}>
+      {FIGHTER_SHAPES.map(([x, y, rx, ry, rotDeg], i) => (
+        <ellipse key={i} cx={x} cy={y} rx={rx} ry={ry} transform={rotDeg ? `rotate(${rotDeg} ${x} ${y})` : undefined} />
+      ))}
     </svg>
   );
 }
@@ -654,15 +698,15 @@ export default function FightCardPage() {
 
   /* ── EA FC Ultimate Team tarzı kart gövdesi ── */
   const cardBody = (
-    <div className="relative overflow-hidden rounded-[26px] p-4 sm:p-5"
-      style={{ background: `linear-gradient(165deg, ${theme.bgFrom} 0%, ${theme.bgVia} 55%, ${theme.bgTo} 100%)` }}>
+    <div className="relative overflow-hidden p-3 sm:p-4 pt-6 sm:pt-7 pb-7 sm:pb-8"
+      style={{ background: `linear-gradient(165deg, ${theme.bgFrom} 0%, ${theme.bgVia} 55%, ${theme.bgTo} 100%)`, clipPath: FIGHT_CARD_CLIP }}>
       {/* Işık efektleri */}
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(circle at 85% 6%, ${theme.glow}33, transparent 45%)` }} />
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(circle at 8% 96%, ${theme.glow}22, transparent 50%)` }} />
       <div className="absolute inset-0 pointer-events-none opacity-[0.05]" style={{ background: "linear-gradient(115deg, transparent 35%, #fff 50%, transparent 65%)" }} />
-      {/* Hafif kickboks dövüşçüsü silüeti */}
+      {/* Gerçekçi kickboksçu silüeti — gard + yüksek tekme */}
       <FighterSilhouette className="absolute inset-0 w-full h-full pointer-events-none"
-        style={{ opacity: theme.effect ? 0.06 : 0.04 }} />
+        color={theme.accent} style={{ opacity: theme.effect ? 0.16 : 0.12 }} />
 
       {/* Üst bant: ANKARA FIGHT LEAGUE + KEDİ AI VERIFIED */}
       <div className="relative z-10 flex items-center justify-between mb-2.5">
@@ -684,10 +728,10 @@ export default function FightCardPage() {
       <div className="relative z-10 flex items-start justify-between">
         <div className="flex flex-col items-start leading-none">
           <div className="font-black tabular-nums" style={{
-            fontFamily: "var(--font-bebas)", fontSize: "clamp(3.5rem,17vw,5.5rem)",
+            fontFamily: "var(--font-bebas)", fontSize: "clamp(4.5rem,22vw,7.5rem)",
             backgroundImage: `linear-gradient(135deg, ${theme.textFrom}, ${theme.textTo})`,
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
-            filter: `drop-shadow(0 0 22px ${theme.glow}99)`,
+            filter: `drop-shadow(0 0 28px ${theme.glow}aa)`,
           }}>
             {stats!.ovr}
           </div>
@@ -695,61 +739,68 @@ export default function FightCardPage() {
             {stats!.levelIcon} {stats!.levelShortName}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2 pt-1">
+        <div className="flex flex-col items-center gap-2 pt-1">
           {stats!.hofRank > 0 && (
-            <div className="flex flex-col items-end gap-0.5 px-2.5 py-1.5 rounded-xl"
-              style={{ background: "rgba(251,191,36,0.14)", border: "1px solid rgba(251,191,36,0.45)", boxShadow: "0 0 16px rgba(251,191,36,0.25)" }}>
-              <div className="flex items-center gap-1.5">
-                <Trophy size={14} style={{ color: "#FBBF24" }} />
-                <span className="text-lg font-black tabular-nums leading-none" style={{ color: "#FBBF24", fontFamily: "var(--font-bebas)" }}>
+            <div className="flex flex-col items-center">
+              <div className="relative flex items-center justify-center rounded-full" style={{
+                width: 60, height: 60,
+                background: "radial-gradient(circle at 32% 28%, #FFFBEB, #FBBF24 48%, #92400E 100%)",
+                border: "2px solid #FDE68A",
+                boxShadow: "0 0 18px rgba(251,191,36,0.6), inset 0 2px 5px rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.35)",
+              }}>
+                <Trophy size={13} style={{ color: "#78350F", position: "absolute", top: 7 }} />
+                <span className="font-black leading-none" style={{ fontFamily: "var(--font-bebas)", fontSize: 22, color: "#78350F", marginTop: 8 }}>
                   #{stats!.hofRank}
                 </span>
               </div>
-              <span className="text-[8px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,191,36,.8)", fontFamily: "var(--font-barlow-condensed)" }}>
+              <div className="-mt-1.5 px-2.5 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-[0.2em] whitespace-nowrap"
+                style={{ background: "linear-gradient(90deg,#92400E,#FBBF24)", color: "#1F1300", boxShadow: "0 2px 6px rgba(0,0,0,0.35)" }}>
                 Onur Listesi
-              </span>
+              </div>
             </div>
           )}
-          <SideStat icon={Award} value={stats!.badgeCount} color="#34D399" />
-          <SideStat icon={Flame} value={stats!.weekStreak} color="#FB923C" />
+          <div className="flex items-center gap-1.5">
+            <SideStat icon={Award} value={stats!.badgeCount} color="#34D399" />
+            <SideStat icon={Flame} value={stats!.weekStreak} color="#FB923C" />
+          </div>
         </div>
       </div>
 
       {/* Profil fotoğrafı + seviyeye göre premium çerçeve */}
       <div className="relative flex justify-center mt-3 mb-1">
         {theme.effect === "legend" ? (
-          <motion.div className="rounded-full p-[6px]"
+          <motion.div className="rounded-full p-[4px]"
             style={{ backgroundImage: "linear-gradient(115deg, #7C3AED, #FBBF24, #C084FC, #7C3AED)", backgroundSize: "300% 300%" }}
             animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
             transition={{ duration: 5, repeat: Infinity, ease: "linear" }}>
-            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(240px,58vw)", height: "min(240px,58vw)" }}>
+            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
             </div>
           </motion.div>
         ) : theme.effect === "neon" ? (
-          <motion.div className="rounded-full p-[6px]"
+          <motion.div className="rounded-full p-[4px]"
             style={{ background: `linear-gradient(135deg, ${theme.ringFrom}, ${theme.ringTo})` }}
             animate={{ boxShadow: [`0 0 20px ${theme.glow}88`, `0 0 48px ${theme.glow}`, `0 0 20px ${theme.glow}88`] }}
             transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}>
-            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(240px,58vw)", height: "min(240px,58vw)" }}>
+            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
             </div>
           </motion.div>
         ) : theme.effect === "gold" ? (
-          <motion.div className="rounded-full p-[6px]"
+          <motion.div className="rounded-full p-[4px]"
             style={{ backgroundImage: "linear-gradient(115deg, #B45309, #FFD700, #FDE68A, #FFD700, #B45309)", backgroundSize: "300% 300%" }}
             animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
             transition={{ duration: 4, repeat: Infinity, ease: "linear" }}>
-            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(240px,58vw)", height: "min(240px,58vw)" }}>
+            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
             </div>
           </motion.div>
         ) : (
-          <div className="rounded-full p-[6px]" style={{ background: `linear-gradient(135deg, ${theme.ringFrom}, ${theme.ringTo})`, boxShadow: `0 0 24px ${theme.glow}66` }}>
-            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(240px,58vw)", height: "min(240px,58vw)" }}>
+          <div className="rounded-full p-[4px]" style={{ background: `linear-gradient(135deg, ${theme.ringFrom}, ${theme.ringTo})`, boxShadow: `0 0 24px ${theme.glow}66` }}>
+            <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
             </div>
@@ -783,8 +834,9 @@ export default function FightCardPage() {
         </div>
       </div>
 
-      {/* İstatistik ızgarası — YUM · TEK · SAV / KON · XP · DRS (profesyonel oyuncu kartı stili) */}
-      <div className="relative z-10 mt-4 rounded-2xl overflow-hidden" style={{ border: `1px solid ${theme.accent}22`, background: "rgba(255,255,255,0.02)" }}>
+      {/* İstatistik ızgarası — YUM · TEK · SAV / KON · XP · DRS (profesyonel oyuncu kartı stili, kartın tam genişliği) */}
+      <div className="relative z-10 mt-4 -mx-3 sm:-mx-4 overflow-hidden"
+        style={{ borderTop: `1px solid ${theme.accent}22`, borderBottom: `1px solid ${theme.accent}22`, background: "rgba(255,255,255,0.03)" }}>
         <div className="grid grid-cols-3">
           <StatCell label="YUM" value={stats!.yum} color="#F87171" pct={stats!.yum / 99} divider />
           <StatCell label="TEK" value={stats!.tek} color="#FB923C" pct={stats!.tek / 99} divider />
@@ -830,29 +882,29 @@ export default function FightCardPage() {
             style={{ background: `radial-gradient(circle, ${theme.glow}66, transparent 70%)` }} />
 
           {theme.effect === "legend" ? (
-            <motion.div className="relative rounded-[28px] p-[3px]"
-              style={{ backgroundImage: "linear-gradient(115deg, #7C3AED, #FBBF24, #C084FC, #7C3AED)", backgroundSize: "300% 300%", boxShadow: `0 0 60px ${theme.glow}aa` }}
+            <motion.div className="relative p-[3px]"
+              style={{ backgroundImage: "linear-gradient(115deg, #7C3AED, #FBBF24, #C084FC, #7C3AED)", backgroundSize: "300% 300%", boxShadow: `0 0 60px ${theme.glow}aa`, clipPath: FIGHT_CARD_CLIP }}
               animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
               transition={{ duration: 6, repeat: Infinity, ease: "linear" }}>
               {cardBody}
             </motion.div>
           ) : theme.effect === "neon" ? (
-            <motion.div className="relative rounded-[28px] p-[3px]"
-              style={{ background: `linear-gradient(160deg, ${theme.frameFrom}, ${theme.frameTo})` }}
+            <motion.div className="relative p-[3px]"
+              style={{ background: `linear-gradient(160deg, ${theme.frameFrom}, ${theme.frameTo})`, clipPath: FIGHT_CARD_CLIP }}
               animate={{ boxShadow: [`0 0 25px ${theme.glow}66`, `0 0 55px ${theme.glow}cc`, `0 0 25px ${theme.glow}66`] }}
               transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}>
               {cardBody}
             </motion.div>
           ) : theme.effect === "gold" ? (
-            <motion.div className="relative rounded-[28px] p-[3px]"
-              style={{ backgroundImage: "linear-gradient(115deg, #B45309, #FFD700, #FDE68A, #FFD700, #B45309)", backgroundSize: "300% 300%" }}
+            <motion.div className="relative p-[3px]"
+              style={{ backgroundImage: "linear-gradient(115deg, #B45309, #FFD700, #FDE68A, #FFD700, #B45309)", backgroundSize: "300% 300%", clipPath: FIGHT_CARD_CLIP }}
               animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"], boxShadow: [`0 0 30px ${theme.glow}66`, `0 0 58px ${theme.glow}cc`, `0 0 30px ${theme.glow}66`] }}
               transition={{ backgroundPosition: { duration: 4, repeat: Infinity, ease: "linear" }, boxShadow: { duration: 2.4, repeat: Infinity, ease: "easeInOut" } }}>
               {cardBody}
             </motion.div>
           ) : (
-            <div className="relative rounded-[28px] p-[3px]"
-              style={{ background: `linear-gradient(160deg, ${theme.frameFrom}, ${theme.frameTo})`, boxShadow: `0 0 40px ${theme.glow}55` }}>
+            <div className="relative p-[3px]"
+              style={{ background: `linear-gradient(160deg, ${theme.frameFrom}, ${theme.frameTo})`, boxShadow: `0 0 40px ${theme.glow}55`, clipPath: FIGHT_CARD_CLIP }}>
               {cardBody}
             </div>
           )}
