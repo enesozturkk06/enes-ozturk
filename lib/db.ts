@@ -470,6 +470,20 @@ export async function getAppointments(filters?: {
 }
 
 /**
+ * Tarihi geçmiş (beforeDate'den önce) ama hâlâ "onaylandi" durumda kalan
+ * randevular — admin aynı gün "Tamamla"ya basmadığı için listede unutulan dersler.
+ */
+export async function getIncompleteAppointments(beforeDate: string): Promise<Appointment[]> {
+  const { data, error } = await db()
+    .from("appointments").select("*")
+    .lt("date", beforeDate)
+    .eq("status", "onaylandi")
+    .order("date", { ascending: false }).order("start_time");
+  if (error) fail("getIncompleteAppointments", error);
+  return (data ?? []).map(ma);
+}
+
+/**
  * Öğrenciye ait tüm randevular:
  * - Kendi oluşturduğu (student_id)
  * - Düet daveti kabul ettiği (appointment_students → invite_status != declined)
@@ -973,12 +987,19 @@ export async function completeAppointmentWithAttendance(
   const today = new Date().toISOString().split("T")[0];
   const warnings: string[] = [];
 
-  // Randevuyu tamamlandı yap
-  const { error: e1 } = await db()
+  // Randevuyu tamamlandı yap — tarih (date) alanına dokunulmaz, ders hangi gün
+  // yapıldıysa o tarihte kalır; sadece completed_at "ne zaman işaretlendi"yi tutar
+  const { data: updatedApt, error: e1 } = await db()
     .from("appointments")
     .update({ status: "tamamlandi", completed_at: today })
-    .eq("id", id);
+    .eq("id", id)
+    .select("date, start_time")
+    .single();
   if (e1) fail("completeAppointment:update", e1);
+
+  const lessonDateLabel = updatedApt?.date
+    ? `${updatedApt.date.split("-").reverse().join(".")}${updatedApt.start_time ? " " + updatedApt.start_time : ""}`
+    : "";
 
   // appointment_students kayıtlarını al
   const { data: apStudents } = await db()
@@ -1051,6 +1072,21 @@ export async function completeAppointmentWithAttendance(
         }, { onConflict: "appointment_id,student_id" });
       }
     } catch { /* tablo yoksa sessizce geç */ }
+
+    // Öğrenciye bildirim — sadece dersi gerçekten düşülenlere
+    if (shouldDeduct) {
+      try {
+        await db().from("notifications").insert({
+          student_id: studentId,
+          title:      "✅ Ders Tamamlandı",
+          message:    lessonDateLabel
+            ? `${lessonDateLabel} tarihli dersin tamamlandı olarak işaretlendi ve kalan ders hakkından düşüldü.`
+            : "Dersin tamamlandı olarak işaretlendi ve kalan ders hakkından düşüldü.",
+          type:       "success",
+          is_read:    false,
+        });
+      } catch { /* bildirim tablosu sorunluysa ders düşümünü etkilemesin */ }
+    }
   }
 
   return { success: true, warnings };

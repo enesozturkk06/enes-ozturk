@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  getAppointments, getStudents, getAdminNotifications,
+  getAppointments, getIncompleteAppointments, getStudents, getAdminNotifications,
   completeAppointmentWithAttendance, getAppointmentStudents,
   bulkGetAppointmentStudents, createLessonRecord,
   markNotificationRead, markAllAdminNotificationsRead,
@@ -51,6 +51,10 @@ export default function AdminDashboard() {
   const [notifs, setNotifs]         = useState<Notification[]>([]);
   const [loading, setLoading]       = useState(true);
   const [aptStudents, setAptStudents] = useState<Record<string, AppointmentStudent[]>>({});
+
+  /* Geçmiş tamamlanmamış dersler — admin aynı gün "Tamamla"ya basmadığı için unutulanlar */
+  const [incompleteApts, setIncompleteApts] = useState<Appointment[]>([]);
+  const [lessonFilter, setLessonFilter] = useState<"today" | "incomplete" | "completed">("today");
 
   /* Katılım modalı */
   const [attendModal, setAttendModal]     = useState<Appointment | null>(null);
@@ -134,20 +138,28 @@ export default function AdminDashboard() {
     setTodayApts(active);
     // Tek bulk sorguda tüm appointment_students (N+1 yerine 2 sorgu)
     const map = await bulkGetAppointmentStudents(active.map(a => a.id));
-    setAptStudents(map);
+    setAptStudents(prev => ({ ...prev, ...map }));
+  }, [today]);
+
+  /* Geçmiş tamamlanmamış dersleri yükle (tarih < bugün, status = onaylandi) */
+  const reloadIncompleteApts = useCallback(async () => {
+    const apts = await getIncompleteAppointments(today);
+    setIncompleteApts(apts);
+    const map = await bulkGetAppointmentStudents(apts.map(a => a.id));
+    setAptStudents(prev => ({ ...prev, ...map }));
   }, [today]);
 
   useEffect(() => {
     const season = getCurrentSeason();
     Promise.all([
-      reloadApts(), getStudents(), getAdminNotifications(),
+      reloadApts(), reloadIncompleteApts(), getStudents(), getAdminNotifications(),
       getPendingGiftLessonRequests().catch(() => []),
       getAppointments().catch(() => []),
       getLessonRecords().catch(() => []),
       getGiftLessonRequestsForSeason(season).catch(() => []),
       getAllXPAdjustments().catch(() => []),
       getAllGiftLessonRequests().catch(() => []),
-    ]).then(([, s, n, gifts, apts, recs, seasonGiftReqs, adjustments, allGifts]) => {
+    ]).then(([, , s, n, gifts, apts, recs, seasonGiftReqs, adjustments, allGifts]) => {
       setStudents(s);
       setNotifs(n);
       setGiftRequests(gifts as GiftLessonRequest[]);
@@ -165,7 +177,7 @@ export default function AdminDashboard() {
       const unread = n.filter(x => !x.isRead);
       if (unread.length > 0) setLoginToast(unread[0]);
     });
-  }, [reloadApts]);
+  }, [reloadApts, reloadIncompleteApts]);
 
   /* ── Tamamla butonuna basıldı ─────────────────────────────── */
   const handleCompleteClick = async (apt: Appointment) => {
@@ -201,7 +213,8 @@ export default function AdminDashboard() {
     try {
       const entries = Object.entries(attendances).map(([studentId, attended]) => ({ studentId, attended }));
       const result = await completeAppointmentWithAttendance(attendModal.id, entries);
-      await reloadApts();
+      await Promise.all([reloadApts(), reloadIncompleteApts()]);
+      getAppointments().then(setAllAppointments).catch(() => {});
 
       /* Düet ders ise per-student score/note state'ini hazırla */
       const initDuet = (apt: Appointment) => {
@@ -279,6 +292,7 @@ export default function AdminDashboard() {
           durationMinutes: 60,
         });
       }
+      getLessonRecords().then(setAllRecords).catch(() => {});
     } finally {
       setSaving(false);
       setNoteModal(null);
@@ -555,71 +569,121 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Bugünkü dersler */}
+        {/* Bugünkü / Geçmiş Tamamlanmamış / Tamamlanan dersler */}
         <motion.div variants={fadeUp} className="lg:col-span-2">
           <Card className="p-6" id="bugunun-dersleri">
-            <h3 className="text-xl font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>
-              Bugünkü Dersler
-            </h3>
-            {todayApts.length === 0 ? (
-              <div className="text-center py-12">
-                <Calendar size={40} className="text-white/10 mx-auto mb-3"/>
-                <p className="text-white/30 text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Bugün ders yok</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {todayApts.sort((a,b)=>a.startTime.localeCompare(b.startTime)).map(apt => (
-                  <div key={apt.id} className="flex flex-wrap items-center gap-3 p-4 bg-steel/30 border border-white/5 hover:border-white/10 transition-colors">
-                    <div className="w-12 h-12 bg-crimson/10 border border-crimson/20 flex flex-col items-center justify-center flex-shrink-0">
-                      <span className="text-crimson text-sm font-display" style={{ fontFamily:"var(--font-bebas)" }}>{apt.startTime}</span>
-                    </div>
-                    <div className="flex-1 min-w-0" style={{ minWidth: 120 }}>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                          {aptDisplayName(apt)}
-                        </span>
-                        {aptTypeLabel(apt) && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded"
-                            style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-barlow-condensed)", border:"1px solid rgba(139,92,246,0.25)" }}>
-                            {aptTypeLabel(apt)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                        <span>{apt.studentCode} · {apt.startTime}–{apt.endTime}</span>
-                        {apt.lessonType === "duet" && (aptStudents[apt.id] ?? []).map(s => {
-                          const color = s.inviteStatus === "accepted" ? "#22c55e" : s.inviteStatus === "declined" ? "#ef4444" : "#d97706";
-                          const label = s.inviteStatus === "accepted" ? "Onayladı" : s.inviteStatus === "declined" ? "Reddetti" : "Bekliyor";
-                          return (
-                            <span key={s.studentId} style={{ color, fontFamily:"var(--font-barlow-condensed)" }}>
-                              · {s.studentName || "?"}: {label}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-                      <Badge color={apt.status==="tamamlandi"?"green":apt.status==="iptal"?"red":"gold"}>
-                        {STATUS_LABELS[apt.status]}
-                      </Badge>
-                      {apt.status === "onaylandi" && (
-                        <>
-                          <Button size="sm" onClick={() => handleCompleteClick(apt)}>
-                            <CheckCircle size={14}/>Tamamla
-                          </Button>
-                          <button
-                            onClick={() => { setCancelTarget(apt); setCancelReason(""); }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-all"
-                            style={{ border:"1px solid rgba(239,68,68,0.4)", color:"#ef4444", fontFamily:"var(--font-barlow-condensed)", borderRadius:"4px" }}>
-                            <XCircle size={13}/>İptal
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <h3 className="text-xl font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                {lessonFilter === "today" ? "Bugünkü Dersler" : lessonFilter === "incomplete" ? "Geçmiş Tamamlanmamış Dersler" : "Tamamlanan Dersler"}
+              </h3>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([
+                  { key: "today" as const,      label: "Bugünkü Dersler",  active: { bg:"rgba(220,38,38,0.15)", fg:"#f87171", bd:"rgba(220,38,38,0.35)" } },
+                  { key: "incomplete" as const,  label: "Geçmiş Tamamlanmamış", active: { bg:"rgba(217,119,6,0.15)", fg:"#fbbf24", bd:"rgba(217,119,6,0.35)" } },
+                  { key: "completed" as const,   label: "Tamamlanan Dersler", active: { bg:"rgba(34,197,94,0.15)", fg:"#4ade80", bd:"rgba(34,197,94,0.35)" } },
+                ]).map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setLessonFilter(tab.key)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all"
+                    style={lessonFilter === tab.key
+                      ? { background: tab.active.bg, color: tab.active.fg, border: `1px solid ${tab.active.bd}`, fontFamily:"var(--font-barlow-condensed)", borderRadius:"6px" }
+                      : { background:"transparent", color:"rgba(255,255,255,0.35)", border:"1px solid rgba(255,255,255,0.08)", fontFamily:"var(--font-barlow-condensed)", borderRadius:"6px" }}
+                  >
+                    {tab.label}
+                    {tab.key === "incomplete" && incompleteApts.length > 0 && (
+                      <span className="inline-flex items-center justify-center text-[10px] w-4 h-4 rounded-full" style={{ background:"#dc2626", color:"#fff" }}>
+                        {incompleteApts.length}
+                      </span>
+                    )}
+                  </button>
                 ))}
               </div>
-            )}
+            </div>
+
+            {(() => {
+              const list =
+                lessonFilter === "today"      ? [...todayApts].sort((a,b)=>a.startTime.localeCompare(b.startTime)) :
+                lessonFilter === "incomplete" ? incompleteApts :
+                [...allAppointments]
+                  .filter(a => a.status === "tamamlandi")
+                  .sort((a,b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
+                  .slice(0, 50);
+
+              if (list.length === 0) {
+                return (
+                  <div className="text-center py-12">
+                    <Calendar size={40} className="text-white/10 mx-auto mb-3"/>
+                    <p className="text-white/30 text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      {lessonFilter === "today" ? "Bugün ders yok"
+                        : lessonFilter === "incomplete" ? "Tamamlanmamış geçmiş ders yok 🎉"
+                        : "Henüz tamamlanan ders yok"}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {list.map(apt => (
+                    <div key={apt.id} className="flex flex-wrap items-center gap-3 p-4 bg-steel/30 border border-white/5 hover:border-white/10 transition-colors">
+                      <div className="w-12 h-12 bg-crimson/10 border border-crimson/20 flex flex-col items-center justify-center flex-shrink-0">
+                        <span className="text-crimson text-sm font-display" style={{ fontFamily:"var(--font-bebas)" }}>{apt.startTime}</span>
+                      </div>
+                      <div className="flex-1 min-w-0" style={{ minWidth: 120 }}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            {aptDisplayName(apt)}
+                          </span>
+                          {aptTypeLabel(apt) && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-barlow-condensed)", border:"1px solid rgba(139,92,246,0.25)" }}>
+                              {aptTypeLabel(apt)}
+                            </span>
+                          )}
+                          {lessonFilter !== "today" && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded"
+                              style={{ background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.45)", fontFamily:"var(--font-barlow-condensed)" }}>
+                              {apt.date.split("-").reverse().join(".")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          <span>{apt.studentCode} · {apt.startTime}–{apt.endTime}</span>
+                          {apt.lessonType === "duet" && (aptStudents[apt.id] ?? []).map(s => {
+                            const color = s.inviteStatus === "accepted" ? "#22c55e" : s.inviteStatus === "declined" ? "#ef4444" : "#d97706";
+                            const label = s.inviteStatus === "accepted" ? "Onayladı" : s.inviteStatus === "declined" ? "Reddetti" : "Bekliyor";
+                            return (
+                              <span key={s.studentId} style={{ color, fontFamily:"var(--font-barlow-condensed)" }}>
+                                · {s.studentName || "?"}: {label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                        <Badge color={apt.status==="tamamlandi"?"green":apt.status==="iptal"?"red":"gold"}>
+                          {STATUS_LABELS[apt.status]}
+                        </Badge>
+                        {apt.status === "onaylandi" && (
+                          <>
+                            <Button size="sm" onClick={() => handleCompleteClick(apt)}>
+                              <CheckCircle size={14}/>Tamamla
+                            </Button>
+                            <button
+                              onClick={() => { setCancelTarget(apt); setCancelReason(""); }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-all"
+                              style={{ border:"1px solid rgba(239,68,68,0.4)", color:"#ef4444", fontFamily:"var(--font-barlow-condensed)", borderRadius:"4px" }}>
+                              <XCircle size={13}/>İptal
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </Card>
         </motion.div>
 
