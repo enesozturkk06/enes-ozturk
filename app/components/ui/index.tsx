@@ -225,21 +225,23 @@ export function ProgressBar({ value, max = 100, color = "red", label, showValue 
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-interface ModalProps { open: boolean; onClose: () => void; title: string; children: ReactNode; maxWidth?: string }
-export function Modal({ open, onClose, title, children, maxWidth = "max-w-lg" }: ModalProps) {
+interface ModalProps { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; maxWidth?: string }
+export function Modal({ open, onClose, title, children, footer, maxWidth = "max-w-lg" }: ModalProps) {
   if (!open) return null;
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <motion.div
-        initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }}
-        className={`relative z-10 w-full ${maxWidth} bg-carbon border border-white/10 shadow-[0_20px_80px_rgba(0,0,0,0.6)]`}
+        initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+        className={`relative z-10 w-full sm:${maxWidth} bg-carbon border border-white/10 shadow-[0_20px_80px_rgba(0,0,0,0.6)] flex flex-col rounded-t-2xl sm:rounded-2xl`}
+        style={{ maxHeight: "90svh" }}
       >
-        <div className="flex items-center justify-between p-5 border-b border-white/8">
+        {/* Sabit başlık */}
+        <div className="flex-shrink-0 flex items-center justify-between p-5 border-b border-white/8">
           <h3 className="text-xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>{title}</h3>
           <button onClick={onClose} className="text-white/30 hover:text-white transition-colors duration-200">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -247,7 +249,16 @@ export function Modal({ open, onClose, title, children, maxWidth = "max-w-lg" }:
             </svg>
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        {/* Kaydırılabilir içerik */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5" style={{ WebkitOverflowScrolling: "touch" }}>
+          {children}
+        </div>
+        {/* Sabit alt buton alanı */}
+        {footer && (
+          <div className="flex-shrink-0 border-t border-white/8 px-5 py-4" style={{ background: "rgba(24,24,27,0.98)" }}>
+            {footer}
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

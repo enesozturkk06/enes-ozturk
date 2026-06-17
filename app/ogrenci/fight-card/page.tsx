@@ -96,6 +96,13 @@ function statVal(score: number): number {
   return Math.max(1, Math.min(99, Math.round(score * 10)));
 }
 
+/** Büyük sayıları kısaltır: 10050 → "10K", 1250000 → "1.25M" */
+function formatXP(n: number): string {
+  if (n >= 1_000_000) return (Math.round(n / 10_000) / 100).toFixed(2).replace(/\.?0+$/, "") + "M";
+  if (n >= 1_000) return Math.round(n / 1_000) + "K";
+  return String(n);
+}
+
 function loadImage(url: string): Promise<HTMLImageElement | null> {
   return new Promise(resolve => {
     const img = new window.Image();
@@ -165,11 +172,13 @@ function drawFighterSilhouette(ctx: CanvasRenderingContext2D, cx: number, cy: nu
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
+  // Tüm gövde parçaları TEK path olarak doldurulur — üst üste binen elipslerde
+  // çift alfa karışımı (görünür "dikiş" izleri) oluşmaz, bütünlüklü tek bir gölge görünür.
+  ctx.beginPath();
   for (const [x, y, rx, ry, rotDeg] of FIGHTER_SHAPES) {
-    ctx.beginPath();
     ctx.ellipse(cx + x * scale, cy + y * scale, rx * scale, ry * scale, ((rotDeg ?? 0) * Math.PI) / 180, 0, Math.PI * 2);
-    ctx.fill();
   }
+  ctx.fill();
   ctx.restore();
 }
 
@@ -321,15 +330,15 @@ function drawFightStoryCard(canvas: HTMLCanvasElement, o: StoryCardData) {
   const cx0 = ix + pad, cy0 = iy + pad, innerW = iw - pad * 2;
 
   // OVR (kartın en baskın öğesi) + seviye adı (sol üst)
-  const ovrGrad = ctx.createLinearGradient(cx0, cy0, cx0 + 355, cy0 + 355);
+  const ovrGrad = ctx.createLinearGradient(cx0, cy0, cx0 + 375, cy0 + 375);
   ovrGrad.addColorStop(0, theme.textFrom); ovrGrad.addColorStop(1, theme.textTo);
-  ctx.fillStyle = ovrGrad; ctx.font = "bold 250px Impact,sans-serif";
+  ctx.fillStyle = ovrGrad; ctx.font = "bold 270px Impact,sans-serif";
   ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  ctx.shadowColor = theme.glow + "cc"; ctx.shadowBlur = 48;
-  ctx.fillText(String(o.ovr), cx0, cy0 + 195);
+  ctx.shadowColor = theme.glow + "cc"; ctx.shadowBlur = 50;
+  ctx.fillText(String(o.ovr), cx0, cy0 + 205);
   ctx.shadowBlur = 0;
   ctx.fillStyle = theme.accent; ctx.font = "bold 50px Arial,sans-serif";
-  ctx.fillText(`${o.levelIcon}  ${o.levelShortName.toUpperCase()}`, cx0, cy0 + 250);
+  ctx.fillText(`${o.levelIcon}  ${o.levelShortName.toUpperCase()}`, cx0, cy0 + 262);
 
   // Sağ sütun: Onur Listesi sırası (altın madalyon) / Rozet / Haftalık seri
   const riX = cx0 + innerW;
@@ -431,55 +440,58 @@ function drawFightStoryCard(canvas: HTMLCanvasElement, o: StoryCardData) {
   ctx.fillText(o.name.toUpperCase(), avCx, nameY);
   ctx.shadowBlur = 0;
 
-  // "Antrenör Enes Öztürk Resmi Sporcusu" etiketi
-  const tagY = nameY + 50;
-  ctx.font = "bold 28px Arial,sans-serif";
-  const tagText = "ANTRENÖR ENES ÖZTÜRK RESMİ SPORCUSU";
-  const tagTextW = ctx.measureText(tagText).width;
-  const tagW = tagTextW + 64, tagH = 50, tagX = avCx - tagW / 2, tagYTop = tagY - 34;
-  rr(ctx, tagX, tagYTop, tagW, tagH, 25);
-  ctx.fillStyle = theme.accent + "1a"; ctx.fill();
-  ctx.strokeStyle = theme.accent + "55"; ctx.lineWidth = 2; rr(ctx, tagX, tagYTop, tagW, tagH, 25); ctx.stroke();
-  ctx.fillStyle = theme.accent; ctx.textAlign = "center";
-  ctx.fillText(tagText, avCx, tagY);
-
-  // İstatistik ızgarası — YUM · TEK · SAV / KON · XP · DRS (profesyonel oyuncu kartı stilinde, ilerleme çubuklu)
-  const sd = [
-    { l: "YUM", v: String(o.yum), c: "#F87171", pct: o.yum / 99 },
-    { l: "TEK", v: String(o.tek), c: "#FB923C", pct: o.tek / 99 },
-    { l: "SAV", v: String(o.sav), c: "#60A5FA", pct: o.sav / 99 },
-    { l: "KON", v: String(o.kon), c: "#34D399", pct: o.kon / 99 },
-    { l: "XP",  v: String(o.xp),  c: theme.accent, pct: Math.min(1, o.xp / 10000) },
-    { l: "DRS", v: String(o.drs), c: "#A78BFA", pct: Math.min(1, o.drs / 100) },
+  // İstatistik ızgarası — 2 sütun x 3 satır, EA FC tarzı, seviye renginde neon glow
+  const statItems: [string, string][] = [
+    ["YUM", String(o.yum)], ["TEK", String(o.tek)],
+    ["SAV", String(o.sav)], ["KON", String(o.kon)],
+    ["XP", formatXP(o.xp)], ["DRS", String(o.drs)],
   ];
-  const gridY = tagY + 50, gap = 14, cols = 3;
-  const gpad = 14, gx0 = ix + gpad;
-  const cellW = (iw - gpad * 2 - gap * (cols - 1)) / cols, cellH = 160;
-  sd.forEach((s, i) => {
-    const col = i % cols, row = Math.floor(i / cols);
-    const x = gx0 + col * (cellW + gap), y = gridY + row * (cellH + gap);
-    ctx.fillStyle = "rgba(255,255,255,.03)"; rr(ctx, x, y, cellW, cellH, 14); ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.lineWidth = 1; rr(ctx, x, y, cellW, cellH, 14); ctx.stroke();
-    ctx.fillStyle = s.c + "55"; rr(ctx, x, y, cellW, 6, [14, 14, 0, 0]); ctx.fill();
-    ctx.fillStyle = s.c; ctx.font = "bold 66px Impact,sans-serif"; ctx.textAlign = "center";
-    ctx.fillText(s.v, x + cellW / 2, y + 82);
-    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.font = "bold 28px Arial,sans-serif";
-    ctx.fillText(s.l, x + cellW / 2, y + 116);
-    // ilerleme çubuğu
-    const barX = x + 24, barW = cellW - 48, barY = y + cellH - 22, barH = 10;
-    ctx.fillStyle = "rgba(255,255,255,.08)"; rr(ctx, barX, barY, barW, barH, 5); ctx.fill();
-    ctx.fillStyle = s.c; rr(ctx, barX, barY, Math.max(8, barW * s.pct), barH, 5); ctx.fill();
-  });
+  const gridY = nameY + 50;
+  const gpad = 14, gx0 = ix + gpad, gridW = iw - gpad * 2, cellW = gridW / 2, rowH = 110;
+  const gridBottom = gridY + rowH * 3;
 
-  // Kart içi marka altlığı
-  const gridBottom = gridY + 2 * cellH + gap;
-  const footY = gridBottom + 50;
+  ctx.fillStyle = "rgba(255,255,255,.03)";
+  ctx.fillRect(gx0, gridY, gridW, rowH * 3);
+  ctx.strokeStyle = theme.accent + "44"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(gx0, gridY); ctx.lineTo(gx0 + gridW, gridY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(gx0, gridBottom); ctx.lineTo(gx0 + gridW, gridBottom); ctx.stroke();
+
+  // ince neon ayırıcılar
+  ctx.save();
+  ctx.shadowColor = theme.glow; ctx.shadowBlur = 16;
+  ctx.strokeStyle = theme.accent + "66"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(gx0 + cellW, gridY); ctx.lineTo(gx0 + cellW, gridBottom); ctx.stroke();
+  for (let r = 1; r < 3; r++) {
+    ctx.beginPath(); ctx.moveTo(gx0, gridY + r * rowH); ctx.lineTo(gx0 + gridW, gridY + r * rowH); ctx.stroke();
+  }
+  ctx.restore();
+
+  statItems.forEach(([label, value], i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = gx0 + col * cellW, y = gridY + row * rowH;
+    const cyc = y + rowH / 2;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.font = "bold 34px Arial,sans-serif";
+    ctx.fillText(label, x + 40, cyc);
+    ctx.textAlign = "right";
+    ctx.fillStyle = theme.accent; ctx.font = "bold 74px Impact,sans-serif";
+    ctx.shadowColor = theme.glow + "cc"; ctx.shadowBlur = 20;
+    ctx.fillText(value, x + cellW - 40, cyc + 6);
+    ctx.shadowBlur = 0;
+  });
+  ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+
+  // Kart içi marka altlığı — 3 satır
+  const footY = gridBottom + 60;
   ctx.strokeStyle = theme.accent + "33"; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(cx0, footY - 34); ctx.lineTo(cx0 + innerW, footY - 34); ctx.stroke();
   ctx.fillStyle = theme.accent; ctx.font = "bold 34px Impact,sans-serif"; ctx.textAlign = "center";
   ctx.fillText("ANTRENÖR ENES ÖZTÜRK", avCx, footY);
   ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.font = "24px Arial,sans-serif";
   ctx.fillText("@p.t.enesozturk", avCx, footY + 38);
+  ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.font = "bold 20px Arial,sans-serif";
+  ctx.fillText("RESMİ SPORCU KARTI", avCx, footY + 72);
 
   /* ── Alt bilgi ── */
   ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.font = "28px Arial,sans-serif"; ctx.textAlign = "center";
@@ -505,18 +517,16 @@ function SideStat({ icon: Icon, value, color }: { icon: IconType; value: string 
   );
 }
 
-function StatCell({ label, value, color, pct, divider }: { label: string; value: string | number; color: string; pct: number; divider?: boolean }) {
+/** EA FC tarzı istatistik satırı — sol kısa etiket, sağda büyük sayı (seviye renginde neon glow) */
+function StatItem({ label, value, theme }: { label: string; value: string | number; theme: FightCardTheme }) {
   return (
-    <div className="flex flex-col items-center justify-center py-4 sm:py-5 gap-2" style={divider ? { borderRight: `1px solid ${color}1a` } : undefined}>
-      <div className="font-black tabular-nums leading-none" style={{ fontFamily: "var(--font-bebas)", fontSize: 32, color, textShadow: `0 0 12px ${color}66` }}>
-        {value}
-      </div>
-      <div className="text-[10px] uppercase tracking-[0.25em]" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+    <div className="relative z-10 flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4">
+      <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.3em]" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-barlow-condensed)" }}>
         {label}
-      </div>
-      <div className="w-3/5 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-        <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(4, pct * 100))}%`, background: color }} />
-      </div>
+      </span>
+      <span className="font-black tabular-nums leading-none" style={{ fontFamily: "var(--font-bebas)", fontSize: "clamp(1.5rem,7vw,2.1rem)", color: theme.accent, textShadow: `0 0 14px ${theme.glow}aa` }}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -728,7 +738,7 @@ export default function FightCardPage() {
       <div className="relative z-10 flex items-start justify-between">
         <div className="flex flex-col items-start leading-none">
           <div className="font-black tabular-nums" style={{
-            fontFamily: "var(--font-bebas)", fontSize: "clamp(4.5rem,22vw,7.5rem)",
+            fontFamily: "var(--font-bebas)", fontSize: "clamp(5rem,24vw,8.5rem)",
             backgroundImage: `linear-gradient(135deg, ${theme.textFrom}, ${theme.textTo})`,
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
             filter: `drop-shadow(0 0 28px ${theme.glow}aa)`,
@@ -826,33 +836,34 @@ export default function FightCardPage() {
         </div>
       </div>
 
-      {/* "Antrenör Enes Öztürk Resmi Sporcusu" etiketi */}
-      <div className="relative z-10 flex justify-center mt-2">
-        <div className="px-3 py-1 rounded-full text-center text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.2em]"
-          style={{ color: theme.accent, border: `1px solid ${theme.accent}40`, background: `${theme.accent}14`, fontFamily: "var(--font-barlow-condensed)" }}>
-          Antrenör Enes Öztürk Resmi Sporcusu
-        </div>
-      </div>
-
-      {/* İstatistik ızgarası — YUM · TEK · SAV / KON · XP · DRS (profesyonel oyuncu kartı stili, kartın tam genişliği) */}
+      {/* İstatistik ızgarası — 2 sütun x 3 satır, EA FC tarzı, seviye rengine göre neon glow */}
       <div className="relative z-10 mt-4 -mx-3 sm:-mx-4 overflow-hidden"
-        style={{ borderTop: `1px solid ${theme.accent}22`, borderBottom: `1px solid ${theme.accent}22`, background: "rgba(255,255,255,0.03)" }}>
-        <div className="grid grid-cols-3">
-          <StatCell label="YUM" value={stats!.yum} color="#F87171" pct={stats!.yum / 99} divider />
-          <StatCell label="TEK" value={stats!.tek} color="#FB923C" pct={stats!.tek / 99} divider />
-          <StatCell label="SAV" value={stats!.sav} color="#60A5FA" pct={stats!.sav / 99} />
-        </div>
-        <div className="grid grid-cols-3" style={{ borderTop: `1px solid ${theme.accent}1a` }}>
-          <StatCell label="KON" value={stats!.kon} color="#34D399" pct={stats!.kon / 99} divider />
-          <StatCell label="XP" value={stats!.lifetimeXP} color={theme.accent} pct={Math.min(1, stats!.lifetimeXP / 10000)} divider />
-          <StatCell label="DRS" value={stats!.completedLessons} color="#A78BFA" pct={Math.min(1, stats!.completedLessons / 100)} />
+        style={{ borderTop: `1px solid ${theme.accent}40`, borderBottom: `1px solid ${theme.accent}40`, background: "rgba(255,255,255,0.03)" }}>
+        {/* ince neon ayırıcılar */}
+        <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 pointer-events-none" style={{ background: theme.accent, opacity: 0.35, boxShadow: `0 0 8px ${theme.glow}` }} />
+        <div className="absolute left-0 right-0 top-1/3 h-px pointer-events-none" style={{ background: theme.accent, opacity: 0.22, boxShadow: `0 0 6px ${theme.glow}` }} />
+        <div className="absolute left-0 right-0 top-2/3 h-px pointer-events-none" style={{ background: theme.accent, opacity: 0.22, boxShadow: `0 0 6px ${theme.glow}` }} />
+        <div className="grid grid-cols-2">
+          <StatItem label="YUM" value={stats!.yum} theme={theme} />
+          <StatItem label="TEK" value={stats!.tek} theme={theme} />
+          <StatItem label="SAV" value={stats!.sav} theme={theme} />
+          <StatItem label="KON" value={stats!.kon} theme={theme} />
+          <StatItem label="XP" value={formatXP(stats!.lifetimeXP)} theme={theme} />
+          <StatItem label="DRS" value={stats!.completedLessons} theme={theme} />
         </div>
       </div>
 
       {/* Marka altlığı */}
-      <div className="relative z-10 mt-3 pt-2.5 text-center border-t" style={{ borderColor: `${theme.accent}22` }}>
-        <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+      <div className="relative z-10 mt-3 pt-3 text-center border-t space-y-1" style={{ borderColor: `${theme.accent}22` }}>
+        <div className="text-sm sm:text-base font-black uppercase tracking-[0.12em]"
+          style={{ color: theme.accent, fontFamily: "var(--font-bebas)", textShadow: `0 0 10px ${theme.glow}66` }}>
+          Antrenör Enes Öztürk
+        </div>
+        <div className="text-[10px] sm:text-[11px]" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
           @p.t.enesozturk
+        </div>
+        <div className="text-[8px] sm:text-[9px] uppercase tracking-[0.35em]" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+          Resmi Sporcu Kartı
         </div>
       </div>
     </div>

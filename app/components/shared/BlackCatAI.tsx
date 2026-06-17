@@ -1165,6 +1165,12 @@ export default function BlackCatAI() {
     }
   }, []);
 
+  useEffect(() => {
+    const h = () => { setOpen(true); setMin(false); };
+    window.addEventListener("kedi-open", h);
+    return () => window.removeEventListener("kedi-open", h);
+  }, []);
+
   const toggleVoice = useCallback(() => {
     if (listening) {
       recognitionRef.current?.stop();

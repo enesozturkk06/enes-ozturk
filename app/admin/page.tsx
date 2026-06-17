@@ -1614,6 +1614,14 @@ export default function AdminDashboard() {
         onClose={() => setNoteModal(null)}
         title={noteModal?.lessonType === "duet" ? "Düet Ders Notu Ekle" : "Ders Notu Ekle"}
         maxWidth="max-w-2xl"
+        footer={noteModal ? (
+          <div className="flex gap-3">
+            <Button onClick={() => setNoteModal(null)} variant="secondary" className="flex-1">Atla</Button>
+            <Button onClick={handleSaveNote} loading={saving} className="flex-1">
+              {noteModal.lessonType === "duet" ? "İkisini de Kaydet" : "Notu Kaydet"}
+            </Button>
+          </div>
+        ) : undefined}
       >
         {noteModal && (() => {
           const isDuet = noteModal.lessonType === "duet";
@@ -1677,16 +1685,11 @@ export default function AdminDashboard() {
                     </div>
                   );
                 })}
-
-                <div className="flex gap-3">
-                  <Button onClick={() => setNoteModal(null)} variant="secondary" className="flex-1">Atla</Button>
-                  <Button onClick={handleSaveNote} loading={saving} className="flex-1">İkisini de Kaydet</Button>
-                </div>
               </div>
             );
           }
 
-          /* ── Bireysel: mevcut tek öğrenci formu (değişmedi) ── */
+          /* ── Bireysel: mevcut tek öğrenci formu ── */
           return (
             <div className="space-y-4">
               <div className="p-3 bg-steel/30 border border-white/5">
@@ -1707,10 +1710,6 @@ export default function AdminDashboard() {
                 ))}
               </div>
               <Textarea label="Antrenör Notu" value={noteText} onChange={setNoteText} rows={3} placeholder="Derste neler yapıldı..." />
-              <div className="flex gap-3">
-                <Button onClick={() => setNoteModal(null)} variant="secondary" className="flex-1">Atla</Button>
-                <Button onClick={handleSaveNote} loading={saving} className="flex-1">Notu Kaydet</Button>
-              </div>
             </div>
           );
         })()}

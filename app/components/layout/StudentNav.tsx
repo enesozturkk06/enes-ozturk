@@ -2,12 +2,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import Logo from "@/app/components/shared/Logo";
 import {
   LayoutDashboard, Calendar, TrendingUp, Dumbbell,
   Bell, LogOut, Menu, X, ChevronRight, Heart, Award, Zap,
-  FileText, Medal, User, Swords, CreditCard,
+  FileText, Medal, User, Swords, CreditCard, Sparkles,
 } from "lucide-react";
 
 const links = [
@@ -150,6 +151,194 @@ export default function StudentNav() {
           </nav>
         </div>
       )}
+
+      {/* Mobile bottom navigation — premium floating glassmorphism */}
+      <div
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-[46]"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      >
+        <motion.div
+          className="mx-4"
+          initial={{ y: 90, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.12 }}
+        >
+          {/* Glass card */}
+          <div
+            className="rounded-2xl relative overflow-visible"
+            style={{
+              background: "rgba(8,5,20,0.92)",
+              backdropFilter: "blur(28px)",
+              WebkitBackdropFilter: "blur(28px)",
+              border: "1px solid rgba(139,92,246,0.20)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 40px rgba(0,0,0,0.70), 0 0 0 1px rgba(139,92,246,0.06), 0 -2px 20px rgba(139,92,246,0.06)",
+            }}
+          >
+            <div className="flex items-center px-1" style={{ height: "62px" }}>
+
+              {/* Ana Sayfa */}
+              <Link
+                href="/ogrenci"
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 h-full relative transition-all duration-200 active:scale-90"
+              >
+                {/* Badge slot — şimdilik boş */}
+                <div className="relative">
+                  <LayoutDashboard
+                    size={22}
+                    style={{
+                      color: isActive("/ogrenci", true) ? "#C4B5FD" : "rgba(255,255,255,0.30)",
+                      filter: isActive("/ogrenci", true) ? "drop-shadow(0 0 7px rgba(167,139,250,0.85))" : "none",
+                      transition: "all 0.2s ease",
+                    }}
+                  />
+                </div>
+                <span
+                  className="text-[9px] tracking-widest leading-none"
+                  style={{
+                    fontFamily: "var(--font-barlow-condensed)",
+                    color: isActive("/ogrenci", true) ? "#C4B5FD" : "rgba(255,255,255,0.26)",
+                    transition: "color 0.2s ease",
+                  }}
+                >
+                  Ana Sayfa
+                </span>
+                {isActive("/ogrenci", true) && (
+                  <span
+                    className="absolute bottom-1.5 left-1/2 -translate-x-1/2 rounded-full"
+                    style={{ width: 18, height: 2, background: "linear-gradient(90deg,transparent,#A78BFA,transparent)" }}
+                  />
+                )}
+              </Link>
+
+              {/* Randevu */}
+              <Link
+                href="/ogrenci/randevu"
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 h-full relative transition-all duration-200 active:scale-90"
+              >
+                <div className="relative">
+                  <Calendar
+                    size={22}
+                    style={{
+                      color: isActive("/ogrenci/randevu") ? "#C4B5FD" : "rgba(255,255,255,0.30)",
+                      filter: isActive("/ogrenci/randevu") ? "drop-shadow(0 0 7px rgba(167,139,250,0.85))" : "none",
+                      transition: "all 0.2s ease",
+                    }}
+                  />
+                </div>
+                <span
+                  className="text-[9px] tracking-widest leading-none"
+                  style={{
+                    fontFamily: "var(--font-barlow-condensed)",
+                    color: isActive("/ogrenci/randevu") ? "#C4B5FD" : "rgba(255,255,255,0.26)",
+                    transition: "color 0.2s ease",
+                  }}
+                >
+                  Randevu
+                </span>
+                {isActive("/ogrenci/randevu") && (
+                  <span
+                    className="absolute bottom-1.5 left-1/2 -translate-x-1/2 rounded-full"
+                    style={{ width: 18, height: 2, background: "linear-gradient(90deg,transparent,#A78BFA,transparent)" }}
+                  />
+                )}
+              </Link>
+
+              {/* CENTER: Kedi AI — elevated, %20 bigger, neon ring */}
+              <div className="flex-1 flex justify-center items-center">
+                <button
+                  onClick={() => window.dispatchEvent(new Event("kedi-open"))}
+                  aria-label="Kedi AI"
+                  className="relative flex items-center justify-center transition-all duration-200 active:scale-90"
+                  style={{
+                    width: 62,
+                    height: 62,
+                    borderRadius: "50%",
+                    background: "linear-gradient(145deg, #5B21B6 0%, #7C3AED 50%, #9333EA 100%)",
+                    boxShadow:
+                      "0 0 0 2.5px rgba(139,92,246,0.55), 0 0 0 7px rgba(139,92,246,0.10), 0 0 30px rgba(139,92,246,0.65), 0 6px 24px rgba(0,0,0,0.55)",
+                    transform: "translateY(-22px)",
+                  }}
+                >
+                  <Sparkles size={27} style={{ color: "#fff", filter: "drop-shadow(0 0 5px rgba(255,255,255,0.55))" }} />
+                  {/* Pulsing neon ring */}
+                  <span
+                    className="absolute inset-0 rounded-full animate-ping"
+                    style={{ background: "rgba(139,92,246,0.22)", animationDuration: "2.8s" }}
+                  />
+                </button>
+              </div>
+
+              {/* Seviye */}
+              <Link
+                href="/ogrenci/seviye"
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 h-full relative transition-all duration-200 active:scale-90"
+              >
+                <div className="relative">
+                  <Zap
+                    size={22}
+                    style={{
+                      color: isActive("/ogrenci/seviye") ? "#C4B5FD" : "rgba(255,255,255,0.30)",
+                      filter: isActive("/ogrenci/seviye") ? "drop-shadow(0 0 7px rgba(167,139,250,0.85))" : "none",
+                      transition: "all 0.2s ease",
+                    }}
+                  />
+                </div>
+                <span
+                  className="text-[9px] tracking-widest leading-none"
+                  style={{
+                    fontFamily: "var(--font-barlow-condensed)",
+                    color: isActive("/ogrenci/seviye") ? "#C4B5FD" : "rgba(255,255,255,0.26)",
+                    transition: "color 0.2s ease",
+                  }}
+                >
+                  Seviye
+                </span>
+                {isActive("/ogrenci/seviye") && (
+                  <span
+                    className="absolute bottom-1.5 left-1/2 -translate-x-1/2 rounded-full"
+                    style={{ width: 18, height: 2, background: "linear-gradient(90deg,transparent,#A78BFA,transparent)" }}
+                  />
+                )}
+              </Link>
+
+              {/* Profil */}
+              <Link
+                href="/ogrenci/profil"
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 h-full relative transition-all duration-200 active:scale-90"
+              >
+                <div className="relative">
+                  <User
+                    size={22}
+                    style={{
+                      color: isActive("/ogrenci/profil") ? "#C4B5FD" : "rgba(255,255,255,0.30)",
+                      filter: isActive("/ogrenci/profil") ? "drop-shadow(0 0 7px rgba(167,139,250,0.85))" : "none",
+                      transition: "all 0.2s ease",
+                    }}
+                  />
+                </div>
+                <span
+                  className="text-[9px] tracking-widest leading-none"
+                  style={{
+                    fontFamily: "var(--font-barlow-condensed)",
+                    color: isActive("/ogrenci/profil") ? "#C4B5FD" : "rgba(255,255,255,0.26)",
+                    transition: "color 0.2s ease",
+                  }}
+                >
+                  Profil
+                </span>
+                {isActive("/ogrenci/profil") && (
+                  <span
+                    className="absolute bottom-1.5 left-1/2 -translate-x-1/2 rounded-full"
+                    style={{ width: 18, height: 2, background: "linear-gradient(90deg,transparent,#A78BFA,transparent)" }}
+                  />
+                )}
+              </Link>
+
+            </div>
+          </div>
+        </motion.div>
+      </div>
     </>
   );
 }

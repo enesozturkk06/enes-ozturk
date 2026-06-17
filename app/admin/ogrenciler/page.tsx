@@ -753,8 +753,116 @@ export default function OgrencilerPage() {
         </div>
       )}
 
-      {/* Tablo */}
-      <div className="bg-carbon border border-white/6 overflow-hidden">
+      {/* ── Kart görünümü — mobil (sm altı) ───────────────────────── */}
+      <div className="block sm:hidden space-y-3">
+        {loading ? (
+          <div className="text-center py-12 text-white/30 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yükleniyor...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12">
+            <User size={28} className="text-white/10 mx-auto mb-2" />
+            <p className="text-white/20 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Öğrenci bulunamadı</p>
+          </div>
+        ) : (
+          <AnimatePresence>
+            {filtered.map((s, i) => {
+              const days = getDaysRemaining(s.packageEndDate);
+              const u = days !== null ? getPackageUrgency(days) : null;
+              return (
+                <motion.div key={s.id}
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  transition={{ delay: i * 0.02 }}
+                  className="bg-carbon border border-white/8 p-4 space-y-3">
+
+                  {/* Üst: Ad, Kod, Ödeme durumu */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 bg-crimson/10 border border-crimson/20 flex items-center justify-center text-xs text-crimson flex-shrink-0"
+                        style={{ fontFamily: "var(--font-bebas)" }}>
+                        {s.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm text-white font-semibold truncate" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.fullName}</div>
+                        <div className="text-xs text-gold font-mono tracking-wider">{s.code}</div>
+                      </div>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 border flex-shrink-0 ${s.paymentStatus === "odendi" ? "border-green-500/20 bg-green-500/8 text-green-400" : s.paymentStatus === "kismi" ? "border-gold/20 bg-gold/8 text-gold" : "border-crimson/20 bg-crimson/8 text-crimson"}`}
+                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      {PAYMENT_LABELS[s.paymentStatus]}
+                    </span>
+                  </div>
+
+                  {/* İstatistik satırı */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-steel/20 p-2">
+                      <div className="text-[10px] text-white/30 mb-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Ders</div>
+                      <div className={`text-lg leading-none ${s.remainingLessons <= 2 ? "text-crimson" : "text-white"}`}
+                        style={{ fontFamily: "var(--font-bebas)" }}>
+                        {s.remainingLessons}<span className="text-xs text-white/25">/{s.totalLessons}</span>
+                      </div>
+                    </div>
+                    <div className="bg-steel/20 p-2">
+                      <div className="text-[10px] text-white/30 mb-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödenen</div>
+                      <div className="text-sm text-green-400 font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        {s.amountPaid > 0 ? `₺${s.amountPaid.toLocaleString("tr-TR")}` : "—"}
+                      </div>
+                    </div>
+                    <div className="bg-steel/20 p-2">
+                      <div className="text-[10px] text-white/30 mb-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Borç</div>
+                      <div className={`text-sm font-semibold ${s.amountDue > 0 ? "text-crimson" : "text-white/25"}`}
+                        style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        {s.amountDue > 0 ? `₺${s.amountDue.toLocaleString("tr-TR")}` : "✓"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Paket süresi */}
+                  {u && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Paket Süresi:</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${u.color}`}
+                        style={{ background: u.bg, border: `1px solid ${u.border}`, fontFamily: "var(--font-barlow-condensed)" }}>
+                        {days! < 0 ? "Süresi Doldu" : `${days} gün`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Aksiyon butonları */}
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
+                    <button onClick={() => openRenewModal(s)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
+                      style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22c55e", fontFamily: "var(--font-barlow-condensed)" }}>
+                      <RotateCcw size={12} />Yenile
+                    </button>
+                    <button onClick={() => openEdit(s)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
+                      style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
+                      <Edit size={12} />Düzenle
+                    </button>
+                    <button onClick={() => openPartnerModal(s)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
+                      style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)", color: "#A855F7", fontFamily: "var(--font-barlow-condensed)" }}>
+                      <Users size={12} />Düet
+                    </button>
+                    <button onClick={() => setQrSt(s)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
+                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                      <QrCode size={12} />QR
+                    </button>
+                    <button onClick={() => setDelSt(s)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
+                      style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", color: "#F87171", fontFamily: "var(--font-barlow-condensed)" }}>
+                      <Trash2 size={12} />Sil
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        )}
+      </div>
+
+      {/* ── Tablo — masaüstü (sm ve üzeri) ─────────────────────── */}
+      <div className="hidden sm:block bg-carbon border border-white/6 overflow-hidden">
         <div className="overflow-x-auto overscroll-x-contain" style={{ WebkitOverflowScrolling: "touch" }}>
           <table className="w-full" style={{ minWidth: 640 }}>
             <thead>

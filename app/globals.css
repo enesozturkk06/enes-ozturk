@@ -34,7 +34,7 @@
 
 /* ── KARA AI Panel — responsive konumlama ──────────────────── */
 .kara-panel {
-  bottom:       calc(env(safe-area-inset-bottom, 0px) + 8px);
+  bottom:       calc(env(safe-area-inset-bottom, 0px) + 82px);
   right:        8px;
   left:         8px;
   height:       70dvh;      /* flex-1 için kesin yükseklik gerekli */

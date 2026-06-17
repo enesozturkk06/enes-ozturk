@@ -61,7 +61,7 @@ export default function WhatsAppButton({ message, fixed = true, label = "WhatsAp
         aria-label="WhatsApp ile iletişime geç"
         style={{
           position:     "fixed",
-          bottom:       "calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          bottom:       "calc(env(safe-area-inset-bottom, 0px) + 80px)",
           right:        20,
           zIndex:       45,
           width:        52,
