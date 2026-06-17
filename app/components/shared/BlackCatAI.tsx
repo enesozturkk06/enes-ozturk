@@ -23,9 +23,9 @@ import {
   getLevelForXP, sumManualXP, type XPResult, type SeasonXPSummary,
 } from "@/lib/xp";
 import { computeBadges, type Badge } from "@/lib/badges";
-import { isPackageExpired } from "@/lib/packageDuration";
+import { isPackageExpired, getDaysRemaining } from "@/lib/packageDuration";
 import { PACKAGE_EXPIRED_AI_TEXT } from "@/lib/constants";
-import { X, Send, ChevronDown, Mic, MicOff } from "lucide-react";
+import { X, Send, ChevronDown, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -101,7 +101,9 @@ interface StudentContext {
   waterGlasses:     number;
   waterTarget:      number;
   subscriptionType?: string;
+  packageStartDate?: string;
   packageEndDate?: string;
+  packageDaysRemaining: number | null;
   /* Sağlık profili */
   weight?:          number;
   age?:             number;
@@ -140,6 +142,32 @@ function pick<T>(arr: T[]): T {
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+/** AI cevabını sesli oku (Web Speech Synthesis API) */
+function speakText(text: string) {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  const clean = text.replace(/\*\*/g, "").replace(/[#_~`]/g, "").replace(/\n+/g, ". ");
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang = "tr-TR";
+    u.rate = 1.02;
+    window.speechSynthesis.speak(u);
+  } catch { /* sessizce geç */ }
+}
+
+/** Sesli komuttaki "Kedi," çağrı sözcüğünü temizle */
+function stripWakeWord(text: string): string {
+  return text.replace(/^\s*kedi[\s,]+/i, "").trim();
+}
+
+/** Seviye id'sine göre koçluk tonu — her öğrenciye aynı tonda konuşulmaz */
+type CoachTier = "amator" | "gelisen" | "elit";
+function coachTier(levelId: string): CoachTier {
+  if (levelId === "starter") return "amator";
+  if (levelId === "bronze" || levelId === "silver") return "gelisen";
+  return "elit"; // gold, diamond, legend
 }
 
 /** En yakın kilidi açılacak rozeti bul (ilerleme oranına göre) */
@@ -191,7 +219,7 @@ type Intent =
 function detectIntent(msg: string): Intent {
   if (/antrenman yap|bugün ne|program|egzersiz|hazırla|çalışma|ısın|kondisyon plan|idman/.test(msg)) return "training";
   if (/teknik|yumruk|tekme|savunma|gard|kombinasyon|spar|punch|kick/.test(msg))                       return "technical";
-  if (/paket|ders hakkı|kalan ders|yenile|satın|ders bit|paket bit|kaç dersim/.test(msg))             return "lesson";
+  if (/paket|ders hakkı|kalan ders|yenile|satın|ders bit|paket bit|kaç dersim|ne zaman bit|kaç gün kaldı|pakete kalan/.test(msg)) return "lesson";
   if (/randevu|ne zaman geli|randevum|booking|takvim/.test(msg))                                       return "appointment";
   if (/ilerleme|gelişim|skor|puan|performans|nasıl gidiy|grafik|trend|istatistik/.test(msg))           return "progress";
   if (/motivasyon|vazgeç|bırak|yorgun|zor|üzgün|kötü|sinir|pes|olmaz|duy|hisse/.test(msg))            return "motivation";
@@ -221,6 +249,9 @@ const ACTION_LINKS: Record<string, ActionLink> = {
   shop:          { label: "Mağaza",           href: "/magaza" },
   lessons:       { label: "Kalan Derslerim",  href: "/ogrenci" },
   missions:      { label: "Görevlerimi Gör",  href: "/ogrenci/seviye" },
+  fightcard:     { label: "Fight Card",       href: "/ogrenci/fight-card" },
+  profile:       { label: "Profilim",         href: "/ogrenci/profil" },
+  renewal:       { label: "Paket Yenile",     href: "/magaza" },
 };
 
 /** İlgili yönlendirme butonlarını intent + mesaj içeriğine göre seç (tekrarsız) */
@@ -244,6 +275,9 @@ function getActionLinks(intent: Intent, msg: string): ActionLink[] {
   if (/bildirim|duyuru/.test(msg)) links.push(ACTION_LINKS.notifications);
   if (/seviye|level/.test(msg)) links.push(ACTION_LINKS.level);
   if (/rozet|ödül/.test(msg)) links.push(ACTION_LINKS.badges);
+  if (/fight card|dövüşçü kart|kartım/.test(msg)) links.push(ACTION_LINKS.fightcard);
+  if (/profil/.test(msg)) links.push(ACTION_LINKS.profile);
+  if (/paket yenile|yeni paket|paket al/.test(msg)) links.push(ACTION_LINKS.renewal);
 
   // tekrarsız hale getir (href bazlı)
   const seen = new Set<string>();
@@ -328,27 +362,36 @@ function handleTechnical(name: string, ctx: StudentContext): string {
 
 function handleLesson(name: string, ctx: StudentContext): string {
   const lowL = ctx.subscriptionType !== "monthly" && ctx.remainingLessons <= 4;
+  const days = ctx.packageDaysRemaining;
+  const packLine = days !== null
+    ? (days < 0
+        ? `\n\n⚠️ Paketinin süresi **${Math.abs(days)} gün önce** doldu.`
+        : days === 0
+        ? `\n\n⏰ Paketin **bugün** sona eriyor!`
+        : `\n\n📅 Paketinin bitmesine **${days} gün** kaldı.`)
+    : "";
+
   if (ctx.subscriptionType === "monthly") {
     return pick([
-      `${name}, aylık üyeliğin aktif! 🎉 Sınırsız ders — sadece randevu oluşturman yeterli. Bu ay ne kadar ders aldığını görmek ister misin?`,
-      `Aylık paketle ${name}, her hafta istediğin kadar antrenman yapabilirsin. Randevu sayfasından uygun slotu seç, başka bir şey gerekmez!`,
+      `${name}, aylık üyeliğin aktif! 🎉 Sınırsız ders — sadece randevu oluşturman yeterli. Bu ay ne kadar ders aldığını görmek ister misin?${packLine}`,
+      `Aylık paketle ${name}, her hafta istediğin kadar antrenman yapabilirsin. Randevu sayfasından uygun slotu seç, başka bir şey gerekmez!${packLine}`,
     ]);
   }
   if (ctx.remainingLessons === 0) {
     return pick([
-      `${name}, ders hakkın tükendi 😿 Antrenör Enes'e WhatsApp'tan ulaşarak yeni paket alabilirsin. ${ctx.completedLessons} ders tamamladın — harika bir çalışmaydı!`,
-      `Ders hakkın bitti ${name}. Devam etmek için yeni paket al — WhatsApp butonuna bas, Enes sana en uygun paketi önerir. Momentumu kaybetme!`,
+      `${name}, ders hakkın tükendi 😿 Antrenör Enes'e WhatsApp'tan ulaşarak yeni paket alabilirsin. ${ctx.completedLessons} ders tamamladın — harika bir çalışmaydı!${packLine}`,
+      `Ders hakkın bitti ${name}. Devam etmek için yeni paket al — WhatsApp butonuna bas, Enes sana en uygun paketi önerir. Momentumu kaybetme!${packLine}`,
     ]);
   }
   if (lowL) {
     return pick([
-      `${name}, dikkat! Sadece **${ctx.remainingLessons}** ders hakkın kaldı. Bu hafta içinde yeni paket almayı planla. Toplam **${ctx.completedLessons}** ders bitti — momentumu koruyalım!`,
-      `**${ctx.remainingLessons}** ders kaldı ${name} — yakında bitiyor. WhatsApp'tan Enes'e yaz, kesintisiz devam et. Şu ana kadar ${ctx.completedLessons} ders tamamladın!`,
+      `${name}, dikkat! Sadece **${ctx.remainingLessons}** ders hakkın kaldı. Bu hafta içinde yeni paket almayı planla. Toplam **${ctx.completedLessons}** ders bitti — momentumu koruyalım!${packLine}`,
+      `**${ctx.remainingLessons}** ders kaldı ${name} — yakında bitiyor. WhatsApp'tan Enes'e yaz, kesintisiz devam et. Şu ana kadar ${ctx.completedLessons} ders tamamladın!${packLine}`,
     ]);
   }
   return pick([
-    `${name}, ders durumun:\n\n✅ **Kalan**: ${ctx.remainingLessons} ders\n📚 **Tamamlanan**: ${ctx.completedLessons} ders\n\nSürdür, harika gidiyorsun! 🥊`,
-    `Paket özeti ${name}: **${ctx.remainingLessons}** ders hakkın var, arkanda **${ctx.completedLessons}** ders var. Her ders seni biraz daha güçlendirdi!`,
+    `${name}, ders durumun:\n\n✅ **Kalan**: ${ctx.remainingLessons} ders\n📚 **Tamamlanan**: ${ctx.completedLessons} ders${packLine}\n\nSürdür, harika gidiyorsun! 🥊`,
+    `Paket özeti ${name}: **${ctx.remainingLessons}** ders hakkın var, arkanda **${ctx.completedLessons}** ders var. Her ders seni biraz daha güçlendirdi!${packLine}`,
   ]);
 }
 
@@ -599,14 +642,27 @@ function handleGreeting(name: string, ctx: StudentContext): string {
   const greet = hour < 6 ? "Gece geç saatte çalışıyorsun" : hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : hour < 22 ? "İyi akşamlar" : "Gece geç saatte";
   const hasToday = ctx.appointments.some(a => a.date === todayStr() && isUpcomingApt(a));
   const lowL = ctx.subscriptionType !== "monthly" && ctx.remainingLessons <= 2;
+  const tier = coachTier(ctx.xp.level.current.id);
 
   let extra = "";
   if (hasToday) extra = " Bugün dersin var — hazır ol!";
   else if (lowL) extra = ` ⚠️ Sadece **${ctx.remainingLessons}** ders hakkın kaldı, dikkat!`;
 
+  if (tier === "amator") {
+    return pick([
+      `${greet} ${name}! 🐾${extra} Düzenli gelmek en önemli şey — randevunu kontrol edelim mi?`,
+      `${greet} ${name}! İlk hedefin: disiplinli gelmek. ${extra} Yardım için her şeyi sorabilirsin.`,
+    ]);
+  }
+  if (tier === "gelisen") {
+    return pick([
+      `${greet} ${name}! 🐾${extra} **${ctx.xp.breakdown.total.toLocaleString()} XP**'desin — bugün teknik gelişim veya görevlere bakalım mı?`,
+      `${greet} ${name}! Seninle çalışmaya her zaman hazırım.${extra} Antrenman mı, teknik mi, görev mi? 🥊`,
+    ]);
+  }
   return pick([
-    `${greet} ${name}! 🐾${extra} Antrenman programı, teknik analiz, beslenme veya randevu hakkında konuşabiliriz.`,
-    `${greet} ${name}! Seninle çalışmaya her zaman hazırım.${extra} Antrenman mı, teknik mi, beslenme mi? 🥊`,
+    `${greet} ${name}! 🐾${extra} **${ctx.xp.level.current.name}** seviyesindesin — bugün performans analizi mi, hedef belirleme mi konuşalım?`,
+    `${greet} ${name}! Üst düzey bir sporcusun.${extra} Detaylı teknik analiz veya sezon hedefin hakkında konuşabiliriz.`,
   ]);
 }
 
@@ -615,8 +671,9 @@ function handleGreeting(name: string, ctx: StudentContext): string {
 function handleBadge(name: string, ctx: StudentContext): string {
   const earned = ctx.earnedBadges;
   const next   = ctx.nextBadge;
+  const tierName = ctx.xp.level.current.name;
 
-  let msg = `${name}, rozet koleksiyonun:\n\n🏅 **${earned.length}/${ctx.badges.length}** rozet kazandın`;
+  let msg = `${name}, şu an **${tierName}** seviyesindesin. Rozet koleksiyonun:\n\n🏅 **${earned.length}/${ctx.badges.length}** rozet kazandın`;
   if (earned.length > 0) {
     const recent = [...earned].sort((a, b) => (b.earnedAt ?? "").localeCompare(a.earnedAt ?? "")).slice(0, 3);
     msg += `\n\n✅ Son kazandıkların: ${recent.map(b => `${b.icon} ${b.name}`).join(", ")}`;
@@ -867,6 +924,19 @@ function buildContext(ctx: StudentContext): string {
 
   const lines: string[] = [`Merhaba **${firstName}**! 🐾 Ben **KEDİ AI**, senin kişisel AI antrenör koçunum.`];
 
+  // Kısa günlük özet — tek cümlelik, örnek: "Adar, 7 dersin kaldı. Paketinin bitmesine 41 gün var..."
+  const digestParts: string[] = [];
+  if (ctx.subscriptionType !== "monthly") digestParts.push(`**${ctx.remainingLessons}** dersin kaldı`);
+  if (ctx.packageDaysRemaining !== null && ctx.packageDaysRemaining >= 0)
+    digestParts.push(`paketinin bitmesine **${ctx.packageDaysRemaining} gün** var`);
+  const nearestM = nearestMission(ctx.missions);
+  if (nearestM) {
+    const remain = Math.max(0, nearestM.target - nearestM.progress);
+    if (remain > 0) digestParts.push(`**${nearestM.title}** görevine **${remain}** adım kaldı`);
+  }
+  if (ctx.xp.level.next) digestParts.push(`sıradaki hedefin **${ctx.xp.level.next.name}**`);
+  if (digestParts.length > 0) lines.push(digestParts.join(", ") + ".");
+
   // Paket durumu
   if (ctx.subscriptionType === "monthly") {
     lines.push(`Aylık üyeliğinle sınırsız ders alabilirsin. Randevu almanı öneriyorum!`);
@@ -951,6 +1021,13 @@ function aiRespond(
 
   const intent = detectIntent(msg);
   const links  = getActionLinks(intent, msg);
+
+  // Ders hakkı bittiyse veya paket süresi dolduysa "Paket Yenile" butonunu otomatik ekle
+  if (intent === "lesson" && ctx.subscriptionType !== "monthly" &&
+      (ctx.remainingLessons === 0 || isPackageExpired(ctx.packageEndDate)) &&
+      !links.some(l => l.href === ACTION_LINKS.renewal.href)) {
+    links.push(ACTION_LINKS.renewal);
+  }
 
   if (intent === "missions") {
     const r = handleMissions(name, ctx);
@@ -1155,6 +1232,11 @@ export default function BlackCatAI() {
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  /* Sesli cevap (Text-to-Speech) — tercih localStorage'da saklanır */
+  const [voiceOut, setVoiceOut] = useState(false);
+  /* sendMessage henüz tanımlanmadan toggleVoice'tan çağırabilmek için ref */
+  const sendMessageRef = useRef<(text?: string) => void>(() => {});
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1162,6 +1244,7 @@ export default function BlackCatAI() {
         (window as unknown as Record<string, unknown>).SpeechRecognition ||
         (window as unknown as Record<string, unknown>).webkitSpeechRecognition
       ));
+      setVoiceOut(localStorage.getItem("kedi_ai_voice_out") === "1");
     }
   }, []);
 
@@ -1190,8 +1273,18 @@ export default function BlackCatAI() {
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
 
-    recognition.onstart  = () => setListening(true);
-    recognition.onerror  = () => setListening(false);
+    recognition.onstart  = () => { setListening(true); setVoiceError(null); };
+    recognition.onerror  = (e: any) => {
+      setListening(false);
+      const map: Record<string, string> = {
+        "not-allowed":   "Mikrofon izni reddedildi. Tarayıcı ayarlarından izin vermen gerekiyor.",
+        "no-speech":     "Ses algılanamadı, tekrar dener misin?",
+        "audio-capture": "Mikrofon bulunamadı.",
+        "network":       "Ses tanıma için internet bağlantısı gerekiyor.",
+      };
+      setVoiceError(map[e?.error] ?? "Ses tanıma başarısız oldu, yazarak devam edebilirsin.");
+      setTimeout(() => setVoiceError(null), 4500);
+    };
     recognition.onend    = () => setListening(false);
 
     recognition.onresult = (event: any) => {
@@ -1201,11 +1294,17 @@ export default function BlackCatAI() {
       setInput(transcript);
       if (event.results[event.results.length - 1].isFinal) {
         setListening(false);
+        const cleaned = stripWakeWord(transcript);
+        if (cleaned) sendMessageRef.current?.(cleaned);
       }
     };
 
     recognitionRef.current = recognition;
-    try { recognition.start(); } catch { setListening(false); }
+    try { recognition.start(); } catch {
+      setListening(false);
+      setVoiceError("Mikrofon başlatılamadı, yazarak devam edebilirsin.");
+      setTimeout(() => setVoiceError(null), 4500);
+    }
   }, [listening]);
 
   /* Sürükleme */
@@ -1328,7 +1427,9 @@ export default function BlackCatAI() {
         waterGlasses:     water?.glasses ?? 0,
         waterTarget:      8,
         subscriptionType: student.subscriptionType,
+        packageStartDate: student.packageStartDate,
         packageEndDate:   student.packageEndDate,
+        packageDaysRemaining: getDaysRemaining(student.packageEndDate),
         weight:           health?.weight ?? student.weight,
         age:              health?.age    ?? student.age,
         height:           health?.height,
@@ -1373,12 +1474,14 @@ export default function BlackCatAI() {
     if (!open || !ctx || msgs.length > 0) return;
     setTyping(true);
     const timer = setTimeout(() => {
-      setMsgs([{ id:"init", role:"ai", text: buildContext(ctx), ts: Date.now() }]);
+      const greeting = buildContext(ctx);
+      setMsgs([{ id:"init", role:"ai", text: greeting, ts: Date.now() }]);
       setTyping(false);
       if (typeof window !== "undefined") localStorage.setItem("kedi_ai_used", "1");
+      if (voiceOut) speakText(greeting);
     }, 900);
     return () => clearTimeout(timer);
-  }, [open, ctx, msgs.length]);
+  }, [open, ctx, msgs.length, voiceOut]);
 
   /* Scroll */
   useEffect(() => {
@@ -1390,9 +1493,10 @@ export default function BlackCatAI() {
     if (open && !minimized) setTimeout(() => inputRef.current?.focus(), 200);
   }, [open, minimized]);
 
-  const sendMessage = useCallback(() => {
-    if (!input.trim() || !ctx) return;
-    const userMsg: Msg = { id: Date.now().toString(), role:"user", text: input.trim(), ts: Date.now() };
+  const sendMessage = useCallback((overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
+    if (!text || !ctx) return;
+    const userMsg: Msg = { id: Date.now().toString(), role:"user", text, ts: Date.now() };
     setMsgs(prev => [...prev, userMsg]);
     setInput("");
     setTyping(true);
@@ -1401,8 +1505,21 @@ export default function BlackCatAI() {
       setPendingIntent(nextPending ?? null);
       setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links, kind, missions: ms }]);
       setTyping(false);
+      if (voiceOut) speakText(reply);
     }, 600 + Math.random() * 800);
-  }, [input, ctx, msgs, pendingIntent]);
+  }, [input, ctx, msgs, pendingIntent, voiceOut]);
+
+  /* toggleVoice — daha önce tanımlandığı için sendMessage'a ref üzerinden ulaşır */
+  useEffect(() => { sendMessageRef.current = sendMessage; }, [sendMessage]);
+
+  const toggleVoiceOut = useCallback(() => {
+    setVoiceOut(v => {
+      const next = !v;
+      if (typeof window !== "undefined") localStorage.setItem("kedi_ai_voice_out", next ? "1" : "0");
+      if (!next && typeof window !== "undefined") window.speechSynthesis?.cancel();
+      return next;
+    });
+  }, []);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -1540,6 +1657,15 @@ export default function BlackCatAI() {
 
                 <div className="flex items-center gap-1">
                   <button
+                    onClick={toggleVoiceOut}
+                    className="w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                    style={{ color: voiceOut ? "#A78BFA" : "rgba(255,255,255,0.3)" }}
+                    title={voiceOut ? "Sesli oku: Açık" : "Sesli oku: Kapalı"}
+                    aria-label="Sesli oku aç/kapat"
+                  >
+                    {voiceOut ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                  </button>
+                  <button
                     onClick={() => setMin(m => !m)}
                     className="w-7 h-7 flex items-center justify-center rounded-full transition-colors"
                     style={{ color:"rgba(255,255,255,0.3)" }}
@@ -1588,6 +1714,7 @@ export default function BlackCatAI() {
                               setPendingIntent(np ?? null);
                               setMsgs(prev => [...prev, { id:(Date.now()+1).toString(), role:"ai", text:reply, ts:Date.now(), links, kind, missions: ms }]);
                               setTyping(false);
+                              if (voiceOut) speakText(reply);
                             }, 700 + Math.random() * 600);
                           }}
                           className="text-[10px] px-2.5 py-1 transition-all duration-200"
@@ -1602,6 +1729,13 @@ export default function BlackCatAI() {
                           {q}
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Sesli komut hata mesajı */}
+                  {voiceError && (
+                    <div className="flex-shrink-0 px-4 pb-1.5 text-[11px]" style={{ color:"#FCA5A5", fontFamily:"var(--font-barlow-condensed)" }}>
+                      ⚠️ {voiceError}
                     </div>
                   )}
 
@@ -1637,7 +1771,7 @@ export default function BlackCatAI() {
                       style={{ fontFamily:"var(--font-inter)" }}
                     />
                     <button
-                      onClick={sendMessage}
+                      onClick={() => sendMessage()}
                       disabled={!input.trim() || typing}
                       className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 flex-shrink-0"
                       style={{
