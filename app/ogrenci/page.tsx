@@ -5,7 +5,7 @@ import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudentNotifications,
   getPendingInvites, respondToInvite, cancelAppointment, createAdminNotification,
-  checkPackageExpiryNotification,
+  checkPackageExpiryNotification, checkPackageWarningNotification,
 } from "@/lib/db";
 import type { Appointment, LessonRecord, Notification, PendingInvite } from "@/lib/types";
 import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components/ui";
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import ActivityFeed from "@/app/components/shared/ActivityFeed";
+import PushNotificationButton from "@/app/components/shared/PushNotificationButton";
 import { format, parseISO, isFuture, differenceInHours } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -42,6 +43,7 @@ export default function OgrenciDashboard() {
   const reload = async () => {
     if (!student) return;
     await checkPackageExpiryNotification(student).catch(() => {});
+    await checkPackageWarningNotification(student).catch(() => {});
     const [apts, recs, notifs, invites] = await Promise.all([
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
@@ -123,6 +125,11 @@ export default function OgrenciDashboard() {
           subtitle={`${student.code} · ${pkg?.name ?? ""} Paketi`}
           accent="Öğrenci Paneli"
         />
+      </motion.div>
+
+      {/* Push bildirim izni */}
+      <motion.div variants={fadeUp}>
+        <PushNotificationButton role="student" studentId={student.id} />
       </motion.div>
 
       {/* Canlı aktivite akışı */}

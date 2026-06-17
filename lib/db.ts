@@ -9,8 +9,8 @@ import type {
   PackagePurchase, PackageType, PaymentStatus, ArenaDuel,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
-import { isPackageExpired } from "./packageDuration";
-import { PACKAGE_EXPIRED_NOTIFICATION_TEXT } from "./constants";
+import { isPackageExpired, getDaysRemaining } from "./packageDuration";
+import { PACKAGE_EXPIRED_NOTIFICATION_TEXT, PACKAGE_URGENT_DAYS } from "./constants";
 
 /* ── Hata yönetimi ─────────────────────────────────────────── */
 function isSchemaError(e: { message?: string; code?: string }): boolean {
@@ -1202,6 +1202,37 @@ export async function checkPackageExpiryNotification(student: Student): Promise<
     student_id: student.id,
     title:      PACKAGE_EXPIRED_NOTIF_TITLE,
     message:    PACKAGE_EXPIRED_NOTIFICATION_TEXT,
+    type:       "warning" as NotifType,
+    is_read:    false,
+  });
+}
+
+const PACKAGE_WARNING_NOTIF_TITLE = "Paketin Bitmesine Az Kaldı";
+
+/**
+ * Paket süresi yaklaşıyorsa (≤ PACKAGE_URGENT_DAYS gün, henüz dolmamış) uyarı bildirimi gönderir.
+ * Aynı paket dönemi için tekrar göndermez (packageStartDate sonrası kontrolü).
+ */
+export async function checkPackageWarningNotification(student: Student): Promise<void> {
+  if (student.subscriptionType === "monthly") return;
+  const days = getDaysRemaining(student.packageEndDate);
+  if (days === null || days < 0 || days > PACKAGE_URGENT_DAYS) return;
+
+  const { data, error } = await db()
+    .from("notifications").select("id")
+    .eq("student_id", student.id)
+    .eq("title", PACKAGE_WARNING_NOTIF_TITLE)
+    .gte("created_at", student.packageStartDate)
+    .limit(1);
+  if (error) { console.warn("[checkPackageWarningNotification] kontrol hatası:", error.message); return; }
+  if (data && data.length > 0) return; // bu dönem için zaten gönderildi
+
+  await db().from("notifications").insert({
+    student_id: student.id,
+    title:      PACKAGE_WARNING_NOTIF_TITLE,
+    message:    days === 0
+      ? "Paketin bugün sona eriyor! Devam etmek için yeni paket almayı unutma."
+      : `Paketinin bitmesine ${days} gün kaldı. Devam etmek için yeni paket almayı planla.`,
     type:       "warning" as NotifType,
     is_read:    false,
   });

@@ -21,6 +21,7 @@ import {
   type HallEntry,
 } from "@/lib/hallOfFame";
 import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
+import PushNotificationButton from "@/app/components/shared/PushNotificationButton";
 import type { Appointment, Student, Notification, AppointmentStudent, GiftLessonRequest, LessonRecord, XPAdjustment, KediMission, ArenaDuel } from "@/lib/types";
 import { StatCard, Card, Badge, Button, PageHeader, Modal, Textarea, Input, Select } from "@/app/components/ui";
 import { STATUS_LABELS, TRAINER_NAME } from "@/lib/constants";
@@ -129,6 +130,35 @@ export default function AdminDashboard() {
   const [missionTarget,setMissionTarget]      = useState("1");
   const [missionStudentId, setMissionStudentId] = useState("all");
   const [missionBusy,  setMissionBusy]        = useState(false);
+
+  /* Push bildirimi — test gönderimi */
+  const [testPushStudentId, setTestPushStudentId] = useState("");
+  const [testPushBusy, setTestPushBusy]            = useState(false);
+  const [testPushResult, setTestPushResult]        = useState<string | null>(null);
+
+  const handleSendTestPush = async () => {
+    if (!testPushStudentId) return;
+    setTestPushBusy(true);
+    setTestPushResult(null);
+    try {
+      const res = await fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: testPushStudentId,
+          title: "Test Bildirimi 🔔",
+          message: "Bu bir test push bildirimidir — Kedi AI sistemleri çalışıyor!",
+          url: "/ogrenci/bildirimler",
+        }),
+      });
+      const data = await res.json();
+      setTestPushResult(res.ok ? `Gönderildi (${data.sent ?? 0} cihaz)` : `Hata: ${data.error ?? "bilinmiyor"}`);
+    } catch (err) {
+      setTestPushResult("Hata: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setTestPushBusy(false);
+    }
+  };
 
   /* ── Yükle ──────────────────────────────────────────────────── */
   const reloadApts = useCallback(async () => {
@@ -718,6 +748,36 @@ export default function AdminDashboard() {
               )}
             </Card>
             </div>
+          </motion.div>
+
+          {/* Push bildirimleri */}
+          <motion.div variants={fadeUp}>
+            <Card className="p-4 space-y-3">
+              <h3 className="text-base font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                Push Bildirimleri
+              </h3>
+              <PushNotificationButton role="admin" />
+
+              <div className="pt-2 border-t border-white/5 space-y-2">
+                <p className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Test bildirimi gönder</p>
+                <Select
+                  value={testPushStudentId}
+                  onChange={setTestPushStudentId}
+                  options={[
+                    { value: "", label: "Öğrenci seç…" },
+                    ...students.map(s => ({ value: s.id, label: `${s.fullName} (${s.code})` })),
+                  ]}
+                />
+                <Button size="sm" onClick={handleSendTestPush} loading={testPushBusy} disabled={!testPushStudentId} className="w-full">
+                  Test Push Gönder
+                </Button>
+                {testPushResult && (
+                  <p className="text-xs text-center" style={{ color: testPushResult.startsWith("Hata") ? "#ef4444" : "#4ADE80", fontFamily:"var(--font-barlow-condensed)" }}>
+                    {testPushResult}
+                  </p>
+                )}
+              </div>
+            </Card>
           </motion.div>
 
           {lowLessons.length > 0 && (
