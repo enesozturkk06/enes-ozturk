@@ -34,7 +34,15 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!isPushSupported()) return null;
   try {
-    return await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    // Android Chrome'da subscribe() çağrısından önce worker'ın "active" olması
+    // beklenmeli — register()'ın resolve olması bunu garanti etmez.
+    // sw.js bozuksa "ready" sonsuza kadar bekleyebilir, bu yüzden timeout koyuyoruz.
+    const ready = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("SW_READY_TIMEOUT")), 8000)),
+    ]);
+    return ready;
   } catch (err) {
     console.error("[push] Service worker kayıt hatası:", err);
     return null;
@@ -71,7 +79,7 @@ export async function subscribeToPush(opts: {
   }
 
   const reg = await registerServiceWorker();
-  if (!reg) return { ok: false, reason: "error", message: "Service worker kaydedilemedi." };
+  if (!reg) return { ok: false, reason: "error", message: "Service worker kaydedilemedi (register/ready başarısız)." };
 
   try {
     let sub = await reg.pushManager.getSubscription();
@@ -94,11 +102,12 @@ export async function subscribeToPush(opts: {
         userAgent: navigator.userAgent,
       }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(`subscribe API ${res.status}: ${await res.text()}`);
     return { ok: true };
   } catch (err) {
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
     console.error("[push] subscribe hatası:", err);
-    return { ok: false, reason: "error", message: "Abonelik kaydedilemedi, tekrar dener misin?" };
+    return { ok: false, reason: "error", message: `Abonelik kaydedilemedi — ${detail}` };
   }
 }
 
