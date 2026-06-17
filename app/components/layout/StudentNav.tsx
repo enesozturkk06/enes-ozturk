@@ -5,10 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import Logo from "@/app/components/shared/Logo";
+import { CatIcon } from "@/app/components/shared/BlackCatAI";
 import {
   LayoutDashboard, Calendar, TrendingUp, Dumbbell,
   Bell, LogOut, Menu, X, ChevronRight, Heart, Award, Zap,
-  FileText, Medal, User, Swords, CreditCard, Sparkles,
+  FileText, Medal, User, Swords, CreditCard,
 } from "lucide-react";
 
 const links = [
@@ -260,7 +261,18 @@ export default function StudentNav() {
                     transform: "translateY(-22px)",
                   }}
                 >
-                  <Sparkles size={27} style={{ color: "#fff", filter: "drop-shadow(0 0 5px rgba(255,255,255,0.55))" }} />
+                  {/* Beyaz daire arka plan — kedi logosu kontrast için */}
+                  <div
+                    className="absolute rounded-full flex items-center justify-center"
+                    style={{
+                      width: 44,
+                      height: 44,
+                      background: "rgba(255,255,255,0.95)",
+                      boxShadow: "inset 0 0 0 1px rgba(139,92,246,0.18)",
+                    }}
+                  >
+                    <CatIcon size={32} />
+                  </div>
                   {/* Pulsing neon ring */}
                   <span
                     className="absolute inset-0 rounded-full animate-ping"

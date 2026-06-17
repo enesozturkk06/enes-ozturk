@@ -48,7 +48,7 @@ interface Msg {
 
 /* ── Kedi SVG ikonu ───────────────────────────────────────────────── */
 
-function CatIcon({ size = 32 }: { size?: number }) {
+export function CatIcon({ size = 32 }: { size?: number }) {
   return (
     <svg
       width={size}
@@ -1436,6 +1436,7 @@ export default function BlackCatAI() {
         whileTap={{ scale: 0.91 }}
         transition={{ type:"spring", stiffness:280, damping:22 }}
         aria-label="KEDİ AI Koç — tıkla veya sürükle"
+        className="hidden lg:flex"
         style={{
           position:     "fixed",
           bottom:       "calc(env(safe-area-inset-bottom, 0px) + 88px)",
@@ -1451,7 +1452,6 @@ export default function BlackCatAI() {
             : "0 0 18px rgba(139,92,246,0.45), 0 4px 14px rgba(0,0,0,0.5)",
           cursor:       "grab",
           touchAction:  "none",
-          display:      "flex",
           alignItems:   "center",
           justifyContent: "center",
         }}
