@@ -59,6 +59,7 @@ export default function WhatsAppButton({ message, fixed = true, label = "WhatsAp
         whileTap={{ opacity: 1, scale: 0.92 }}
         transition={{ type:"spring", stiffness:300, damping:22 }}
         aria-label="WhatsApp ile iletişime geç"
+        className="dbg-floating-ui"
         style={{
           position:     "fixed",
           bottom:       "calc(env(safe-area-inset-bottom, 0px) + 80px)",

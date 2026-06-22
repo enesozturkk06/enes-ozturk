@@ -265,3 +265,54 @@ body::before {
 ::-webkit-scrollbar-track { background: #18181B; }
 ::-webkit-scrollbar-thumb { background: #8B5CF6; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #A855F7; }
+
+/* ══════════════════════════════════════════════════════════════════
+   ANDROID DEBUG MODE — sadece tanı amaçlı, geçici kill-switch'ler.
+   AndroidDebugPanel.tsx tarafından <html> elemanına eklenen class'lara
+   bağlı çalışır. Normal kullanıcıda hiçbir class yok → hiçbir etkisi yok.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* 1) Tüm CSS animation/transition kapalı */
+html.dbg-no-anim *,
+html.dbg-no-anim *::before,
+html.dbg-no-anim *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 2) Tüm blur efektleri kapalı (backdrop-filter + filter:blur) */
+html.dbg-no-blur *,
+html.dbg-no-blur *::before,
+html.dbg-no-blur *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+}
+
+/* 3) Tüm ::before / ::after katmanları kapalı */
+html.dbg-no-pseudo *::before,
+html.dbg-no-pseudo *::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* 4) Framer Motion'ın inline style ile uyguladığı transform/opacity'yi
+   ezmeye çalış (attribute-substring seçici — kesin değil ama tanı için yeterli) */
+html.dbg-no-motion [style*="transform"] {
+  transform: none !important;
+}
+html.dbg-no-motion [style*="opacity"] {
+  opacity: 1 !important;
+}
+
+/* 5) Neon glow efektleri kapalı */
+html.dbg-no-glow * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* 6) Kedi AI + WhatsApp floating butonları kapalı
+   (WhatsAppButton.tsx ve BlackCatAI.tsx'teki .dbg-floating-ui class'ı) */
+html.dbg-no-floating .dbg-floating-ui {
+  display: none !important;
+}
