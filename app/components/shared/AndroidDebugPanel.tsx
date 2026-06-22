@@ -83,8 +83,6 @@ export default function AndroidDebugPanel() {
     setSafeAuto(false);
   };
 
-  if (!visible) return null;
-
   const toggle = (id: ToggleId) => {
     const next = !active[id];
     document.documentElement.classList.toggle(id, next);
@@ -111,73 +109,103 @@ export default function AndroidDebugPanel() {
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: "env(safe-area-inset-top, 0px)",
-        left: 8,
-        zIndex: 999999,
-        width: collapsed ? "auto" : 260,
-        background: "#000",
-        border: "2px solid #0f0",
-        borderRadius: 8,
-        padding: collapsed ? "6px 10px" : "10px",
-        fontFamily: "monospace",
-        fontSize: 11,
-        color: "#0f0",
-        boxShadow: "0 0 0 1px #000",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: collapsed ? 0 : 8 }}>
-        <strong style={{ cursor: "pointer" }} onClick={() => setCollapsed(c => !c)}>
-          🐞 ANDROID DEBUG {collapsed ? "▼" : "▲"}
-        </strong>
-        {!collapsed && (
-          <button onClick={closeDebug} style={{ color: "#f55", background: "none", border: "none", fontSize: 14, cursor: "pointer" }}>
-            ✕
-          </button>
-        )}
-      </div>
-
-      {!collapsed && (
-        <>
-          {/* Safe Mode — ayrı ve baskın anahtar */}
-          <label
-            style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "6px 4px",
-              marginBottom: 6, cursor: "pointer", background: safeMode ? "rgba(0,255,0,0.12)" : "transparent",
-              border: "1px solid #0f0", borderRadius: 4,
-            }}
-          >
-            <input type="checkbox" checked={safeMode} onChange={toggleSafeMode} style={{ width: 14, height: 14, flexShrink: 0 }} />
-            <span style={{ fontWeight: "bold" }}>
-              SAFE MODE {safeAuto ? "(otomatik — Android algılandı)" : safeMode ? "(manuel açık)" : "(manuel kapalı)"}
-            </span>
-          </label>
-
-          {TOGGLES.map(t => (
-            <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={!!active[t.id]}
-                onChange={() => toggle(t.id)}
-                style={{ width: 14, height: 14, flexShrink: 0 }}
-              />
-              <span>{t.label}</span>
-            </label>
-          ))}
-          <button
-            onClick={resetAll}
-            style={{
-              marginTop: 6, width: "100%", padding: "6px 0",
-              background: "#0f0", color: "#000", border: "none",
-              borderRadius: 4, fontWeight: "bold", cursor: "pointer",
-            }}
-          >
-            SIFIRLA
-          </button>
-        </>
+    <>
+      {/* SAFE MODE rozeti — debug paneli kapalı olsa bile (sadece ?safe=1
+          ile açılmış olsa da) her zaman görünür, böylece "siyah ekran mı
+          yoksa gerçekten Safe Mode mu" karışıklığı olmaz. */}
+      {safeMode && (
+        <div
+          style={{
+            position: "fixed",
+            top: "calc(env(safe-area-inset-top, 0px) + 6px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 999998,
+            background: "#0f0",
+            color: "#000",
+            fontFamily: "monospace",
+            fontSize: 11,
+            fontWeight: "bold",
+            padding: "4px 12px",
+            borderRadius: 6,
+            letterSpacing: "0.05em",
+            pointerEvents: "none",
+          }}
+        >
+          🟢 SAFE MODE AKTİF
+        </div>
       )}
-    </div>
+
+      {visible && (
+        <div
+          style={{
+            position: "fixed",
+            top: "env(safe-area-inset-top, 0px)",
+            left: 8,
+            zIndex: 999999,
+            width: collapsed ? "auto" : 260,
+            background: "#000",
+            border: "2px solid #0f0",
+            borderRadius: 8,
+            padding: collapsed ? "6px 10px" : "10px",
+            fontFamily: "monospace",
+            fontSize: 11,
+            color: "#0f0",
+            boxShadow: "0 0 0 1px #000",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: collapsed ? 0 : 8 }}>
+            <strong style={{ cursor: "pointer" }} onClick={() => setCollapsed(c => !c)}>
+              🐞 ANDROID DEBUG {collapsed ? "▼" : "▲"}
+            </strong>
+            {!collapsed && (
+              <button onClick={closeDebug} style={{ color: "#f55", background: "none", border: "none", fontSize: 14, cursor: "pointer" }}>
+                ✕
+              </button>
+            )}
+          </div>
+
+          {!collapsed && (
+            <>
+              {/* Safe Mode — ayrı ve baskın anahtar */}
+              <label
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "6px 4px",
+                  marginBottom: 6, cursor: "pointer", background: safeMode ? "rgba(0,255,0,0.12)" : "transparent",
+                  border: "1px solid #0f0", borderRadius: 4,
+                }}
+              >
+                <input type="checkbox" checked={safeMode} onChange={toggleSafeMode} style={{ width: 14, height: 14, flexShrink: 0 }} />
+                <span style={{ fontWeight: "bold" }}>
+                  SAFE MODE {safeAuto ? "(otomatik — Android algılandı)" : safeMode ? "(manuel açık)" : "(manuel kapalı)"}
+                </span>
+              </label>
+
+              {TOGGLES.map(t => (
+                <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!active[t.id]}
+                    onChange={() => toggle(t.id)}
+                    style={{ width: 14, height: 14, flexShrink: 0 }}
+                  />
+                  <span>{t.label}</span>
+                </label>
+              ))}
+              <button
+                onClick={resetAll}
+                style={{
+                  marginTop: 6, width: "100%", padding: "6px 0",
+                  background: "#0f0", color: "#000", border: "none",
+                  borderRadius: 4, fontWeight: "bold", cursor: "pointer",
+                }}
+              >
+                SIFIRLA
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }

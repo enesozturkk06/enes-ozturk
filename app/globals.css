@@ -323,21 +323,25 @@ html.dbg-no-floating .dbg-floating-ui {
    dışında hiçbir fixed/absolute tam-ekran katman yok. AndroidDebugPanel
    üzerinden ?safe=1 ile (veya debug oturumunda Android algılanınca) açılır.
    ══════════════════════════════════════════════════════════════════ */
-html.dbg-safe-mode,
 html.dbg-safe-mode body {
   background: #09090B !important;
 }
 
-html.dbg-safe-mode * {
+/* NOT: transform/opacity'ye DOKUNULMUYOR — Framer Motion bu özellikleri
+   inline style ile yönetiyor, blanket "transform:none!important" verince
+   motion.div'lerin initial={opacity:0} durumunda kilitli kalıp içeriği
+   tamamen kaybolmasına (siyah ekran) sebep oluyordu. Sadece kozmetik/
+   gereksiz katmanlar kapatılıyor, layout/visibility'ye dokunulmuyor. */
+html.dbg-safe-mode *,
+html.dbg-safe-mode *::before,
+html.dbg-safe-mode *::after {
   animation: none !important;
   transition: none !important;
   filter: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  will-change: auto !important;
   box-shadow: none !important;
   text-shadow: none !important;
-  transform: none !important;
 }
 
 html.dbg-safe-mode *::before,
@@ -349,11 +353,4 @@ html.dbg-safe-mode *::after {
 /* Kedi AI + WhatsApp floating butonları */
 html.dbg-safe-mode .dbg-floating-ui {
   display: none !important;
-}
-
-/* Header ve bottom nav DIŞINDA hiçbir fixed katman kalmasın — Tailwind'in
-   ürettiği .fixed class'ı .dbg-allow-fixed işaretli olmayan her yerde
-   normal document flow'a (static) döner. */
-html.dbg-safe-mode .fixed:not(.dbg-allow-fixed) {
-  position: static !important;
 }
