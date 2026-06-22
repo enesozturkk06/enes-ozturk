@@ -18,7 +18,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   if (!loaded) {
     return (
-      <div className="min-h-screen bg-obsidian flex items-center justify-center">
+      <div className="min-h-[100dvh] overflow-x-hidden bg-obsidian flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-2 border-crimson border-t-transparent rounded-full animate-spin" />
           <span
@@ -34,23 +34,23 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   if (!student) {
     return (
-      <div className="min-h-screen bg-obsidian flex items-center justify-center">
+      <div className="min-h-[100dvh] overflow-x-hidden bg-obsidian flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-crimson/40 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-obsidian">
+    <div className="min-h-[100dvh] overflow-x-hidden bg-obsidian">
       <StudentNav />
       <motion.main
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="lg:ml-64 min-h-screen"
+        className="lg:ml-64 min-h-[100dvh] overflow-x-hidden"
       >
         <div
-          className="lg:pt-0 lg:p-8 p-4 pb-32 lg:pb-8"
+          className="lg:pt-0 lg:p-8 p-4 pb-32 lg:pb-8 overflow-x-hidden"
           style={{ paddingTop: "var(--content-pt-mobile, 72px)" }}
         >
           {children}

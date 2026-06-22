@@ -101,6 +101,13 @@ export default function StudentNav() {
           paddingTop:    "calc(env(safe-area-inset-top, 0px) + 10px)",
           paddingBottom: "12px",
           minHeight:     "calc(env(safe-area-inset-top, 0px) + 56px)",
+          // Android Chrome'da fixed + backdrop-blur kombinasyonu kaydırma sırasında
+          // hatalı çiziliyor (kartlar üst üste biniyor gibi görünüyor) — kendi GPU
+          // katmanına zorlayıp bu render hatasını önlüyoruz.
+          transform: "translateZ(0)",
+          WebkitTransform: "translateZ(0)",
+          willChange: "transform",
+          isolation: "isolate",
         }}
       >
         <Link href="/" className="flex items-center gap-2">
@@ -156,7 +163,16 @@ export default function StudentNav() {
       {/* Mobile bottom navigation — premium floating glassmorphism */}
       <div
         className="lg:hidden fixed bottom-0 left-0 right-0 z-[46]"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          // Android Chrome'da fixed + backdrop-blur kombinasyonu kaydırma sırasında
+          // hatalı çiziliyor (kartlar üst üste biniyor gibi görünüyor) — kendi GPU
+          // katmanına zorlayıp bu render hatasını önlüyoruz.
+          transform: "translateZ(0)",
+          WebkitTransform: "translateZ(0)",
+          willChange: "transform",
+          isolation: "isolate",
+        }}
       >
         <motion.div
           className="mx-4"
