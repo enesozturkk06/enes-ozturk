@@ -111,6 +111,13 @@ export default function ActivityFeed() {
           "linear-gradient(90deg,rgba(139,92,246,0.07),rgba(217,70,239,0.04))",
         border: "1px solid rgba(139,92,246,0.16)",
         borderRadius: 6,
+        // Android Chrome'da overflow:hidden + sürekli çalışan will-change:transform
+        // animasyonu birleşince kırpma sınırı bazen "sızıyor" (kayan yazı alttaki
+        // kartın üzerine biniyor gibi görünüyor). Kapsayıcıyı kendi katmanına
+        // sabitleyip bu render hatasını önlüyoruz.
+        transform: "translateZ(0)",
+        WebkitTransform: "translateZ(0)",
+        isolation: "isolate",
       }}
     >
       {/* Sol soluk */}
