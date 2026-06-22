@@ -457,10 +457,16 @@ export default function OgrenciDashboard() {
             { href:"/ogrenci/bildirimler",label:"Bildirimler",     icon:<Bell size={20}/>,        color:"gold"    },
           ].map(({ href, label, icon, color }) => (
             <Link key={href} href={href}>
-              <motion.div
-                whileHover={{ y: -3, scale: 1.02 }}
-                whileTap={{ scale: 0.96 }}
-                className="p-4 text-center transition-all rounded-xl"
+              {/*
+                Android Chrome'da bu kartlarin whileHover/whileTap (Framer
+                Motion gesture transform) kullanimi, dokunma ile kaydirma
+                ayni anda basladiginda transform'un "sikisip" kalmasina ve
+                kartlarin ust uste binmis gibi gorunmesine sebep oluyordu
+                (iOS'ta gorulmuyordu). Saf CSS hover/active gecisine
+                cevrildi - ayni gorsel his, dokunma/scroll catismasi yok.
+              */}
+              <div
+                className="p-4 text-center rounded-xl transition-transform duration-150 hover:-translate-y-0.5 hover:scale-[1.02] active:scale-95"
                 style={{
                   background: "rgba(15,15,22,0.9)",
                   border: color === "crimson" ? "1px solid rgba(220,38,38,0.15)" : color === "violet" ? "1px solid rgba(139,92,246,0.2)" : "1px solid rgba(217,119,6,0.15)",
@@ -471,7 +477,7 @@ export default function OgrenciDashboard() {
                 </div>
                 <div className="text-xs text-white/55 tracking-wider"
                   style={{ fontFamily:"var(--font-barlow-condensed)" }}>{label}</div>
-              </motion.div>
+              </div>
             </Link>
           ))}
         </div>
