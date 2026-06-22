@@ -98,6 +98,12 @@ export default function AdminSidebar() {
           paddingTop:    "calc(env(safe-area-inset-top, 0px) + 10px)",
           paddingBottom: "10px",
           minHeight:     "calc(env(safe-area-inset-top, 0px) + 56px)",
+          // Android Chrome'da fixed + backdrop-blur kombinasyonu kaydırma
+          // sırasında hatalı çiziliyor — kendi GPU katmanına zorluyoruz.
+          transform: "translateZ(0)",
+          WebkitTransform: "translateZ(0)",
+          willChange: "transform",
+          isolation: "isolate",
         }}
       >
         <div className="flex items-center gap-2">

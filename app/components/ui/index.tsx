@@ -82,15 +82,17 @@ export function StatCard({ label, value, sub, color = "white", icon, href, onCli
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="relative overflow-hidden"
+      className="relative overflow-hidden stat-card-glass"
       style={{
         background: "rgba(15,15,22,0.95)",
         border: `1px solid ${isClickable ? c.border : "rgba(255,255,255,0.08)"}`,
-        backdropFilter: "blur(16px)",
         boxShadow: isClickable ? `0 0 0px ${c.glow}` : "none",
         transition: "box-shadow 0.25s, border-color 0.25s",
         minHeight: 88, // touch alanı
         cursor: isClickable ? "pointer" : "default",
+        transform: "translateZ(0)",
+        WebkitTransform: "translateZ(0)",
+        isolation: "isolate",
       }}
       onMouseEnter={!reduced && isClickable ? e => {
         e.currentTarget.style.boxShadow = `0 0 24px ${c.glow}`;

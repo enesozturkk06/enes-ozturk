@@ -771,7 +771,8 @@ export default function OgrencilerPage() {
                 <motion.div key={s.id}
                   initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                   transition={{ delay: i * 0.02 }}
-                  className="bg-carbon border border-white/8 p-4 space-y-3">
+                  className="relative overflow-hidden bg-carbon border border-white/8 p-4 space-y-3"
+                  style={{ isolation: "isolate" }}>
 
                   {/* Üst: Ad, Kod, Ödeme durumu */}
                   <div className="flex items-center justify-between gap-2">
