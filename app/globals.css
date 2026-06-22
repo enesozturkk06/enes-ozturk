@@ -354,3 +354,10 @@ html.dbg-safe-mode *::after {
 html.dbg-safe-mode .dbg-floating-ui {
   display: none !important;
 }
+
+/* Bölüm Kaldır — AndroidDebugPanel.tsx tarafından [data-dbg-section]
+   etiketli kartlara eklenen class. Hangi kart kaldırılınca glitch
+   kayboluyorsa sorunun kaynağını gösterir. */
+.dbg-section-hidden {
+  display: none !important;
+}

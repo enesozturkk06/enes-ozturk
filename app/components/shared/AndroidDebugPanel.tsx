@@ -8,9 +8,11 @@ import { useEffect, useState } from "react";
  * Normal kullanıcılar bunu asla görmez — hiçbir görsel/performans etkisi yok.
  */
 
-const STORAGE_KEY      = "android_debug_enabled";
-const SAFE_CLASS        = "dbg-safe-mode";
-const SAFE_OVERRIDE_KEY = "android_safe_mode_override"; // "1" | "0" | yok (=otomatik)
+const STORAGE_KEY        = "android_debug_enabled";
+const SAFE_CLASS         = "dbg-safe-mode";
+const SAFE_OVERRIDE_KEY  = "android_safe_mode_override"; // "1" | "0" | yok (=otomatik)
+const HIDDEN_SECTIONS_KEY = "android_dbg_hidden_sections"; // JSON string[]
+const SECTION_HIDDEN_CLASS = "dbg-section-hidden";
 
 const TOGGLES = [
   { id: "dbg-no-anim",     label: "Tüm animasyonlar/transition kapalı" },
@@ -34,6 +36,8 @@ export default function AndroidDebugPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const [safeMode, setSafeMode] = useState(false);
   const [safeAuto, setSafeAuto] = useState(false); // otomatik mi yoksa manuel mi açıldı
+  const [sections, setSections] = useState<string[]>([]);
+  const [hiddenSections, setHiddenSections] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -75,6 +79,68 @@ export default function AndroidDebugPanel() {
     document.documentElement.classList.toggle(SAFE_CLASS, shouldEnable);
   }, []);
 
+  // ── Bölüm Kaldır: sayfadaki [data-dbg-section] etiketli kartları bul,
+  // localStorage'da gizli işaretlenenleri yeniden uygula. React DOM'u
+  // yeniden render etse de MutationObserver yeni düğümleri yakalayıp
+  // tekrar gizler — sayfa/route değişse bile çalışır.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const applyHidden = () => {
+      let stored: string[] = [];
+      try { stored = JSON.parse(localStorage.getItem(HIDDEN_SECTIONS_KEY) ?? "[]"); } catch { stored = []; }
+      const hiddenSet = new Set(stored);
+
+      const found = new Set<string>();
+      document.querySelectorAll<HTMLElement>("[data-dbg-section]").forEach(el => {
+        const name = el.getAttribute("data-dbg-section");
+        if (!name) return;
+        found.add(name);
+        el.classList.toggle(SECTION_HIDDEN_CLASS, hiddenSet.has(name));
+      });
+
+      setSections(prev => {
+        const next = Array.from(found).sort();
+        return prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next;
+      });
+      setHiddenSections(hiddenSet);
+    };
+
+    applyHidden();
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const observer = new MutationObserver(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(applyHidden, 150);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  const toggleSection = (name: string) => {
+    let stored: string[] = [];
+    try { stored = JSON.parse(localStorage.getItem(HIDDEN_SECTIONS_KEY) ?? "[]"); } catch { stored = []; }
+    const set = new Set(stored);
+    if (set.has(name)) set.delete(name); else set.add(name);
+    localStorage.setItem(HIDDEN_SECTIONS_KEY, JSON.stringify(Array.from(set)));
+    setHiddenSections(new Set(set));
+    document.querySelectorAll<HTMLElement>(`[data-dbg-section="${name}"]`).forEach(el => {
+      el.classList.toggle(SECTION_HIDDEN_CLASS, set.has(name));
+    });
+  };
+
+  const resetSections = () => {
+    localStorage.removeItem(HIDDEN_SECTIONS_KEY);
+    document.querySelectorAll<HTMLElement>(`.${SECTION_HIDDEN_CLASS}`).forEach(el => {
+      el.classList.remove(SECTION_HIDDEN_CLASS);
+    });
+    setHiddenSections(new Set());
+  };
+
   const toggleSafeMode = () => {
     const next = !safeMode;
     localStorage.setItem(SAFE_OVERRIDE_KEY, next ? "1" : "0");
@@ -101,6 +167,7 @@ export default function AndroidDebugPanel() {
 
   const closeDebug = () => {
     resetAll();
+    resetSections();
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(SAFE_OVERRIDE_KEY);
     document.documentElement.classList.remove(SAFE_CLASS);
@@ -202,6 +269,36 @@ export default function AndroidDebugPanel() {
               >
                 SIFIRLA
               </button>
+
+              {/* Bölüm Kaldır — bu sayfada bulunan etiketli kartlar */}
+              {sections.length > 0 && (
+                <>
+                  <div style={{ marginTop: 10, marginBottom: 4, borderTop: "1px solid #0f0", paddingTop: 8, fontWeight: "bold" }}>
+                    📦 BÖLÜM KALDIR (bu sayfa)
+                  </div>
+                  {sections.map(name => (
+                    <label key={name} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={hiddenSections.has(name)}
+                        onChange={() => toggleSection(name)}
+                        style={{ width: 14, height: 14, flexShrink: 0 }}
+                      />
+                      <span>{name}</span>
+                    </label>
+                  ))}
+                  <button
+                    onClick={resetSections}
+                    style={{
+                      marginTop: 6, width: "100%", padding: "6px 0",
+                      background: "transparent", color: "#0f0", border: "1px solid #0f0",
+                      borderRadius: 4, fontWeight: "bold", cursor: "pointer",
+                    }}
+                  >
+                    BÖLÜMLERİ SIFIRLA
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

@@ -564,7 +564,7 @@ export default function AdminDashboard() {
   return (
     <>
     <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-6">
-      <motion.div variants={fadeUp}>
+      <motion.div variants={fadeUp} data-dbg-section="header">
         <PageHeader
           title="Bugünün Dersleri"
           subtitle={format(new Date(), "dd MMMM yyyy, EEEE", { locale: tr })}
@@ -573,7 +573,7 @@ export default function AdminDashboard() {
       </motion.div>
 
       {/* Stat kartları — tıklanabilir, animasyonlu */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" data-dbg-section="stat-cards">
         <StatCard
           label="Aktif Öğrenci" value={active.length}
           sub="Tümünü görüntüle" color="gold" icon={<Users size={18}/>}
@@ -600,7 +600,7 @@ export default function AdminDashboard() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Bugünkü / Geçmiş Tamamlanmamış / Tamamlanan dersler */}
-        <motion.div variants={fadeUp} className="lg:col-span-2">
+        <motion.div variants={fadeUp} className="lg:col-span-2" data-dbg-section="bugunun-dersleri">
           <Card className="p-6" id="bugunun-dersleri">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <h3 className="text-xl font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
@@ -718,7 +718,7 @@ export default function AdminDashboard() {
         </motion.div>
 
         {/* Sidebar */}
-        <div className="space-y-4">
+        <div className="space-y-4" data-dbg-section="sidebar">
           <motion.div variants={fadeUp}>
             <div className="cursor-pointer" onClick={() => setNotifOpen(true)}>
             <Card className="p-4">

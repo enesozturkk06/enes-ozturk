@@ -119,7 +119,7 @@ export default function OgrenciDashboard() {
     <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5">
 
       {/* Header */}
-      <motion.div variants={fadeUp}>
+      <motion.div variants={fadeUp} data-dbg-section="header">
         <PageHeader
           title={`Hoş Geldin, ${student.fullName.split(" ")[0]}!`}
           subtitle={`${student.code} · ${pkg?.name ?? ""} Paketi`}
@@ -128,18 +128,18 @@ export default function OgrenciDashboard() {
       </motion.div>
 
       {/* Push bildirim izni */}
-      <motion.div variants={fadeUp}>
+      <motion.div variants={fadeUp} data-dbg-section="push-notification">
         <PushNotificationButton role="student" studentId={student.id} />
       </motion.div>
 
       {/* Canlı aktivite akışı */}
-      <motion.div variants={fadeUp}>
+      <motion.div variants={fadeUp} data-dbg-section="activity-feed">
         <ActivityFeed />
       </motion.div>
 
       {/* Bekleyen Düet Davetleri */}
       {pendingInvites.length > 0 && (
-        <motion.div variants={fadeUp}>
+        <motion.div variants={fadeUp} data-dbg-section="pending-invites">
           <div className="rounded-2xl overflow-hidden"
             style={{ background:"rgba(139,92,246,0.06)", border:"1px solid rgba(139,92,246,0.25)" }}>
             <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor:"rgba(139,92,246,0.15)" }}>
@@ -184,7 +184,7 @@ export default function OgrenciDashboard() {
 
       {/* Bildirim bandı */}
       {unreadNotifs > 0 && (
-        <motion.div variants={fadeUp}>
+        <motion.div variants={fadeUp} data-dbg-section="unread-notifs-banner">
           <Link href="/ogrenci/bildirimler"
             className="flex items-center justify-between p-4 rounded-xl transition-all"
             style={{ background:"rgba(217,119,6,0.06)", border:"1px solid rgba(217,119,6,0.2)" }}>
@@ -200,7 +200,7 @@ export default function OgrenciDashboard() {
       )}
 
       {/* ── Tıklanabilir stat kartları ── */}
-      <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" data-dbg-section="stat-cards">
         <StatCard
           label={student.subscriptionType === "monthly" ? "Üyelik" : "Kalan Ders"}
           value={student.subscriptionType === "monthly" ? "∞" : student.remainingLessons}
@@ -240,7 +240,7 @@ export default function OgrenciDashboard() {
       </motion.div>
 
       {/* Paket kartı */}
-      <motion.div variants={fadeUp} id="paket-kartı">
+      <motion.div variants={fadeUp} id="paket-kartı" data-dbg-section="paket-karti">
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
             <div className="min-w-0">
@@ -311,7 +311,7 @@ export default function OgrenciDashboard() {
       <div className="grid lg:grid-cols-2 gap-5">
 
         {/* Yaklaşan randevular */}
-        <motion.div variants={fadeUp} ref={randevuRef}>
+        <motion.div variants={fadeUp} ref={randevuRef} data-dbg-section="yaklasan-randevular">
           <Card className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-display text-white tracking-wider"
@@ -390,7 +390,7 @@ export default function OgrenciDashboard() {
         </motion.div>
 
         {/* Son ders notu */}
-        <motion.div variants={fadeUp} ref={gelisimRef}>
+        <motion.div variants={fadeUp} ref={gelisimRef} data-dbg-section="son-ders-notu">
           <Card className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-display text-white tracking-wider"
@@ -446,7 +446,7 @@ export default function OgrenciDashboard() {
       </div>
 
       {/* Hızlı erişim */}
-      <motion.div variants={fadeUp}>
+      <motion.div variants={fadeUp} data-dbg-section="hizli-erisim">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { href:"/ogrenci/randevu",   label:"Randevu Al",       icon:<Calendar size={20}/>,   color:"crimson" },
@@ -483,7 +483,7 @@ export default function OgrenciDashboard() {
     {cancelTarget && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
         style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
-        <div className="w-full max-w-sm rounded-2xl overflow-hidden"
+        <div className="relative w-full max-w-sm rounded-2xl overflow-hidden"
           style={{ background:"rgba(15,15,22,0.99)", border:"1px solid rgba(239,68,68,0.3)" }}>
           <div className="absolute top-0 left-0 right-0 h-px"
             style={{ background:"linear-gradient(90deg,transparent,#ef4444,transparent)" }} />
