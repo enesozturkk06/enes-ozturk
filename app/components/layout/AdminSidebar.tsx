@@ -93,7 +93,7 @@ export default function AdminSidebar() {
 
       {/* ── Mobil header ─────────────────────────────────── */}
       <header
-        className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-pitch/98 backdrop-blur-md border-b border-white/6 flex items-end justify-between px-4"
+        className="lg:hidden fixed dbg-allow-fixed top-0 left-0 right-0 z-50 bg-pitch/98 backdrop-blur-md border-b border-white/6 flex items-end justify-between px-4"
         style={{
           paddingTop:    "calc(env(safe-area-inset-top, 0px) + 10px)",
           paddingBottom: "10px",

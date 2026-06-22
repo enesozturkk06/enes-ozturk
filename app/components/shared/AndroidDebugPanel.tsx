@@ -8,7 +8,9 @@ import { useEffect, useState } from "react";
  * Normal kullanıcılar bunu asla görmez — hiçbir görsel/performans etkisi yok.
  */
 
-const STORAGE_KEY = "android_debug_enabled";
+const STORAGE_KEY      = "android_debug_enabled";
+const SAFE_CLASS        = "dbg-safe-mode";
+const SAFE_OVERRIDE_KEY = "android_safe_mode_override"; // "1" | "0" | yok (=otomatik)
 
 const TOGGLES = [
   { id: "dbg-no-anim",     label: "Tüm animasyonlar/transition kapalı" },
@@ -21,24 +23,31 @@ const TOGGLES = [
 
 type ToggleId = typeof TOGGLES[number]["id"];
 
+function isAndroidUA(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /android/i.test(navigator.userAgent);
+}
+
 export default function AndroidDebugPanel() {
   const [visible, setVisible] = useState(false);
   const [active, setActive] = useState<Record<string, boolean>>({});
   const [collapsed, setCollapsed] = useState(false);
+  const [safeMode, setSafeMode] = useState(false);
+  const [safeAuto, setSafeAuto] = useState(false); // otomatik mi yoksa manuel mi açıldı
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("debug") === "1") {
-      localStorage.setItem(STORAGE_KEY, "1");
-    }
+
+    // ── Debug paneli görünürlüğü ──────────────────────────────
+    if (params.get("debug") === "1") localStorage.setItem(STORAGE_KEY, "1");
     if (params.get("debug") === "0") {
       localStorage.removeItem(STORAGE_KEY);
       TOGGLES.forEach(t => document.documentElement.classList.remove(t.id));
     }
     setVisible(localStorage.getItem(STORAGE_KEY) === "1");
 
-    // Önceki oturumdan kalan anahtar durumlarını geri yükle
+    // ── Önceki oturumdan kalan anahtar durumlarını geri yükle ──
     const restored: Record<string, boolean> = {};
     TOGGLES.forEach(t => {
       const on = localStorage.getItem(t.id) === "1";
@@ -46,7 +55,33 @@ export default function AndroidDebugPanel() {
       document.documentElement.classList.toggle(t.id, on);
     });
     setActive(restored);
+
+    // ── SAFE MODE: ?safe=1 / ?safe=0 manuel override ──────────
+    // NOT: Android'de henüz doğrulanmamış bir efekt setini canlıda TÜM
+    // kullanıcılara otomatik uygulamak riskli (yanlışsa herkesin deneyimini
+    // gereksiz bozar). Bu yüzden otomatik Android algılaması SADECE debug
+    // paneli açıkken (?debug=1 ile test session'ı başlatılmışsa) devreye
+    // girer — normal ziyaretçiler hiçbir şekilde etkilenmez. Doğrulandıktan
+    // sonra istersen bunu kalıcı/herkese-otomatik yapacak şekilde genişletirim.
+    if (params.get("safe") === "1") localStorage.setItem(SAFE_OVERRIDE_KEY, "1");
+    if (params.get("safe") === "0") localStorage.setItem(SAFE_OVERRIDE_KEY, "0");
+
+    const debugSessionActive = localStorage.getItem(STORAGE_KEY) === "1";
+    const override = localStorage.getItem(SAFE_OVERRIDE_KEY);
+    const autoCandidate = debugSessionActive && isAndroidUA();
+    const shouldEnable = override === "1" ? true : override === "0" ? false : autoCandidate;
+    setSafeAuto(override === null && autoCandidate);
+    setSafeMode(shouldEnable);
+    document.documentElement.classList.toggle(SAFE_CLASS, shouldEnable);
   }, []);
+
+  const toggleSafeMode = () => {
+    const next = !safeMode;
+    localStorage.setItem(SAFE_OVERRIDE_KEY, next ? "1" : "0");
+    document.documentElement.classList.toggle(SAFE_CLASS, next);
+    setSafeMode(next);
+    setSafeAuto(false);
+  };
 
   if (!visible) return null;
 
@@ -69,6 +104,9 @@ export default function AndroidDebugPanel() {
   const closeDebug = () => {
     resetAll();
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SAFE_OVERRIDE_KEY);
+    document.documentElement.classList.remove(SAFE_CLASS);
+    setSafeMode(false);
     setVisible(false);
   };
 
@@ -103,6 +141,20 @@ export default function AndroidDebugPanel() {
 
       {!collapsed && (
         <>
+          {/* Safe Mode — ayrı ve baskın anahtar */}
+          <label
+            style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "6px 4px",
+              marginBottom: 6, cursor: "pointer", background: safeMode ? "rgba(0,255,0,0.12)" : "transparent",
+              border: "1px solid #0f0", borderRadius: 4,
+            }}
+          >
+            <input type="checkbox" checked={safeMode} onChange={toggleSafeMode} style={{ width: 14, height: 14, flexShrink: 0 }} />
+            <span style={{ fontWeight: "bold" }}>
+              SAFE MODE {safeAuto ? "(otomatik — Android algılandı)" : safeMode ? "(manuel açık)" : "(manuel kapalı)"}
+            </span>
+          </label>
+
           {TOGGLES.map(t => (
             <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", cursor: "pointer" }}>
               <input
