@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import ActivityFeed from "@/app/components/shared/ActivityFeed";
 import PushNotificationButton from "@/app/components/shared/PushNotificationButton";
+import { isAndroidDevice } from "@/lib/device";
 import { format, parseISO, isFuture, differenceInHours } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -35,6 +36,7 @@ export default function OgrenciDashboard() {
   const [cancelTarget, setCancelTarget]   = useState<Appointment | null>(null);
   const [cancelBusy, setCancelBusy]       = useState(false);
   const [cancelBlocked, setCancelBlocked] = useState<Appointment | null>(null); // 18h engel modal
+  const [isAndroid, setIsAndroid] = useState(false); // Hızlı Erişim Android'de scroll glitch'ine sebep oluyor — Android'de tamamen kaldırılıyor
 
   // Section refs for scroll navigation
   const randevuRef = useRef<HTMLDivElement>(null);
@@ -58,6 +60,7 @@ export default function OgrenciDashboard() {
   };
 
   useEffect(() => { reload(); }, [student]); // eslint-disable-line
+  useEffect(() => { setIsAndroid(isAndroidDevice()); }, []);
 
   const handleInviteResponse = async (invite: PendingInvite, accept: boolean) => {
     if (!student) return;
@@ -445,7 +448,10 @@ export default function OgrenciDashboard() {
         </motion.div>
       </div>
 
-      {/* Hızlı erişim */}
+      {/* Hızlı erişim — Android'de scroll glitch'ine sebep oluyor, CSS düzeltmesi
+          yetersiz kaldığı için Android'de tamamen kaldırıldı. iOS ve masaüstünde
+          aynen görünüyor. */}
+      {!isAndroid && (
       <motion.div variants={fadeUp} data-dbg-section="hizli-erisim">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
@@ -482,6 +488,7 @@ export default function OgrenciDashboard() {
           ))}
         </div>
       </motion.div>
+      )}
     </motion.div>
 
     {/* ══ Randevu İptal Onay Modalı ══ */}
