@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner, renewStudentPackage, getStudentPackageHistory } from "@/lib/db";
+import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner, renewStudentPackage, getStudentPackageHistory, getGyms, addPayment } from "@/lib/db";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { getPackages, getActivePackages, type LessonPackage } from "@/lib/packages";
-import type { Student, PackagePurchase } from "@/lib/types";
+import type { Student, PackagePurchase, Gym, GymShareType } from "@/lib/types";
 import { PAYMENT_LABELS, LEVEL_LABELS, LESSON_DURATIONS, MONTHLY_DURATION_DAYS } from "@/lib/constants";
 import { getPackageDurationDays, calcPackageEndDate, getDaysRemaining, getPackageUrgency, isPackageExpired } from "@/lib/packageDuration";
 import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History, CalendarClock, Infinity as InfinityIcon } from "lucide-react";
@@ -80,6 +80,7 @@ function Sel({ label, value, onChange, options }: {
 export default function OgrencilerPage() {
   const [students, setStudents]   = useState<Student[]>([]);
   const [packages, setPackages]   = useState<LessonPackage[]>([]);
+  const [gyms, setGyms]           = useState<Gym[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState("");
   const [filter, setFilter]       = useState("all");
@@ -103,6 +104,11 @@ export default function OgrencilerPage() {
   const [aPayStatus, setAPayStatus] = useState("beklemede");
   const [aNotes, setANotes]       = useState("");
   const [aSaving, setASaving]     = useState(false);
+  /* Salon ataması */
+  const [aGymId, setAGymId]               = useState("");
+  const [aGymOverride, setAGymOverride]   = useState(false);
+  const [aGymOvType, setAGymOvType]       = useState<GymShareType>("no_share");
+  const [aGymOvValue, setAGymOvValue]     = useState("");
 
   /* Düzenle paneli */
   const [editSt, setEditSt]       = useState<Student | null>(null);
@@ -120,6 +126,11 @@ export default function OgrencilerPage() {
   const [ePS, setEPS]             = useState("beklemede");
   const [eNotes, setENotes]       = useState("");
   const [eSaving, setESaving]     = useState(false);
+  /* Salon ataması */
+  const [eGymId, setEGymId]               = useState("");
+  const [eGymOverride, setEGymOverride]   = useState(false);
+  const [eGymOvType, setEGymOvType]       = useState<GymShareType>("no_share");
+  const [eGymOvValue, setEGymOvValue]     = useState("");
 
   /* Paket yenile */
   const [renewSt, setRenewSt]           = useState<Student | null>(null);
@@ -240,6 +251,7 @@ export default function OgrencilerPage() {
 
   /* ── Yükle ─────────────────────────────────────────────────────── */
   useEffect(() => { getPackages().then(setPackages); }, []);
+  useEffect(() => { getGyms().then(setGyms).catch(() => {}); }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -334,6 +346,7 @@ export default function OgrencilerPage() {
     setACode(seq); setAName(""); setAPhone(""); setAEmail(""); setALevel("baslangic");
     setAPackageId(""); setATL("8"); setADurationDays(String(LESSON_DURATIONS[8])); setAAP(""); setAAD(""); setACustom("");
     setAPayStatus("beklemede"); setANotes("");
+    setAGymId(""); setAGymOverride(false); setAGymOvType("no_share"); setAGymOvValue("");
     setAddOpen(true);
   };
 
@@ -352,13 +365,17 @@ export default function OgrencilerPage() {
       const today = new Date().toISOString().split("T")[0];
       const totalLessons = Number(aTotalLessons) || 8;
       const customPrice  = aCustomPrice ? Number(aCustomPrice) : undefined;
-      // Borç: indirimli fiyat varsa onu, yoksa standart borç alanını kullan
-      const amountDue = customPrice !== undefined ? customPrice : (Number(aAmountDue) || 0);
+      // Paket fiyatı: indirimli fiyat varsa onu, yoksa standart fiyat alanını kullan
+      const packagePrice = customPrice !== undefined ? customPrice : (Number(aAmountDue) || 0);
+      const paidNow       = Number(aAmountPaid) || 0;
       // Bitiş tarihi: paket süresi alanına göre hesaplanır
       const durationDays = Number(aDurationDays) || getPackageDurationDays(totalLessons, "lesson_pack");
       const endDate = calcPackageEndDate(today, durationDays);
+      const pkgName = packages.find(p => p.id === aPackageId)?.name;
 
-      await createStudent({
+      // Öğrenci 0 ödenmiş / tam borçlu olarak oluşturulur — bakiye aşağıdaki
+      // addPayment çağrılarıyla doğru şekilde ayarlanır (çift sayım olmasın).
+      const created = await createStudent({
         code:             finalCode,
         fullName:         aName.trim(),
         phone:            aPhone.trim(),
@@ -370,14 +387,37 @@ export default function OgrencilerPage() {
         totalLessons,
         remainingLessons: totalLessons,
         completedLessons: 0,
-        paymentStatus:    aPayStatus as Student["paymentStatus"],
-        amountPaid:       Number(aAmountPaid) || 0,
-        amountDue,
+        paymentStatus:    "beklemede",
+        amountPaid:       0,
+        amountDue:        packagePrice,
         packageStartDate: today,
         packageEndDate:   endDate,
         notes:            aNotes.trim() || undefined,
         isActive:         true,
+        gymId:                 aGymId || undefined,
+        gymShareOverrideType:  aGymOverride ? aGymOvType : undefined,
+        gymShareOverrideValue: aGymOverride && aGymOvValue ? Number(aGymOvValue) : undefined,
       });
+
+      // Finans Merkezi — ödenen kısım "odendi", kalan borç "beklemede" olarak
+      // Gelir Hareketleri'ne yansır (öğrenciler kısmından eklenen ödeme/borç
+      // artık Finans Merkezi'nde görünür).
+      if (paidNow > 0) {
+        await addPayment({
+          studentId: created.id, studentName: created.fullName,
+          amount: paidNow, paidAt: today, method: "paket", status: "odendi",
+          notes: pkgName ? `${pkgName} — ${totalLessons} ders` : `${totalLessons} ders paketi`,
+        }, { movementType: "yeni_paket", packageType: pkgName });
+      }
+      const stillDue = packagePrice - paidNow;
+      if (stillDue > 0) {
+        await addPayment({
+          studentId: created.id, studentName: created.fullName,
+          amount: stillDue, paidAt: today, method: "paket", status: "beklemede",
+          notes: "Kalan borç",
+        }, { movementType: "yeni_paket", packageType: pkgName });
+      }
+
       await reload();
       setAddOpen(false);
     } catch (err: unknown) {
@@ -397,6 +437,10 @@ export default function OgrencilerPage() {
     setEStartDate(s.packageStartDate || ""); setEEndDate(s.packageEndDate || "");
     setEAP(String(s.amountPaid)); setEAD(String(s.amountDue));
     setEPS(s.paymentStatus); setENotes(s.notes ?? "");
+    setEGymId(s.gymId ?? "");
+    setEGymOverride(!!s.gymShareOverrideType);
+    setEGymOvType(s.gymShareOverrideType ?? "no_share");
+    setEGymOvValue(s.gymShareOverrideValue != null ? String(s.gymShareOverrideValue) : "");
     setEditSt(s);
   };
 
@@ -404,6 +448,14 @@ export default function OgrencilerPage() {
     if (!editSt) return;
     setESaving(true);
     try {
+      // Ödenen alanı yükseldiyse (örn. öğrenci nakit ödedi, admin burada
+      // güncelliyor) farkı otomatik Finans Merkezi'ne gelir hareketi olarak
+      // yansıtırız — admin'in ayrıca Finans Merkezi'nden manuel eklemesine
+      // gerek kalmaz. Borç (amountDue) yükseldiyse de "beklemede" olarak
+      // aynı şekilde yansır.
+      const paidDelta = Number(eAP) - editSt.amountPaid;
+      const dueDelta  = Number(eAD) - editSt.amountDue;
+
       await updateStudent(editSt.id, {
         fullName:         eName.trim(),
         phone:            ePhone.trim(),
@@ -418,7 +470,37 @@ export default function OgrencilerPage() {
         amountDue:        Number(eAD),
         paymentStatus:    ePS as Student["paymentStatus"],
         notes:            eNotes.trim() || undefined,
+        gymId:                 eGymId || null,
+        gymShareOverrideType:  eGymOverride ? eGymOvType : null,
+        gymShareOverrideValue: eGymOverride && eGymOvValue ? Number(eGymOvValue) : null,
       });
+
+      if (paidDelta > 0) {
+        const today = new Date().toISOString().split("T")[0];
+        await addPayment({
+          studentId:   editSt.id,
+          studentName: eName.trim() || editSt.fullName,
+          amount:      paidDelta,
+          paidAt:      today,
+          method:      "nakit",
+          status:      "odendi",
+          notes:       "Öğrenci profilinden güncellendi",
+        }, { movementType: "ek_odeme", skipBalanceUpdate: true });
+      }
+
+      if (dueDelta > 0) {
+        const today = new Date().toISOString().split("T")[0];
+        await addPayment({
+          studentId:   editSt.id,
+          studentName: eName.trim() || editSt.fullName,
+          amount:      dueDelta,
+          paidAt:      today,
+          method:      "nakit",
+          status:      "beklemede",
+          notes:       "Öğrenci profilinden borç güncellendi",
+        }, { movementType: "ek_odeme", skipBalanceUpdate: true });
+      }
+
       await reload();      // ← Supabase'den taze veri çek
       setEditSt(null);
     } catch (err: unknown) {
@@ -657,6 +739,42 @@ export default function OgrencilerPage() {
                 <p className="text-xs text-white/20 mt-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
                   İndirimli fiyat girilirse borç = indirimli fiyat − ödenen. Girilmezse standart fiyat kullanılır.
                 </p>
+              </div>
+
+              {/* Salon ataması — gelir paylaşımı */}
+              <div className="mb-3 p-3 bg-steel/30 border border-violet/20">
+                <p className="text-xs tracking-widest uppercase mb-2" style={{ color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>
+                  Salon (gelir paylaşımı)
+                </p>
+                <select value={aGymId} onChange={e => setAGymId(e.target.value)}
+                  className="w-full bg-carbon border border-violet/25 focus:border-violet text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors mb-2"
+                  style={{ fontFamily:"var(--font-inter)" }}>
+                  <option value="" className="bg-carbon">— Salon yok (tamamen kendi öğrencin) —</option>
+                  {gyms.filter(g => g.isActive).map(g => (
+                    <option key={g.id} value={g.id} className="bg-carbon">
+                      {g.name} — {g.shareType === "fixed_per_lesson" ? `Ders başı ₺${g.fixedLessonFee}` : g.shareType === "percentage" ? `Salon %${g.gymPercentage}` : "Pay yok"}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={aGymOverride} onChange={e => setAGymOverride(e.target.checked)} className="w-3.5 h-3.5" />
+                  <span className="text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Bu öğrenci için özel anlaşma uygula</span>
+                </label>
+                {aGymOverride && (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <select value={aGymOvType} onChange={e => setAGymOvType(e.target.value as GymShareType)}
+                      className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      <option value="fixed_per_lesson">Ders Başı Sabit</option>
+                      <option value="percentage">Yüzdelik</option>
+                      <option value="no_share">Pay Yok</option>
+                    </select>
+                    {aGymOvType !== "no_share" && (
+                      <input type="number" value={aGymOvValue} onChange={e => setAGymOvValue(e.target.value)}
+                        placeholder={aGymOvType === "percentage" ? "Salon %" : "Ders başı ₺"}
+                        className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily:"var(--font-inter)" }} />
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -1016,6 +1134,40 @@ export default function OgrencilerPage() {
                     <input type="number" value={eMonthlyFee} onChange={e => setEMonthlyFee(e.target.value)} placeholder="Örn: 1500"
                       className="w-full bg-carbon border border-white/10 focus:border-violet/50 text-white px-3 py-2.5 text-sm outline-none"
                       style={{ fontFamily:"var(--font-inter)" }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Salon ataması — gelir paylaşımı */}
+              <div className="p-3 border space-y-2" style={{ borderColor:"rgba(139,92,246,0.2)", background:"rgba(139,92,246,0.04)" }}>
+                <p className="text-xs tracking-widest uppercase" style={{ color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>Salon (gelir paylaşımı)</p>
+                <select value={eGymId} onChange={e => setEGymId(e.target.value)}
+                  className="w-full bg-carbon border border-violet/25 focus:border-violet text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors"
+                  style={{ fontFamily:"var(--font-inter)" }}>
+                  <option value="" className="bg-carbon">— Salon yok (tamamen kendi öğrencin) —</option>
+                  {gyms.filter(g => g.isActive || g.id === eGymId).map(g => (
+                    <option key={g.id} value={g.id} className="bg-carbon">
+                      {g.name} — {g.shareType === "fixed_per_lesson" ? `Ders başı ₺${g.fixedLessonFee}` : g.shareType === "percentage" ? `Salon %${g.gymPercentage}` : "Pay yok"}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={eGymOverride} onChange={e => setEGymOverride(e.target.checked)} className="w-3.5 h-3.5" />
+                  <span className="text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Bu öğrenci için özel anlaşma uygula</span>
+                </label>
+                {eGymOverride && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={eGymOvType} onChange={e => setEGymOvType(e.target.value as GymShareType)}
+                      className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      <option value="fixed_per_lesson">Ders Başı Sabit</option>
+                      <option value="percentage">Yüzdelik</option>
+                      <option value="no_share">Pay Yok</option>
+                    </select>
+                    {eGymOvType !== "no_share" && (
+                      <input type="number" value={eGymOvValue} onChange={e => setEGymOvValue(e.target.value)}
+                        placeholder={eGymOvType === "percentage" ? "Salon %" : "Ders başı ₺"}
+                        className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily:"var(--font-inter)" }} />
+                    )}
                   </div>
                 )}
               </div>

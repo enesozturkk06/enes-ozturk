@@ -1,12 +1,16 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getStudents, getPayments, addPayment, deletePayment, updatePayment } from "@/lib/db";
-import type { Student, Payment, PaymentRecordStatus } from "@/lib/types";
+import {
+  getStudents, getPayments, addPayment, deletePayment, updatePayment,
+  getGyms, getGymReports, getFinanceSummary, getIncomeMovements, updateIncomeMovement,
+  type GymReport,
+} from "@/lib/db";
+import type { Student, Payment, PaymentRecordStatus, Gym, IncomeMovement, IncomeMovementType } from "@/lib/types";
 import { LESSON_PRICES } from "@/lib/constants";
 import {
   Plus, Trash2, ChevronDown, ChevronUp, TrendingUp,
-  AlertTriangle, CreditCard, X, Check, Edit2, Clock,
+  AlertTriangle, CreditCard, X, Check, Edit2, Clock, Building2, Wallet, Receipt,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -157,6 +161,20 @@ function PaymentCard({
 export default function OdemelerPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [gyms, setGyms]                       = useState<Gym[]>([]);
+  const [gymReports, setGymReports]           = useState<GymReport[]>([]);
+  const [incomeMovements, setIncomeMovements] = useState<IncomeMovement[]>([]);
+  const [financeSummary, setFinanceSummary]   = useState({ totalRevenue: 0, gymShareTotal: 0, netEarnings: 0 });
+
+  /* Gelir Hareketleri filtreleri */
+  const [fltDateFrom, setFltDateFrom]   = useState("");
+  const [fltDateTo, setFltDateTo]       = useState("");
+  const [fltStudentId, setFltStudentId] = useState("");
+  const [fltGymId, setFltGymId]         = useState("");
+  const [fltType, setFltType]           = useState<IncomeMovementType | "">("");
+  const [fltStatus, setFltStatus]       = useState<PaymentRecordStatus | "">("");
+  const [editingShareId, setEditingShareId] = useState<string | null>(null);
+  const [editingShareValue, setEditingShareValue] = useState("");
 
   /* Form */
   const [addOpen, setAddOpen]     = useState(false);
@@ -184,9 +202,19 @@ export default function OdemelerPage() {
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
-    const [s, p] = await Promise.all([getStudents(), getPayments()]);
+    const [s, p, g, gr, fs, im] = await Promise.all([
+      getStudents(), getPayments(),
+      getGyms().catch(() => []),
+      getGymReports().catch(() => []),
+      getFinanceSummary().catch(() => ({ totalRevenue: 0, gymShareTotal: 0, netEarnings: 0 })),
+      getIncomeMovements().catch(() => []),
+    ]);
     setStudents(s);
     setPayments(p);
+    setGyms(g);
+    setGymReports(gr);
+    setFinanceSummary(fs);
+    setIncomeMovements(im);
   }, []);
 
   useEffect(() => {
@@ -213,6 +241,33 @@ export default function OdemelerPage() {
   const thisMonthTotal  = paidOnly.filter(p => p.paidAt.startsWith(thisMonthKey)).reduce((s, p) => s + p.amount, 0);
   const totalPending    = pendingOnly.reduce((s, p) => s + p.amount, 0);
   const pendingCount    = new Set(pendingOnly.map(p => p.studentId)).size;
+
+  /* Salonlara ödenecek tutar — tüm zamanlar, tüm salonların payı toplamı */
+  const totalOwedToGyms = gymReports.reduce((s, r) => s + r.gymShareTotal, 0);
+
+  /* ── Gelir Hareketleri — filtreler uygulanmış ───────────────────── */
+  const filteredMovements = incomeMovements.filter(m => {
+    if (fltDateFrom && m.paymentDate < fltDateFrom) return false;
+    if (fltDateTo && m.paymentDate > fltDateTo) return false;
+    if (fltStudentId && m.studentId !== fltStudentId) return false;
+    if (fltGymId && m.gymId !== fltGymId) return false;
+    if (fltType && m.paymentType !== fltType) return false;
+    if (fltStatus && m.status !== fltStatus) return false;
+    return true;
+  }).sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
+
+  const MOVEMENT_TYPE_LABELS: Record<IncomeMovementType, string> = {
+    yeni_paket: "Yeni Paket", paket_yenileme: "Paket Yenileme",
+    ek_odeme: "Ek Ödeme", ders_tamamlama: "Ders Tamamlama",
+  };
+
+  const handleSaveShare = async (m: IncomeMovement) => {
+    const value = Number(editingShareValue);
+    if (isNaN(value)) return;
+    await updateIncomeMovement(m.id, { gymShareAmount: value, trainerNetAmount: m.paymentAmount - value });
+    await reload();
+    setEditingShareId(null);
+  };
 
   /* ── Son 6 ay bar grafik (sadece odendi) ─────────────────────────── */
   const barData = Array.from({ length: 6 }, (_, i) => {
@@ -303,9 +358,9 @@ export default function OdemelerPage() {
             <span className="w-8 h-px bg-crimson" />
             <span className="text-crimson text-xs tracking-[0.4em] uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Admin</span>
           </div>
-          <h1 className="text-3xl font-display text-white tracking-wide" style={{ fontFamily: "var(--font-bebas)" }}>ÖDEME TAKİBİ</h1>
+          <h1 className="text-3xl font-display text-white tracking-wide" style={{ fontFamily: "var(--font-bebas)" }}>FİNANS MERKEZİ</h1>
           <p className="text-white/35 text-sm mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            {payments.length} kayıt · Aylık gelir analizi
+            {payments.length} ödeme kaydı · {gyms.filter(g => g.isActive).length} aktif salon
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -436,12 +491,14 @@ export default function OdemelerPage() {
       </AnimatePresence>
 
       {/* ── STAT KARTLAR ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         {[
-          { label: "Toplam Tahsilat",    value: `₺${totalCollected.toLocaleString("tr-TR")}`,  sub: "Sadece ödendi",   color: "#4ADE80", icon: <CreditCard size={16} /> },
-          { label: format(new Date(), "MMMM", { locale: tr }), value: `₺${thisMonthTotal.toLocaleString("tr-TR")}`, sub: "Bu ayın geliri", color: "#FBBF24", icon: <TrendingUp size={16} /> },
-          { label: "Bekleyen Ödemeler",  value: `₺${totalPending.toLocaleString("tr-TR")}`,   sub: `${pendingCount} öğrenci`, color: "#F87171", icon: <Clock size={16} /> },
-          { label: "Ödeme Bekleyen",     value: pendingCount,                                  sub: "Aktif kayıt",     color: "rgba(255,255,255,0.6)", icon: <AlertTriangle size={16} /> },
+          { label: `${format(new Date(), "MMMM", { locale: tr })} Toplam Ciro`, value: `₺${financeSummary.totalRevenue.toLocaleString("tr-TR")}`, sub: "Bu ayki tüm tahsilat", color: "#FBBF24", icon: <TrendingUp size={16} /> },
+          { label: "Bu Ay Salon Payı",   value: `₺${financeSummary.gymShareTotal.toLocaleString("tr-TR")}`, sub: "Salonlara düşen pay", color: "#A855F7", icon: <Building2 size={16} /> },
+          { label: "Bu Ay Net Kazanç",   value: `₺${financeSummary.netEarnings.toLocaleString("tr-TR")}`,  sub: "Salon payı düşülmüş", color: "#4ADE80", icon: <Wallet size={16} /> },
+          { label: "Bekleyen Öğrenci Borçları", value: `₺${totalPending.toLocaleString("tr-TR")}`, sub: `${pendingCount} öğrenci`, color: "#F87171", icon: <Clock size={16} /> },
+          { label: "Alınan Ödemeler",    value: `₺${totalCollected.toLocaleString("tr-TR")}`, sub: "Tüm zamanlar — ödendi", color: "#60A5FA", icon: <CreditCard size={16} /> },
+          { label: "Salonlara Ödenecek Tutar", value: `₺${totalOwedToGyms.toLocaleString("tr-TR")}`, sub: "Tüm zamanlar — toplam pay", color: "#F472B6", icon: <Receipt size={16} /> },
         ].map(s => (
           <div key={s.label} className="bg-carbon border border-white/6 p-4">
             <div className="flex items-start justify-between mb-2">
@@ -452,6 +509,143 @@ export default function OdemelerPage() {
             <div className="text-[10px] text-white/25 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── SALON BAZLI RAPOR ────────────────────────────────────── */}
+      {gymReports.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 px-1 pb-2">
+            <Building2 size={13} style={{ color: "#A855F7" }} />
+            <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+              Salon Bazlı Rapor
+            </span>
+            <div className="h-px flex-1 bg-white/5" />
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {gymReports.map(r => (
+              <div key={r.gym.id} className="bg-carbon border border-violet/15 p-4">
+                <h4 className="text-lg font-display text-white tracking-wider mb-2" style={{ fontFamily: "var(--font-bebas)" }}>{r.gym.name}</h4>
+                {r.gym.shareType === "fixed_per_lesson" ? (
+                  <div className="space-y-1.5 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    <div className="flex justify-between"><span className="text-white/40">Toplam Ders</span><span className="text-white">{r.totalLessons}</span></div>
+                    <div className="flex justify-between"><span className="text-white/40">Ders Başı</span><span className="text-white">₺{(r.gym.fixedLessonFee ?? 0).toLocaleString("tr-TR")}</span></div>
+                    <div className="flex justify-between pt-1.5 border-t border-white/5"><span className="text-violet font-semibold">Ödenecek</span><span className="text-violet font-semibold">₺{r.gymShareTotal.toLocaleString("tr-TR")}</span></div>
+                  </div>
+                ) : r.gym.shareType === "percentage" ? (
+                  <div className="space-y-1.5 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    <div className="flex justify-between"><span className="text-white/40">Toplam Ciro</span><span className="text-white">₺{r.totalRevenue.toLocaleString("tr-TR")}</span></div>
+                    <div className="flex justify-between"><span className="text-white/40">Salon Payı (%{r.gym.gymPercentage})</span><span className="text-white">₺{r.gymShareTotal.toLocaleString("tr-TR")}</span></div>
+                    <div className="flex justify-between pt-1.5 border-t border-white/5"><span className="text-green-400 font-semibold">Net Kazancım</span><span className="text-green-400 font-semibold">₺{r.netEarnings.toLocaleString("tr-TR")}</span></div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Salon payı yok — toplam ciro ₺{r.totalRevenue.toLocaleString("tr-TR")}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── GELİR HAREKETLERİ (filtrelenebilir) ─────────────────── */}
+      <div>
+        <div className="flex items-center gap-2 px-1 pb-2">
+          <Receipt size={13} style={{ color: "#60A5FA" }} />
+          <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+            Gelir Hareketleri
+          </span>
+          <div className="h-px flex-1 bg-white/5" />
+        </div>
+
+        {/* Filtreler */}
+        <div className="bg-carbon border border-white/6 p-3 mb-2 grid sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <input type="date" value={fltDateFrom} onChange={e => setFltDateFrom(e.target.value)}
+            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily: "var(--font-inter)" }} title="Başlangıç tarihi" />
+          <input type="date" value={fltDateTo} onChange={e => setFltDateTo(e.target.value)}
+            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily: "var(--font-inter)" }} title="Bitiş tarihi" />
+          <select value={fltStudentId} onChange={e => setFltStudentId(e.target.value)}
+            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
+            <option value="" className="bg-carbon">Tüm Öğrenciler</option>
+            {students.sort((a, b) => a.fullName.localeCompare(b.fullName)).map(s => (
+              <option key={s.id} value={s.id} className="bg-carbon">{s.fullName}</option>
+            ))}
+          </select>
+          <select value={fltGymId} onChange={e => setFltGymId(e.target.value)}
+            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
+            <option value="" className="bg-carbon">Tüm Salonlar</option>
+            {gyms.map(g => <option key={g.id} value={g.id} className="bg-carbon">{g.name}</option>)}
+          </select>
+          <select value={fltType} onChange={e => setFltType(e.target.value as IncomeMovementType | "")}
+            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
+            <option value="" className="bg-carbon">Tüm Türler</option>
+            <option value="yeni_paket" className="bg-carbon">Yeni Paket</option>
+            <option value="paket_yenileme" className="bg-carbon">Paket Yenileme</option>
+            <option value="ek_odeme" className="bg-carbon">Ek Ödeme</option>
+            <option value="ders_tamamlama" className="bg-carbon">Ders Tamamlama</option>
+          </select>
+          <select value={fltStatus} onChange={e => setFltStatus(e.target.value as PaymentRecordStatus | "")}
+            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
+            <option value="" className="bg-carbon">Ödenen + Borçlu</option>
+            <option value="odendi" className="bg-carbon">Sadece Ödenen</option>
+            <option value="beklemede" className="bg-carbon">Sadece Borçlu (Beklemede)</option>
+            <option value="gecikti" className="bg-carbon">Sadece Gecikmiş</option>
+          </select>
+        </div>
+
+        {filteredMovements.length === 0 ? (
+          <div className="text-center py-10 bg-carbon border border-white/6">
+            <Receipt size={28} className="text-white/10 mx-auto mb-2" />
+            <p className="text-white/25 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Filtreye uyan gelir hareketi yok</p>
+          </div>
+        ) : (
+          <div className="bg-carbon border border-white/6 overflow-x-auto">
+            <table className="w-full text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <thead>
+                <tr className="border-b border-white/5 text-white/30 text-[10px] uppercase tracking-widest">
+                  <th className="text-left px-3 py-2">Tarih</th>
+                  <th className="text-left px-3 py-2">Öğrenci</th>
+                  <th className="text-left px-3 py-2">Tür</th>
+                  <th className="text-left px-3 py-2">Durum</th>
+                  <th className="text-left px-3 py-2">Salon</th>
+                  <th className="text-right px-3 py-2">Tutar</th>
+                  <th className="text-right px-3 py-2">Salon Payı</th>
+                  <th className="text-right px-3 py-2">Net</th>
+                  <th className="px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMovements.slice(0, 100).map(m => (
+                  <tr key={m.id} className="border-b border-white/5 hover:bg-steel/20">
+                    <td className="px-3 py-2 text-white/40 text-xs whitespace-nowrap">{format(parseISO(m.paymentDate), "dd MMM yy", { locale: tr })}</td>
+                    <td className="px-3 py-2 text-white">{m.studentName}</td>
+                    <td className="px-3 py-2 text-white/50 text-xs">{MOVEMENT_TYPE_LABELS[m.paymentType]}</td>
+                    <td className="px-3 py-2"><StatusBadge status={m.status} /></td>
+                    <td className="px-3 py-2 text-violet text-xs">{m.gymName ?? "—"}</td>
+                    <td className="px-3 py-2 text-right text-white tabular-nums">{m.paymentAmount > 0 ? `₺${m.paymentAmount.toLocaleString("tr-TR")}` : "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {editingShareId === m.id ? (
+                        <div className="flex items-center gap-1 justify-end">
+                          <input type="number" value={editingShareValue} onChange={e => setEditingShareValue(e.target.value)} autoFocus
+                            className="w-20 bg-steel/60 border border-violet/40 text-white px-1.5 py-1 text-xs outline-none text-right" />
+                          <button onClick={() => handleSaveShare(m)} className="text-green-400 hover:text-green-300"><Check size={13} /></button>
+                          <button onClick={() => setEditingShareId(null)} className="text-white/30 hover:text-white"><X size={13} /></button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setEditingShareId(m.id); setEditingShareValue(String(m.gymShareAmount)); }}
+                          className="text-violet hover:underline" title="Manuel düzelt">
+                          {m.gymShareAmount > 0 ? `₺${m.gymShareAmount.toLocaleString("tr-TR")}` : "—"}
+                        </button>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-semibold ${m.trainerNetAmount < 0 ? "text-red-400" : "text-green-400"}`}>
+                      ₺{m.trainerNetAmount.toLocaleString("tr-TR")}
+                    </td>
+                    <td className="px-2 py-2" />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ── SON 6 AY GELİR GRAFİĞİ (sadece odendi) ──────────────── */}
@@ -502,7 +696,7 @@ export default function OdemelerPage() {
         <div className="flex items-center gap-2 px-1">
           <Check size={13} style={{ color: "#4ADE80" }} />
           <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
-            Aylık Ödendi Geçmişi
+            Ödeme Kayıtları — Aylık Geçmiş (Ekle / Düzenle / Sil)
           </span>
           <div className="h-px flex-1 bg-white/5" />
         </div>

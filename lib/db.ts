@@ -7,6 +7,7 @@ import type {
   Notification, NotifType, TimeSlot, Payment, CompleteResult, LessonType,
   DuetPartner, PendingInvite, SalonOwner, SalonOwnerStudent,
   PackagePurchase, PackageType, PaymentStatus, ArenaDuel,
+  Gym, GymShareType, IncomeMovement, IncomeMovementType, PaymentRecordStatus,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { isPackageExpired, getDaysRemaining } from "./packageDuration";
@@ -60,6 +61,9 @@ const ms = (r: any): Student => ({
   hallFeatured: r.hall_featured ?? false,
   isStudentOfMonth: r.is_student_of_month ?? false,
   avatarUrl: r.avatar_url ?? undefined,
+  gymId: r.gym_id ?? undefined,
+  gymShareOverrideType: r.gym_share_override_type ?? undefined,
+  gymShareOverrideValue: r.gym_share_override_value != null ? Number(r.gym_share_override_value) : undefined,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,6 +178,9 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.hallFeatured     !== undefined) r.hall_featured        = s.hallFeatured;
   if (s.isStudentOfMonth !== undefined) r.is_student_of_month  = s.isStudentOfMonth;
   if (s.avatarUrl        !== undefined) r.avatar_url            = s.avatarUrl ?? null;
+  if (s.gymId                  !== undefined) r.gym_id                    = s.gymId || null;
+  if (s.gymShareOverrideType   !== undefined) r.gym_share_override_type   = s.gymShareOverrideType || null;
+  if (s.gymShareOverrideValue  !== undefined) r.gym_share_override_value  = s.gymShareOverrideValue ?? null;
   return r;
 }
 
@@ -1086,6 +1093,10 @@ export async function completeAppointmentWithAttendance(
           is_read:    false,
         });
       } catch { /* bildirim tablosu sorunluysa ders düşümünü etkilemesin */ }
+
+      // Finans Merkezi — ders-başı salon anlaşmasıysa salon payı tahakkuku
+      const { data: nameRow } = await db().from("students").select("full_name").eq("id", studentId).maybeSingle();
+      await recordLessonGymAccrual(studentId, nameRow?.full_name ?? "", today);
     }
   }
 
@@ -1239,6 +1250,258 @@ export async function checkPackageWarningNotification(student: Student): Promise
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   GYMS — Salon gelir paylaşımı (mevcut "Salon Sahipleri" gözlemci
+   sisteminden TAMAMEN AYRI, finansal hesaplama burada yapılır)
+   ═══════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mg = (r: any): Gym => ({
+  id: r.id, name: r.name, shareType: r.share_type as GymShareType,
+  fixedLessonFee: r.fixed_lesson_fee != null ? Number(r.fixed_lesson_fee) : undefined,
+  gymPercentage: r.gym_percentage != null ? Number(r.gym_percentage) : undefined,
+  trainerPercentage: r.trainer_percentage != null ? Number(r.trainer_percentage) : undefined,
+  isActive: r.is_active ?? true, notes: r.notes ?? undefined, createdAt: r.created_at ?? "",
+});
+
+export async function getGyms(): Promise<Gym[]> {
+  const { data, error } = await db().from("gyms").select("*").order("name");
+  if (error) { if (isSchemaError(error)) return []; fail("getGyms", error); }
+  return (data ?? []).map(mg);
+}
+
+export async function createGym(gym: Omit<Gym, "id" | "createdAt">): Promise<Gym> {
+  const { data, error } = await db().from("gyms").insert({
+    name: gym.name, share_type: gym.shareType,
+    fixed_lesson_fee: gym.fixedLessonFee ?? null,
+    gym_percentage: gym.gymPercentage ?? null,
+    trainer_percentage: gym.trainerPercentage ?? null,
+    is_active: gym.isActive ?? true, notes: gym.notes ?? null,
+  }).select().single();
+  if (error) fail("createGym", error);
+  return mg(data);
+}
+
+export async function updateGym(id: string, updates: Partial<Gym>): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (updates.name              !== undefined) row.name               = updates.name;
+  if (updates.shareType         !== undefined) row.share_type         = updates.shareType;
+  if (updates.fixedLessonFee    !== undefined) row.fixed_lesson_fee   = updates.fixedLessonFee ?? null;
+  if (updates.gymPercentage     !== undefined) row.gym_percentage     = updates.gymPercentage ?? null;
+  if (updates.trainerPercentage !== undefined) row.trainer_percentage = updates.trainerPercentage ?? null;
+  if (updates.isActive          !== undefined) row.is_active          = updates.isActive;
+  if (updates.notes             !== undefined) row.notes              = updates.notes ?? null;
+  const { error } = await db().from("gyms").update(row).eq("id", id);
+  if (error) fail("updateGym", error);
+}
+
+/** Salonu pasifleştir — geçmiş gelir hareketlerini bozmamak için hard delete yapılmaz */
+export async function deleteGym(id: string): Promise<void> {
+  const { error } = await db().from("gyms").update({ is_active: false }).eq("id", id);
+  if (error) fail("deleteGym", error);
+}
+
+/**
+ * Bir ödeme/ders tutarı için salon payı + antrenör net kazancını hesapla.
+ * Öğrenciye özel anlaşma (override) varsa salonun varsayılan anlaşmasını ezer.
+ */
+export function computeGymShare(
+  gym: Gym | null,
+  overrideType: GymShareType | null | undefined,
+  overrideValue: number | null | undefined,
+  amount: number,
+): { gymShare: number; trainerNet: number } {
+  const effectiveType = overrideType ?? gym?.shareType ?? "no_share";
+
+  if (effectiveType === "no_share" || !gym) {
+    return { gymShare: 0, trainerNet: amount };
+  }
+  if (effectiveType === "percentage") {
+    const pct = overrideType === "percentage" ? (overrideValue ?? 0) : (gym.gymPercentage ?? 0);
+    const gymShare = Math.round(amount * (pct / 100) * 100) / 100;
+    return { gymShare, trainerNet: amount - gymShare };
+  }
+  // fixed_per_lesson: ödeme anında salon payı düşülmez — ders tamamlanınca tahakkuk eder
+  return { gymShare: 0, trainerNet: amount };
+}
+
+/** Ders başı ücreti — override varsa onu, yoksa salonun varsayılanını döner */
+function effectiveFixedLessonFee(
+  gym: Gym | null,
+  overrideType: GymShareType | null | undefined,
+  overrideValue: number | null | undefined,
+): number {
+  if (overrideType === "fixed_per_lesson") return overrideValue ?? 0;
+  if (!overrideType && gym?.shareType === "fixed_per_lesson") return gym.fixedLessonFee ?? 0;
+  return 0;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mim = (r: any): IncomeMovement => ({
+  id: r.id, studentId: r.student_id ?? undefined, studentName: r.student_name,
+  paymentId: r.payment_id ?? undefined, paymentType: r.payment_type as IncomeMovementType,
+  paymentAmount: Number(r.payment_amount ?? 0),
+  status: (r.status ?? "odendi") as PaymentRecordStatus,
+  paymentDate: r.payment_date,
+  packageType: r.package_type ?? undefined,
+  gymId: r.gym_id ?? undefined, gymName: r.gym_name ?? undefined,
+  gymShareAmount: Number(r.gym_share_amount ?? 0),
+  trainerNetAmount: Number(r.trainer_net_amount ?? 0),
+  note: r.note ?? undefined, createdAt: r.created_at ?? "",
+});
+
+/**
+ * Bir gelir hareketi kaydı oluşturur. addPayment/renewStudentPackage tarafından
+ * çağrılır — öğrencinin gym_id + override bilgisine göre salon payı otomatik
+ * hesaplanır. status="odendi" değilse (beklemede/gecikti) salon payı/net
+ * kazanç YİNE hesaplanır ama raporlarda sadece "odendi" satırlar toplanır —
+ * böylece bekleyen tutarlar Gelir Hareketleri'nde görünür, ciroyu şişirmez.
+ * Hata olursa sessizce geçilir (asıl ödeme akışını durdurmaz).
+ */
+export async function recordIncomeMovement(params: {
+  studentId: string; studentName: string; paymentId?: string;
+  paymentType: IncomeMovementType; amount: number; date: string;
+  status?: PaymentRecordStatus; packageType?: string; note?: string;
+}): Promise<void> {
+  try {
+    const { data: std } = await db().from("students")
+      .select("gym_id, gym_share_override_type, gym_share_override_value")
+      .eq("id", params.studentId).maybeSingle();
+
+    let gym: Gym | null = null;
+    if (std?.gym_id) {
+      const { data: g } = await db().from("gyms").select("*").eq("id", std.gym_id).maybeSingle();
+      if (g) gym = mg(g);
+    }
+
+    const overrideType  = (std?.gym_share_override_type ?? null) as GymShareType | null;
+    const overrideValue = std?.gym_share_override_value != null ? Number(std.gym_share_override_value) : null;
+    const { gymShare, trainerNet } = computeGymShare(gym, overrideType, overrideValue, params.amount);
+
+    await db().from("income_movements").insert({
+      student_id: params.studentId, student_name: params.studentName,
+      payment_id: params.paymentId ?? null, payment_type: params.paymentType,
+      payment_amount: params.amount, status: params.status ?? "odendi", payment_date: params.date,
+      package_type: params.packageType ?? null,
+      gym_id: gym?.id ?? null, gym_name: gym?.name ?? null,
+      gym_share_amount: gymShare, trainer_net_amount: trainerNet,
+      note: params.note ?? null,
+    });
+  } catch (err) {
+    console.warn("[recordIncomeMovement] başarısız (ödeme akışı etkilenmedi):", err);
+  }
+}
+
+/** Ders tamamlandığında ders-başı salon payını tahakkuk ettirir (0 tutarlı gelir hareketi) */
+async function recordLessonGymAccrual(studentId: string, studentName: string, date: string): Promise<void> {
+  try {
+    const { data: std } = await db().from("students")
+      .select("gym_id, gym_share_override_type, gym_share_override_value")
+      .eq("id", studentId).maybeSingle();
+    if (!std?.gym_id && !std?.gym_share_override_type) return;
+
+    let gym: Gym | null = null;
+    if (std?.gym_id) {
+      const { data: g } = await db().from("gyms").select("*").eq("id", std.gym_id).maybeSingle();
+      if (g) gym = mg(g);
+    }
+
+    const overrideType  = (std?.gym_share_override_type ?? null) as GymShareType | null;
+    const overrideValue = std?.gym_share_override_value != null ? Number(std.gym_share_override_value) : null;
+    const fee = effectiveFixedLessonFee(gym, overrideType, overrideValue);
+    if (fee <= 0) return; // ders-başı anlaşma değil → tahakkuk yok
+
+    await db().from("income_movements").insert({
+      student_id: studentId, student_name: studentName,
+      payment_type: "ders_tamamlama", payment_amount: 0, payment_date: date,
+      gym_id: gym?.id ?? null, gym_name: gym?.name ?? null,
+      gym_share_amount: fee, trainer_net_amount: -fee,
+      note: "Ders tamamlandı — salon payı tahakkuku",
+    });
+  } catch (err) {
+    console.warn("[recordLessonGymAccrual] başarısız (ders tamamlama akışı etkilenmedi):", err);
+  }
+}
+
+export async function getIncomeMovements(filters?: {
+  dateFrom?: string; dateTo?: string; studentId?: string; gymId?: string;
+  paymentType?: IncomeMovementType; status?: PaymentRecordStatus;
+}): Promise<IncomeMovement[]> {
+  let q = db().from("income_movements").select("*").order("payment_date", { ascending: false });
+  if (filters?.dateFrom)    q = q.gte("payment_date", filters.dateFrom);
+  if (filters?.dateTo)      q = q.lte("payment_date", filters.dateTo);
+  if (filters?.studentId)   q = q.eq("student_id", filters.studentId);
+  if (filters?.gymId)       q = q.eq("gym_id", filters.gymId);
+  if (filters?.paymentType) q = q.eq("payment_type", filters.paymentType);
+  if (filters?.status)      q = q.eq("status", filters.status);
+  const { data, error } = await q;
+  if (error) { if (isSchemaError(error)) return []; fail("getIncomeMovements", error); }
+  return (data ?? []).map(mim);
+}
+
+export async function updateIncomeMovement(
+  id: string,
+  updates: Partial<Pick<IncomeMovement, "gymShareAmount" | "trainerNetAmount" | "note">>,
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (updates.gymShareAmount   !== undefined) row.gym_share_amount   = updates.gymShareAmount;
+  if (updates.trainerNetAmount !== undefined) row.trainer_net_amount = updates.trainerNetAmount;
+  if (updates.note             !== undefined) row.note               = updates.note ?? null;
+  const { error } = await db().from("income_movements").update(row).eq("id", id);
+  if (error) fail("updateIncomeMovement", error);
+}
+
+export async function deleteIncomeMovement(id: string): Promise<void> {
+  const { error } = await db().from("income_movements").delete().eq("id", id);
+  if (error) fail("deleteIncomeMovement", error);
+}
+
+/** Bu ay özet: toplam ciro, salon payı, net kazanç (income_movements üzerinden) */
+export async function getFinanceSummary(monthKey?: string): Promise<{
+  totalRevenue: number; gymShareTotal: number; netEarnings: number;
+}> {
+  const ym = monthKey ?? new Date().toISOString().slice(0, 7); // "yyyy-MM"
+  const { data, error } = await db().from("income_movements")
+    .select("payment_amount, gym_share_amount, trainer_net_amount")
+    .eq("status", "odendi") // sadece gerçekten tahsil edilen — bekleyenler ciroyu şişirmesin
+    .gte("payment_date", `${ym}-01`).lt("payment_date", `${ym}-32`);
+  if (error) { if (isSchemaError(error)) return { totalRevenue: 0, gymShareTotal: 0, netEarnings: 0 }; fail("getFinanceSummary", error); }
+  const rows = data ?? [];
+  return {
+    totalRevenue:  rows.reduce((s, r) => s + Number(r.payment_amount ?? 0), 0),
+    gymShareTotal: rows.reduce((s, r) => s + Number(r.gym_share_amount ?? 0), 0),
+    netEarnings:   rows.reduce((s, r) => s + Number(r.trainer_net_amount ?? 0), 0),
+  };
+}
+
+export interface GymReport {
+  gym: Gym; totalLessons: number; totalRevenue: number;
+  gymShareTotal: number; netEarnings: number;
+}
+
+/** Her aktif salon için toplu rapor — Finans Merkezi'nde "Salon Bazlı Rapor" bölümünde kullanılır */
+export async function getGymReports(): Promise<GymReport[]> {
+  const gyms = await getGyms();
+  if (gyms.length === 0) return [];
+  const { data, error } = await db().from("income_movements")
+    .select("gym_id, payment_type, payment_amount, gym_share_amount, trainer_net_amount")
+    .not("gym_id", "is", null)
+    .eq("status", "odendi"); // bekleyen ödemeler salon raporuna dahil değil
+  if (error) { if (isSchemaError(error)) return []; fail("getGymReports", error); }
+  const rows = data ?? [];
+
+  return gyms.map(gym => {
+    const gymRows = rows.filter(r => r.gym_id === gym.id);
+    return {
+      gym,
+      totalLessons: gymRows.filter(r => r.payment_type === "ders_tamamlama").length,
+      totalRevenue: gymRows.reduce((s, r) => s + Number(r.payment_amount ?? 0), 0),
+      gymShareTotal: gymRows.reduce((s, r) => s + Number(r.gym_share_amount ?? 0), 0),
+      netEarnings: gymRows.reduce((s, r) => s + Number(r.trainer_net_amount ?? 0), 0),
+    };
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
    PAYMENTS
    ═══════════════════════════════════════════════════════════════ */
 
@@ -1248,15 +1511,20 @@ export async function getPayments(): Promise<Payment[]> {
   return (data ?? []).map(mp);
 }
 
-export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment> {
+export async function addPayment(
+  payment: Omit<Payment, "id">,
+  options?: { movementType?: IncomeMovementType; packageType?: string; skipBalanceUpdate?: boolean },
+): Promise<Payment> {
   const { data, error } = await db().from("payments").insert({
     student_id: payment.studentId, student_name: payment.studentName,
     amount: payment.amount, paid_at: payment.paidAt, method: payment.method,
     notes: payment.notes, status: payment.status ?? "odendi",
   }).select().single();
   if (error) fail("addPayment", error);
-  // Sadece "odendi" ödemelerde öğrenci bakiyesi güncellenir
-  if ((payment.status ?? "odendi") === "odendi") {
+  // Sadece "odendi" ödemelerde öğrenci bakiyesi güncellenir — skipBalanceUpdate
+  // ile çağrılırsa (örn. çağıran taraf bakiyeyi ayrıca updateStudent ile zaten
+  // ayarladıysa) burada tekrar dokunulmaz, çift sayım olmaz.
+  if (!options?.skipBalanceUpdate && (payment.status ?? "odendi") === "odendi") {
     const { data: std } = await db().from("students").select("amount_paid, amount_due").eq("id", payment.studentId).single();
     if (std) {
       const newPaid = Number(std.amount_paid) + payment.amount;
@@ -1267,6 +1535,15 @@ export async function addPayment(payment: Omit<Payment, "id">): Promise<Payment>
       }).eq("id", payment.studentId);
     }
   }
+  // Finans Merkezi — durum ne olursa olsun (odendi/beklemede/gecikti) gelir
+  // hareketi oluşturulur, böylece bekleyen ödemeler de Gelir Hareketleri'nde
+  // görünür. Sadece "odendi" satırlar ciro/net kazanç toplamlarına girer.
+  await recordIncomeMovement({
+    studentId: payment.studentId, studentName: payment.studentName,
+    paymentId: data.id, paymentType: options?.movementType ?? "ek_odeme",
+    amount: payment.amount, date: payment.paidAt, status: payment.status ?? "odendi",
+    packageType: options?.packageType, note: payment.notes,
+  });
   return mp(data);
 }
 
@@ -1312,12 +1589,46 @@ export async function updatePayment(
       }).eq("id", old.student_id);
     }
   }
+
+  // Bağlı gelir hareketinin durumu/tutarı da senkron kalsın (örn. "beklemede"
+  // bir ödeme sonradan "odendi" işaretlenirse Gelir Hareketleri de güncellensin)
+  try {
+    if (updates.amount !== undefined) {
+      // Tutar değiştiyse salon payı/net kazanç da yeniden hesaplanmalı
+      const { data: im } = await db().from("income_movements")
+        .select("id, student_id, gym_id").eq("payment_id", id).maybeSingle();
+      if (im) {
+        let gym: Gym | null = null;
+        const { data: std } = await db().from("students")
+          .select("gym_share_override_type, gym_share_override_value").eq("id", im.student_id).maybeSingle();
+        if (im.gym_id) {
+          const { data: g } = await db().from("gyms").select("*").eq("id", im.gym_id).maybeSingle();
+          if (g) gym = mg(g);
+        }
+        const overrideType  = (std?.gym_share_override_type ?? null) as GymShareType | null;
+        const overrideValue = std?.gym_share_override_value != null ? Number(std.gym_share_override_value) : null;
+        const { gymShare, trainerNet } = computeGymShare(gym, overrideType, overrideValue, updates.amount);
+        await db().from("income_movements").update({
+          payment_amount: updates.amount, gym_share_amount: gymShare, trainer_net_amount: trainerNet,
+          ...(updates.status !== undefined ? { status: updates.status } : {}),
+          ...(updates.notes  !== undefined ? { note: updates.notes ?? null } : {}),
+        }).eq("id", im.id);
+      }
+    } else if (updates.status !== undefined || updates.notes !== undefined) {
+      const row2: Record<string, unknown> = {};
+      if (updates.status !== undefined) row2.status = updates.status;
+      if (updates.notes  !== undefined) row2.note   = updates.notes ?? null;
+      await db().from("income_movements").update(row2).eq("payment_id", id);
+    }
+  } catch { /* Gelir Hareketleri senkron hatası ödeme akışını durdurmaz */ }
 }
 
 export async function deletePayment(id: string): Promise<void> {
   const { data: pay, error: e1 } = await db().from("payments")
     .select("student_id, amount, status").eq("id", id).single();
   if (e1) fail("deletePayment:get", e1);
+  // Bağlı gelir hareketi (salon payı dahil) — Finans Merkezi'nde yetim kayıt kalmasın
+  await db().from("income_movements").delete().eq("payment_id", id).then(() => {}, () => {});
   const { error: e2 } = await db().from("payments").delete().eq("id", id);
   if (e2) fail("deletePayment:delete", e2);
   // Sadece "odendi" ödemelerde öğrenci bakiyesi düzeltilir
@@ -1398,11 +1709,9 @@ export async function renewStudentPackage(params: {
 
   const prevRemaining  = Number(std!.remaining_lessons  ?? 0);
   const prevTotal      = Number(std!.total_lessons       ?? 0);
-  const prevAmountPaid = Number(std!.amount_paid         ?? 0);
   const prevAmountDue  = Number(std!.amount_due          ?? 0);
   const newRemaining   = prevRemaining + params.lessonCount;
   const newTotal       = prevTotal     + params.lessonCount;
-  const amountDue      = Math.max(0, params.listPrice - params.paidAmount);
 
   // 2. Paket geçmişi kaydı — package_type yerine package_name kullan (custom paket desteği)
   const { error: pe } = await db().from("student_packages").insert({
@@ -1426,29 +1735,62 @@ export async function renewStudentPackage(params: {
   }
 
   // 3. Öğrenci güncelle — package_type enum güncellenmez (custom paket uyumluluğu için)
+  //    NOT: amount_paid burada GÜNCELLENMEZ — tam liste fiyatı borca eklenir,
+  //    aşağıdaki addPayment() çağrısı ödenen kısmı borçtan düşüp ödeneni artırır
+  //    (iki yerde aynı tutarı eklemek çift sayıma sebep olurdu).
   const { error: ue } = await db().from("students").update({
     remaining_lessons:  newRemaining,
     total_lessons:      newTotal,
     // package_type kasıtlı güncellenmedi: enum kısıtlaması ve custom paket desteği
-    amount_paid:        prevAmountPaid + params.paidAmount,
-    amount_due:         prevAmountDue  + amountDue,
+    amount_due:         prevAmountDue + params.listPrice,
     payment_status:     params.paymentStatus,
     package_start_date: params.startDate,
     package_end_date:   params.endDate,
   }).eq("id", params.studentId);
   if (ue) fail("renewStudentPackage:student_update", ue);
 
-  // 4. Ödeme kaydı oluştur (gelir paneline yansısın)
+  // 4. Ödeme kaydı oluştur (gelir paneline + Finans Merkezi'ne yansısın) —
+  //    addPayment() burada amount_paid/amount_due/payment_status'u doğru
+  //    final değerlere indirger (adım 3'te eklenen tam liste fiyatından düşer).
+  const movementType = prevTotal === 0 ? "yeni_paket" : "paket_yenileme";
   if (params.paidAmount > 0) {
-    const { error: paye } = await db().from("payments").insert({
-      student_id:   params.studentId,
-      student_name: params.studentName,
-      amount:       params.paidAmount,
-      paid_at:      params.startDate,
-      method:       "paket",
-      notes:        `${params.packageName} — ${params.lessonCount} ders`,
-    });
-    if (paye) console.warn("renewStudentPackage:payment:", paye.message);
+    try {
+      await addPayment({
+        studentId:   params.studentId,
+        studentName: params.studentName,
+        amount:      params.paidAmount,
+        paidAt:      params.startDate,
+        method:      "paket",
+        notes:       `${params.packageName} — ${params.lessonCount} ders`,
+        status:      "odendi",
+      }, {
+        // İlk paket mi yenileme mi — toplam ders geçmişi 0'dan büyüyorsa ilk pakettir
+        movementType,
+        packageType:  params.packageName,
+      });
+    } catch (err) {
+      console.warn("renewStudentPackage:payment:", err);
+    }
+  }
+
+  // Kalan borç (listPrice - paidAmount) varsa Finans Merkezi'nde "beklemede"
+  // olarak görünsün — bakiye adım 3'te zaten doğru ayarlandı, burada SADECE
+  // gelir hareketi kaydı için skipBalanceUpdate kullanılır (çift sayım olmaz).
+  const stillDue = params.listPrice - params.paidAmount;
+  if (stillDue > 0) {
+    try {
+      await addPayment({
+        studentId:   params.studentId,
+        studentName: params.studentName,
+        amount:      stillDue,
+        paidAt:      params.startDate,
+        method:      "paket",
+        notes:       "Kalan borç",
+        status:      "beklemede",
+      }, { movementType, packageType: params.packageName, skipBalanceUpdate: true });
+    } catch (err) {
+      console.warn("renewStudentPackage:pending:", err);
+    }
   }
 
   return { newRemaining };

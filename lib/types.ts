@@ -29,6 +29,57 @@ export interface Student {
   isStudentOfMonth?: boolean;
   /** Supabase Storage'daki profil fotoğrafı URL'si */
   avatarUrl?: string;
+  /** Gelir paylaşımlı çalıştığı salon — gyms tablosuna referans, yoksa salon payı yok.
+   *  null = düzenleme formundan açıkça temizlendi (undefined = dokunulmadı) */
+  gymId?: string | null;
+  /** Öğrenciye özel anlaşma — tanımlıysa salonun varsayılan anlaşmasını ezer */
+  gymShareOverrideType?: GymShareType | null;
+  gymShareOverrideValue?: number | null;
+}
+
+/* ── Salon Gelir Paylaşımı ────────────────────────────────────────── */
+
+export type GymShareType = "fixed_per_lesson" | "percentage" | "no_share";
+
+export interface Gym {
+  id: string;
+  name: string;
+  shareType: GymShareType;
+  /** share_type='fixed_per_lesson' iken: ders başı salona ödenecek tutar */
+  fixedLessonFee?: number;
+  /** share_type='percentage' iken: salonun yüzdesi (0-100) */
+  gymPercentage?: number;
+  /** Bilgi amaçlı — 100 - gymPercentage */
+  trainerPercentage?: number;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export type IncomeMovementType = "yeni_paket" | "paket_yenileme" | "ek_odeme" | "ders_tamamlama";
+
+/** Gelir Hareketleri — her ödeme ve her ders tamamlama otomatik buraya düşer */
+export interface IncomeMovement {
+  id: string;
+  studentId?: string;
+  studentName: string;
+  paymentId?: string;
+  paymentType: IncomeMovementType;
+  /** Bu satırda tahsil edilen tutar — ders_tamamlama satırlarında 0 */
+  paymentAmount: number;
+  /** odendi = gerçekten tahsil edildi, beklemede/gecikti = henüz tahsil edilmedi.
+   *  Sadece "odendi" satırlar ciro/net kazanç toplamlarına dahil edilir. */
+  status: PaymentRecordStatus;
+  paymentDate: string;
+  packageType?: string;
+  gymId?: string;
+  gymName?: string;
+  /** Salonun bu satırdaki payı — ders_tamamlama satırlarında bu sefer tahakkuk eder */
+  gymShareAmount: number;
+  /** payment_amount - gym_share_amount (ders_tamamlama satırlarında negatif: -fixedLessonFee) */
+  trainerNetAmount: number;
+  note?: string;
+  createdAt: string;
 }
 
 export interface TimeSlot {

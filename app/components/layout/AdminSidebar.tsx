@@ -7,7 +7,7 @@ import Logo from "@/app/components/shared/Logo";
 import { useUnreadNotifCount } from "@/hooks/useUnreadNotifCount";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
-  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell, ShoppingBag,
+  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell, ShoppingBag, Building2,
 } from "lucide-react";
 
 const links = [
@@ -15,7 +15,8 @@ const links = [
   { href: "/admin/ogrenciler",       label: "Öğrenciler",       icon: Users },
   { href: "/admin/takvim",           label: "Takvim",           icon: Calendar },
   { href: "/admin/paketler",         label: "Ders Paketleri",   icon: Package },
-  { href: "/admin/odemeler",         label: "Ödemeler",         icon: CreditCard },
+  { href: "/admin/odemeler",         label: "Finans Merkezi",   icon: CreditCard },
+  { href: "/admin/salonlar",         label: "Salonlar",         icon: Building2 },
   { href: "/admin/dersler",          label: "Ders Notları",     icon: BookOpen },
   { href: "/admin/salon-sahipleri",  label: "Salon Sahipleri",  icon: Shield },
   { href: "/admin/bildirimler",      label: "Bildirimler",      icon: Bell },
