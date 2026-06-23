@@ -1553,7 +1553,7 @@ export default function BlackCatAI() {
         whileTap={{ scale: 0.91 }}
         transition={{ type:"spring", stiffness:280, damping:22 }}
         aria-label="KEDİ AI Koç — tıkla veya sürükle"
-        className="hidden lg:flex dbg-floating-ui"
+        className="hidden lg:flex"
         style={{
           position:     "fixed",
           bottom:       "calc(env(safe-area-inset-bottom, 0px) + 88px)",
@@ -1610,7 +1610,7 @@ export default function BlackCatAI() {
           <>
             {/* Mobil overlay */}
             <motion.div
-              className="fixed inset-0 sm:hidden dbg-floating-ui"
+              className="fixed inset-0 sm:hidden"
               style={{ zIndex:54, background:"rgba(0,0,0,0.55)", backdropFilter:"blur(4px)" }}
               initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
               onClick={() => setOpen(false)}
@@ -1621,7 +1621,7 @@ export default function BlackCatAI() {
               animate={{ opacity:1, y:0, scale:1 }}
               exit={{ opacity:0, y:24, scale:0.96 }}
               transition={{ type:"spring", stiffness:320, damping:28 }}
-              className="fixed flex flex-col kara-panel dbg-floating-ui"
+              className="fixed flex flex-col kara-panel"
               style={{
                 zIndex:     55,
                 background: "rgba(10,7,20,0.98)",

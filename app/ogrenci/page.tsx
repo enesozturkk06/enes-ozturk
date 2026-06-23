@@ -122,7 +122,7 @@ export default function OgrenciDashboard() {
     <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5">
 
       {/* Header */}
-      <motion.div variants={fadeUp} data-dbg-section="header">
+      <motion.div variants={fadeUp}>
         <PageHeader
           title={`Hoş Geldin, ${student.fullName.split(" ")[0]}!`}
           subtitle={`${student.code} · ${pkg?.name ?? ""} Paketi`}
@@ -131,18 +131,18 @@ export default function OgrenciDashboard() {
       </motion.div>
 
       {/* Push bildirim izni */}
-      <motion.div variants={fadeUp} data-dbg-section="push-notification">
+      <motion.div variants={fadeUp}>
         <PushNotificationButton role="student" studentId={student.id} />
       </motion.div>
 
       {/* Canlı aktivite akışı */}
-      <motion.div variants={fadeUp} data-dbg-section="activity-feed">
+      <motion.div variants={fadeUp}>
         <ActivityFeed />
       </motion.div>
 
       {/* Bekleyen Düet Davetleri */}
       {pendingInvites.length > 0 && (
-        <motion.div variants={fadeUp} data-dbg-section="pending-invites">
+        <motion.div variants={fadeUp}>
           <div className="rounded-2xl overflow-hidden"
             style={{ background:"rgba(139,92,246,0.06)", border:"1px solid rgba(139,92,246,0.25)" }}>
             <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor:"rgba(139,92,246,0.15)" }}>
@@ -187,7 +187,7 @@ export default function OgrenciDashboard() {
 
       {/* Bildirim bandı */}
       {unreadNotifs > 0 && (
-        <motion.div variants={fadeUp} data-dbg-section="unread-notifs-banner">
+        <motion.div variants={fadeUp}>
           <Link href="/ogrenci/bildirimler"
             className="flex items-center justify-between p-4 rounded-xl transition-all"
             style={{ background:"rgba(217,119,6,0.06)", border:"1px solid rgba(217,119,6,0.2)" }}>
@@ -203,7 +203,7 @@ export default function OgrenciDashboard() {
       )}
 
       {/* ── Tıklanabilir stat kartları ── */}
-      <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" data-dbg-section="stat-cards">
+      <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           label={student.subscriptionType === "monthly" ? "Üyelik" : "Kalan Ders"}
           value={student.subscriptionType === "monthly" ? "∞" : student.remainingLessons}
@@ -243,7 +243,7 @@ export default function OgrenciDashboard() {
       </motion.div>
 
       {/* Paket kartı */}
-      <motion.div variants={fadeUp} id="paket-kartı" data-dbg-section="paket-karti">
+      <motion.div variants={fadeUp} id="paket-kartı">
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
             <div className="min-w-0">
@@ -314,7 +314,7 @@ export default function OgrenciDashboard() {
       <div className="grid lg:grid-cols-2 gap-5">
 
         {/* Yaklaşan randevular */}
-        <motion.div variants={fadeUp} ref={randevuRef} data-dbg-section="yaklasan-randevular">
+        <motion.div variants={fadeUp} ref={randevuRef}>
           <Card className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-display text-white tracking-wider"
@@ -393,7 +393,7 @@ export default function OgrenciDashboard() {
         </motion.div>
 
         {/* Son ders notu */}
-        <motion.div variants={fadeUp} ref={gelisimRef} data-dbg-section="son-ders-notu">
+        <motion.div variants={fadeUp} ref={gelisimRef}>
           <Card className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-display text-white tracking-wider"
@@ -452,7 +452,7 @@ export default function OgrenciDashboard() {
           yetersiz kaldığı için Android'de tamamen kaldırıldı. iOS ve masaüstünde
           aynen görünüyor. */}
       {!isAndroid && (
-      <motion.div variants={fadeUp} data-dbg-section="hizli-erisim">
+      <motion.div variants={fadeUp}>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { href:"/ogrenci/randevu",   label:"Randevu Al",       icon:<Calendar size={20}/>,   color:"crimson" },
