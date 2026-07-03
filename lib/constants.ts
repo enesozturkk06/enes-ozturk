@@ -80,6 +80,13 @@ export const TRAINER_WHATSAPP = "905389714459";
 export const TRAINER_NAME = "Antrenör Enes Öztürk";
 export const CANCEL_LIMIT_HOURS = 18;
 
+/** Tüm özel derslerin süresi (dakika) */
+export const LESSON_DURATION_MINUTES = 50;
+
+/** Ders bilgilendirme kartını ilk kez onayladıktan sonra üstte gösterilecek kısa hatırlatma */
+export const LESSON_RULES_REMINDER_TEXT =
+  `📢 Hatırlatma: Ders süresi ${LESSON_DURATION_MINUTES} dakikadır. Ders iptalleri en az ${CANCEL_LIMIT_HOURS} saat önceden yapılmalıdır. Haber verilmeden gelinmeyen dersler yapılmış sayılır.`;
+
 export const SCORE_LABELS: Record<string, string> = {
   conditioning: "Kondisyon",
   punch: "Yumruk",

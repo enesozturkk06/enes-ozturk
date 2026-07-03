@@ -21,6 +21,7 @@ function mapStudent(row: any): Student {
     notes: row.notes ?? undefined, isActive: row.is_active ?? true,
     weight: row.weight ?? undefined, age: row.age ?? undefined, createdAt: row.created_at ?? "",
     avatarUrl: row.avatar_url ?? undefined,
+    rulesAccepted: row.rules_accepted ?? false,
   };
 }
 

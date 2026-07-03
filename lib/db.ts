@@ -64,6 +64,7 @@ const ms = (r: any): Student => ({
   gymId: r.gym_id ?? undefined,
   gymShareOverrideType: r.gym_share_override_type ?? undefined,
   gymShareOverrideValue: r.gym_share_override_value != null ? Number(r.gym_share_override_value) : undefined,
+  rulesAccepted: r.rules_accepted ?? false,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -181,6 +182,7 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.gymId                  !== undefined) r.gym_id                    = s.gymId || null;
   if (s.gymShareOverrideType   !== undefined) r.gym_share_override_type   = s.gymShareOverrideType || null;
   if (s.gymShareOverrideValue  !== undefined) r.gym_share_override_value  = s.gymShareOverrideValue ?? null;
+  if (s.rulesAccepted          !== undefined) r.rules_accepted            = s.rulesAccepted;
   return r;
 }
 

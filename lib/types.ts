@@ -35,6 +35,8 @@ export interface Student {
   /** Öğrenciye özel anlaşma — tanımlıysa salonun varsayılan anlaşmasını ezer */
   gymShareOverrideType?: GymShareType | null;
   gymShareOverrideValue?: number | null;
+  /** Ders bilgilendirme kartını (süre, iptal kuralı vb.) onayladı mı — default: false */
+  rulesAccepted?: boolean;
 }
 
 /* ── Salon Gelir Paylaşımı ────────────────────────────────────────── */

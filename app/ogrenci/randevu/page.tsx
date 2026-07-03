@@ -6,7 +6,7 @@ import { useAuth } from "@/app/providers";
 import {
   getTimeSlots, getStudentAppointments, createAppointment,
   cancelAppointment, getDuetPartner, getPendingInvites, respondToInvite,
-  joinWaitlist, leaveWaitlist, getStudentWaitlist,
+  joinWaitlist, leaveWaitlist, getStudentWaitlist, updateStudent,
 } from "@/lib/db";
 import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry } from "@/lib/types";
 import { PageHeader } from "@/app/components/ui";
@@ -19,6 +19,7 @@ import {
 import { format, addDays, parseISO, differenceInHours, isFuture } from "date-fns";
 import { tr } from "date-fns/locale";
 import PackageExpiryBanner from "@/app/components/shared/PackageExpiryBanner";
+import LessonRulesCard from "@/app/components/shared/LessonRulesCard";
 
 const V = "#8B5CF6";
 
@@ -69,8 +70,9 @@ function InfoRow({ label, val }: { label: string; val: string }) {
    ANA BILEŞEN
    ═══════════════════════════════════════════════════════════════ */
 export default function RandevuPage() {
-  const { student } = useAuth();
+  const { student, setStudent } = useAuth();
   const packageExpired = isPackageExpired(student?.packageEndDate);
+  const rulesAccepted = !!student?.rulesAccepted;
 
   const [selectedDate, setSelectedDate]     = useState(format(new Date(), "yyyy-MM-dd"));
   const [slots, setSlots]                   = useState<TimeSlot[]>([]);
@@ -138,6 +140,16 @@ export default function RandevuPage() {
     }
   };
 
+  const handleAcceptRules = async () => {
+    if (!student) return;
+    try {
+      const updated = await updateStudent(student.id, { rulesAccepted: true });
+      setStudent(updated);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Onay kaydedilemedi, lütfen tekrar deneyin.");
+    }
+  };
+
   const handleSlotClick = (slot: TimeSlot) => { setBookError(""); setSelectedSlot(slot); setConfirmOpen(true); };
 
   const confirmBook = async () => {
@@ -151,6 +163,7 @@ export default function RandevuPage() {
       return;
     }
 
+    if (!rulesAccepted) { setBookError("Randevu oluşturmadan önce ders bilgilendirmesini onaylamanız gerekir."); return; }
     if (packageExpired) { setBookError("Paket süreniz dolduğu için randevu oluşturamazsınız."); return; }
     if (student.remainingLessons <= 0) { setBookError("Paketinizde ders kalmadı."); return; }
     if (lessonType === "duet" && !partner) {
@@ -217,6 +230,9 @@ export default function RandevuPage() {
     // w-full + max-w-full → hiçbir zaman parent'ı aşmaz
     <div className="w-full max-w-5xl mx-auto" style={{ minWidth: 0 }}>
       <PageHeader title="Randevu Al" subtitle="Ders tipini seç, saat seç, randevu oluştur" accent="Özel Ders" />
+
+      {/* Ders bilgilendirmesi — onaylanmadıysa tam kart, onaylandıysa kısa hatırlatma */}
+      <LessonRulesCard accepted={rulesAccepted} onAccept={handleAcceptRules} />
 
       {/* Paket süresi uyarısı */}
       <PackageExpiryBanner endDate={student?.packageEndDate} />
@@ -680,7 +696,7 @@ export default function RandevuPage() {
                     style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
                     Vazgeç
                   </button>
-                  <button onClick={confirmBook} disabled={saving || packageExpired}
+                  <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
                     className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50"
                     style={{ background: "linear-gradient(135deg,#8B5CF6,#A855F7)", fontFamily: "var(--font-barlow-condensed)" }}>
                     {saving ? "Oluşturuluyor..." : "Onayla"}
