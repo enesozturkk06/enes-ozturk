@@ -50,8 +50,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         className="lg:ml-64 min-h-[100dvh] overflow-x-hidden"
       >
         <div
-          className="lg:pt-0 lg:p-8 p-4 pb-32 lg:pb-8 overflow-x-hidden"
-          style={{ paddingTop: "var(--content-pt-mobile, 72px)" }}
+          className="lg:pt-0 lg:p-8 p-4 overflow-x-hidden"
+          style={{
+            paddingTop:    "var(--content-pt-mobile, 72px)",
+            paddingBottom: "var(--content-pb-mobile, 128px)",
+          }}
         >
           {children}
         </div>

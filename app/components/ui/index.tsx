@@ -233,7 +233,7 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = "max-
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
@@ -255,9 +255,10 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = "max-
         <div className="flex-1 overflow-y-auto overscroll-contain p-5" style={{ WebkitOverflowScrolling: "touch" }}>
           {children}
         </div>
-        {/* Sabit alt buton alanı */}
+        {/* Sabit alt buton alanı — safe-area altında hiçbir zaman kırpılmaz */}
         {footer && (
-          <div className="flex-shrink-0 border-t border-white/8 px-5 py-4" style={{ background: "rgba(24,24,27,0.98)" }}>
+          <div className="flex-shrink-0 border-t border-white/8 px-5 pt-4"
+            style={{ background: "rgba(24,24,27,0.98)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}>
             {footer}
           </div>
         )}

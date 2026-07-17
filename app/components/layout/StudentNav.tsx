@@ -160,11 +160,10 @@ export default function StudentNav() {
         </div>
       )}
 
-      {/* Mobile bottom navigation — premium floating glassmorphism */}
+      {/* Mobile bottom navigation — ekrana tam birleşik (Instagram/Spotify tarzı) */}
       <div
         className="lg:hidden fixed bottom-0 left-0 right-0 z-[46]"
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
           // Android Chrome'da fixed + backdrop-blur kombinasyonu kaydırma sırasında
           // hatalı çiziliyor (kartlar üst üste biniyor gibi görünüyor) — kendi GPU
           // katmanına zorlayıp bu render hatasını önlüyoruz.
@@ -175,24 +174,31 @@ export default function StudentNav() {
         }}
       >
         <motion.div
-          className="mx-4"
           initial={{ y: 90, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.12 }}
         >
-          {/* Glass card */}
+          {/* Glass bar — ekranın tam kenarına yapışık, sadece üst köşeler yuvarlak */}
           <div
-            className="rounded-2xl relative overflow-visible"
+            className="relative"
             style={{
-              background: "rgba(8,5,20,0.92)",
+              background: "rgba(8,5,20,0.96)",
               backdropFilter: "blur(28px)",
               WebkitBackdropFilter: "blur(28px)",
-              border: "1px solid rgba(139,92,246,0.20)",
+              borderTop: "1px solid rgba(139,92,246,0.20)",
+              borderTopLeftRadius: 22,
+              borderTopRightRadius: 22,
               boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 40px rgba(0,0,0,0.70), 0 0 0 1px rgba(139,92,246,0.06), 0 -2px 20px rgba(139,92,246,0.06)",
+                "inset 0 1px 0 rgba(255,255,255,0.05), 0 -8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(139,92,246,0.06)",
+              // Bar'ın gerçek yüksekliği: sabit içerik + safe-area — hiçbir öğe bu kutunun dışına taşmaz
+              paddingBottom: "env(safe-area-inset-bottom, 0px)",
             }}
           >
-            <div className="flex items-center px-1" style={{ height: "62px" }}>
+            {/* Üst neon şerit */}
+            <div className="absolute top-0 left-3 right-3 h-px"
+              style={{ background: "linear-gradient(90deg,transparent,rgba(139,92,246,0.5),rgba(217,70,239,0.4),transparent)" }} />
+
+            <div className="flex items-center px-1" style={{ height: "var(--bottom-nav-h, 64px)" }}>
 
               {/* Ana Sayfa */}
               <Link
@@ -261,35 +267,34 @@ export default function StudentNav() {
                 )}
               </Link>
 
-              {/* CENTER: Kedi AI — elevated, %20 bigger, neon ring */}
-              <div className="flex-1 flex justify-center items-center">
+              {/* CENTER: Kedi AI — bar'ın bir parçası, hiçbir zaman dışına taşmaz */}
+              <div className="flex-1 flex justify-center items-center h-full">
                 <button
                   onClick={() => window.dispatchEvent(new Event("kedi-open"))}
                   aria-label="Kedi AI"
                   className="relative flex items-center justify-center transition-all duration-200 active:scale-90"
                   style={{
-                    width: 62,
-                    height: 62,
+                    width: 46,
+                    height: 46,
                     borderRadius: "50%",
                     background: "linear-gradient(145deg, #5B21B6 0%, #7C3AED 50%, #9333EA 100%)",
                     boxShadow:
-                      "0 0 0 2.5px rgba(139,92,246,0.55), 0 0 0 7px rgba(139,92,246,0.10), 0 0 30px rgba(139,92,246,0.65), 0 6px 24px rgba(0,0,0,0.55)",
-                    transform: "translateY(-22px)",
+                      "0 0 0 2px rgba(139,92,246,0.55), 0 0 0 5px rgba(139,92,246,0.10), 0 0 20px rgba(139,92,246,0.55)",
                   }}
                 >
                   {/* Beyaz daire arka plan — kedi logosu kontrast için */}
                   <div
                     className="absolute rounded-full flex items-center justify-center"
                     style={{
-                      width: 44,
-                      height: 44,
+                      width: 34,
+                      height: 34,
                       background: "rgba(255,255,255,0.95)",
                       boxShadow: "inset 0 0 0 1px rgba(139,92,246,0.18)",
                     }}
                   >
-                    <CatIcon size={32} />
+                    <CatIcon size={24} />
                   </div>
-                  {/* Pulsing neon ring */}
+                  {/* Pulsing neon ring — kutunun içinde kalır */}
                   <span
                     className="absolute inset-0 rounded-full animate-ping"
                     style={{ background: "rgba(139,92,246,0.22)", animationDuration: "2.8s" }}

@@ -656,18 +656,18 @@ export default function RandevuPage() {
       <AnimatePresence>
         {confirmOpen && selectedSlot && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
             onClick={e => e.target === e.currentTarget && setConfirmOpen(false)}>
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
               onClick={() => setConfirmOpen(false)} />
-            {/* Mobilde bottom sheet, desktop'ta orta */}
+            {/* Mobilde bottom sheet, desktop'ta orta — küçük ekranlarda kayabilir, butonlar her zaman safe-area üstünde */}
             <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
-              className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden"
-              style={{ background: "rgba(15,15,22,0.99)", border: "1px solid rgba(139,92,246,0.3)" }}
+              className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col"
+              style={{ background: "rgba(15,15,22,0.99)", border: "1px solid rgba(139,92,246,0.3)", maxHeight: "85dvh" }}
               onClick={e => e.stopPropagation()}>
               <div className="absolute top-0 left-0 right-0 h-px"
                 style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
-              <div className="p-5">
+              <div className="p-5 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
                 <h3 className="text-xl text-white tracking-wider mb-4" style={{ fontFamily: "var(--font-bebas)" }}>
                   RANDEVU ONAYLA
                 </h3>
@@ -712,7 +712,7 @@ export default function RandevuPage() {
       <AnimatePresence>
         {successOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} />
             <motion.div initial={{ scale: 0.9, y: 16 }} animate={{ scale: 1, y: 0 }}
               className="relative z-10 w-full max-w-sm rounded-2xl overflow-hidden text-center"
@@ -754,7 +754,7 @@ export default function RandevuPage() {
       <AnimatePresence>
         {cancelId && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
               onClick={() => setCancelId(null)} />
             <motion.div initial={{ scale: 0.95, y: 12 }} animate={{ scale: 1, y: 0 }}
@@ -788,7 +788,7 @@ export default function RandevuPage() {
 
       {/* ══ 18 SAAT ENGEL MODALI ════════════════════════════════ */}
       {cancelBlocked && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           style={{ background:"rgba(0,0,0,0.75)", backdropFilter:"blur(8px)" }}>
           <div className="w-full max-w-sm rounded-2xl overflow-hidden"
             style={{ background:"rgba(15,15,22,0.99)", border:"1px solid rgba(217,119,6,0.35)" }}>

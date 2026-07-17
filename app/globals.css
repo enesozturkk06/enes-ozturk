@@ -34,7 +34,7 @@
 
 /* ── KARA AI Panel — responsive konumlama ──────────────────── */
 .kara-panel {
-  bottom:       calc(env(safe-area-inset-bottom, 0px) + 82px);
+  bottom:       calc(var(--bottom-nav-total-h, calc(env(safe-area-inset-bottom, 0px) + 64px)) + 16px);
   right:        8px;
   left:         8px;
   height:       70dvh;      /* flex-1 için kesin yükseklik gerekli */
@@ -201,6 +201,21 @@ html {
   --mobile-header-h: calc(56px + var(--safe-top));
   /* İçerik padding-top mobil için */
   --content-pt-mobile: calc(var(--mobile-header-h) + 16px);
+
+  /* Mobil alt navigasyon — ekrana tam birleşik, tek kaynak yükseklik.
+     Bar'ın kendisi ve tüm sayfaların padding-bottom'u buradan türetilir,
+     böylece Kedi AI butonu dahil hiçbir öğe içeriğin üstüne taşmaz. */
+  --bottom-nav-h: 64px;
+  --bottom-nav-total-h: calc(var(--safe-bottom) + var(--bottom-nav-h));
+  /* İçerik padding-bottom mobil için — bar + nefes payı */
+  --content-pb-mobile: calc(var(--bottom-nav-total-h) + 20px);
+}
+
+/* lg ve üzeri: alt navigasyon yok (sidebar var) — normal padding yeterli */
+@media (min-width: 1024px) {
+  :root {
+    --content-pb-mobile: 32px;
+  }
 }
 
 body {
