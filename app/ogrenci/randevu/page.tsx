@@ -660,54 +660,69 @@ export default function RandevuPage() {
             onClick={e => e.target === e.currentTarget && setConfirmOpen(false)}>
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
               onClick={() => setConfirmOpen(false)} />
-            {/* Mobilde bottom sheet, desktop'ta orta. 100dvh'a göre yükseklik sınırlı,
-                içerik kayabilir; CTA'lar ayrı, hep görünür bir footer'da — asla scroll ile kaybolmaz. */}
+            {/* Mobilde tam ekran mobil-first sheet: 100dvh tabanlı, kendi içinde kaydırılabilir.
+                CTA footer'ı, kaydırılan alanın İÇİNDE position:sticky ile alta yapışık —
+                içerik ne kadar uzasa da buton hep ekranda, yatay çevirmeye gerek yok. */}
             <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
-              className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col"
-              style={{ background: "rgba(15,15,22,0.99)", border: "1px solid rgba(139,92,246,0.3)", maxHeight: "85dvh" }}
+              className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl flex flex-col"
+              style={{
+                background: "rgba(15,15,22,0.99)",
+                border: "1px solid rgba(139,92,246,0.3)",
+                maxHeight: "calc(100dvh - 32px)",
+              }}
               onClick={e => e.stopPropagation()}>
               <div className="absolute top-0 left-0 right-0 h-px"
                 style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
 
-              {/* Kaydırılabilir özet alanı */}
-              <div className="p-5 pb-3 overflow-y-auto" style={{ flex: "1 1 auto", minHeight: 0 }}>
-                <h3 className="text-lg text-white tracking-wider mb-3" style={{ fontFamily: "var(--font-bebas)" }}>
-                  RANDEVU ONAYLA
-                </h3>
-                <div className="space-y-0 mb-3">
-                  <InfoRow label="Tarih" val={format(parseISO(selectedDate), "dd MMM yyyy (EEE)", { locale: tr })} />
-                  <InfoRow label="Saat" val={`${selectedSlot.startTime} – ${selectedSlot.endTime}`} />
-                  <InfoRow label="Tip" val={lessonType === "bireysel" ? "Bireysel" : lessonType === "duet" ? "Düet" : "Grup"} />
-                  {student && <InfoRow label="Öğrenci" val={`${student.fullName} (${student.remainingLessons} ders)`} />}
-                  {lessonType === "duet" && partner && (
-                    <InfoRow label="Davet" val={`${partner.fullName} (${partner.remainingLessons} ders)`} />
-                  )}
-                  <InfoRow label="Antrenör" val={TRAINER_NAME} />
-                </div>
-                {bookError && (
-                  <div className="p-3 rounded-xl mb-2 text-xs text-red-400"
-                    style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
-                    ⚠️ {bookError}
+              {/* Tek kaydırma alanı — özet + CTA footer birlikte, footer alta yapışık kalır */}
+              <div className="overflow-y-auto rounded-t-2xl sm:rounded-2xl" style={{ flex: "1 1 auto", minHeight: 0 }}>
+                <div className="p-5 pb-3">
+                  <h3 className="text-lg text-white tracking-wider mb-3" style={{ fontFamily: "var(--font-bebas)" }}>
+                    RANDEVU ONAYLA
+                  </h3>
+                  <div className="space-y-0 mb-3">
+                    <InfoRow label="Tarih" val={format(parseISO(selectedDate), "dd MMM yyyy (EEE)", { locale: tr })} />
+                    <InfoRow label="Saat" val={`${selectedSlot.startTime} – ${selectedSlot.endTime}`} />
+                    <InfoRow label="Tip" val={lessonType === "bireysel" ? "Bireysel" : lessonType === "duet" ? "Düet" : "Grup"} />
+                    {student && <InfoRow label="Öğrenci" val={`${student.fullName} (${student.remainingLessons} ders)`} />}
+                    {lessonType === "duet" && partner && (
+                      <InfoRow label="Davet" val={`${partner.fullName} (${partner.remainingLessons} ders)`} />
+                    )}
+                    <InfoRow label="Antrenör" val={TRAINER_NAME} />
                   </div>
-                )}
-                <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
-                  Ders, antrenör tamamla butonuna basınca düşer. {CANCEL_LIMIT_HOURS} saat içinde iptal edemezsiniz.
-                </p>
-              </div>
+                  {bookError && (
+                    <div className="p-3 rounded-xl mb-2 text-xs text-red-400"
+                      style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+                      ⚠️ {bookError}
+                    </div>
+                  )}
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    Ders, antrenör tamamla butonuna basınca düşer. {CANCEL_LIMIT_HOURS} saat içinde iptal edemezsiniz.
+                  </p>
+                </div>
 
-              {/* Sabit CTA footer — scroll'dan bağımsız, alt navigasyonun asla altında kalmaz */}
-              <div className="modal-sheet-footer-pb px-5 pt-3 flex-shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => setConfirmOpen(false)}
-                    className="py-3 rounded-xl text-xs font-semibold uppercase"
-                    style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
-                    Vazgeç
-                  </button>
-                  <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
-                    className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50"
-                    style={{ background: "linear-gradient(135deg,#8B5CF6,#A855F7)", fontFamily: "var(--font-barlow-condensed)" }}>
-                    {saving ? "Oluşturuluyor..." : "Onayla"}
-                  </button>
+                {/* CTA footer — scroll konteynerinin içinde, alta yapışık (position:sticky) */}
+                <div
+                  className="modal-sheet-footer-pb px-5 pt-3"
+                  style={{
+                    position: "sticky",
+                    bottom: 0,
+                    background: "rgba(15,15,22,0.99)",
+                    borderTop: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setConfirmOpen(false)}
+                      className="py-3 rounded-xl text-xs font-semibold uppercase"
+                      style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                      Vazgeç
+                    </button>
+                    <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
+                      className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50"
+                      style={{ background: "linear-gradient(135deg,#8B5CF6,#A855F7)", fontFamily: "var(--font-barlow-condensed)" }}>
+                      {saving ? "Oluşturuluyor..." : "Randevuyu Onayla"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>

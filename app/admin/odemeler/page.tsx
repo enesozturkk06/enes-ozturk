@@ -1,45 +1,46 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   getStudents, getPayments, addPayment, deletePayment, updatePayment,
-  getGyms, getGymReports, getFinanceSummary, getIncomeMovements, updateIncomeMovement,
+  getGyms, getGymReports, getIncomeMovements, updateIncomeMovement, getAppointments,
   type GymReport,
 } from "@/lib/db";
-import type { Student, Payment, PaymentRecordStatus, Gym, IncomeMovement, IncomeMovementType } from "@/lib/types";
+import type { Student, Payment, PaymentRecordStatus, Gym, IncomeMovement, Appointment } from "@/lib/types";
 import { LESSON_PRICES } from "@/lib/constants";
 import {
-  Plus, Trash2, ChevronDown, ChevronUp, TrendingUp,
-  AlertTriangle, CreditCard, X, Check, Edit2, Clock, Building2, Wallet, Receipt,
+  Plus, Trash2, ChevronDown, ChevronUp, X, Check, Edit2, Clock, CreditCard,
 } from "lucide-react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
-import { format, parseISO, subMonths } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
+import {
+  type TimeRange, getRangeBounds, computeKpis, buildRevenueSeries, buildSparkline,
+  buildPendingAccrualSparkline, buildActiveStudentGrowthSparkline, computeFinanceSnapshots,
+  rankTopPayingStudents, computePaymentStatusBreakdown, computeGymPerformance,
+  computeBottomStats, generateAiInsights,
+} from "@/lib/financeCenter";
+import { STATUS_CFG, StatusBadge } from "@/app/components/finance/StatusBadge";
+import FinanceKpiCard from "@/app/components/finance/FinanceKpiCard";
+import FinanceTimeFilter from "@/app/components/finance/FinanceTimeFilter";
+import RevenueAreaChart from "@/app/components/finance/RevenueAreaChart";
+import FinanceAiCard from "@/app/components/finance/FinanceAiCard";
+import GymPerformanceCard from "@/app/components/finance/GymPerformanceCard";
+import FinanceSnapshotRow from "@/app/components/finance/FinanceSnapshotRow";
+import TopPayingStudentsCard from "@/app/components/finance/TopPayingStudentsCard";
+import PaymentStatusDonut from "@/app/components/finance/PaymentStatusDonut";
+import TransactionFeed, {
+  EMPTY_TRANSACTION_FILTERS, applyTransactionFilters, type TransactionFilters,
+} from "@/app/components/finance/TransactionFeed";
+import MonthlyGoalCard from "@/app/components/finance/MonthlyGoalCard";
+import FinanceQuickActions from "@/app/components/finance/FinanceQuickActions";
+import BottomStatsGrid from "@/app/components/finance/BottomStatsGrid";
+import FinanceSkeleton from "@/app/components/finance/FinanceSkeleton";
 
 /* ── Paket fiyatı hesapla ─────────────────────────────────────────── */
 function getPackagePrice(s: Student): number | null {
   if (s.subscriptionType === "monthly") return s.monthlyFee ?? null;
   if (s.customPrice && s.customPrice > 0) return s.customPrice;
   return LESSON_PRICES[s.totalLessons] ?? null;
-}
-
-/* ── Durum etiket / renk ──────────────────────────────────────────── */
-const STATUS_CFG: Record<PaymentRecordStatus, { label: string; bg: string; color: string; bar: string }> = {
-  odendi:    { label: "Ödendi",     bg: "rgba(34,197,94,0.12)",  color: "#4ADE80", bar: "#22C55E" },
-  beklemede: { label: "Beklemede",  bg: "rgba(251,191,36,0.12)", color: "#FBBF24", bar: "#F59E0B" },
-  gecikti:   { label: "Gecikti",    bg: "rgba(220,38,38,0.12)",  color: "#F87171", bar: "#DC2626" },
-};
-
-function StatusBadge({ status }: { status: PaymentRecordStatus }) {
-  const c = STATUS_CFG[status];
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider"
-      style={{ background: c.bg, color: c.color, fontFamily: "var(--font-barlow-condensed)" }}>
-      {c.label}
-    </span>
-  );
 }
 
 /* ── Ay etiketi ───────────────────────────────────────────────────── */
@@ -164,15 +165,16 @@ export default function OdemelerPage() {
   const [gyms, setGyms]                       = useState<Gym[]>([]);
   const [gymReports, setGymReports]           = useState<GymReport[]>([]);
   const [incomeMovements, setIncomeMovements] = useState<IncomeMovement[]>([]);
-  const [financeSummary, setFinanceSummary]   = useState({ totalRevenue: 0, gymShareTotal: 0, netEarnings: 0 });
+  const [appointments, setAppointments]       = useState<Appointment[]>([]);
+  const [initialLoading, setInitialLoading]   = useState(true);
 
-  /* Gelir Hareketleri filtreleri */
-  const [fltDateFrom, setFltDateFrom]   = useState("");
-  const [fltDateTo, setFltDateTo]       = useState("");
-  const [fltStudentId, setFltStudentId] = useState("");
-  const [fltGymId, setFltGymId]         = useState("");
-  const [fltType, setFltType]           = useState<IncomeMovementType | "">("");
-  const [fltStatus, setFltStatus]       = useState<PaymentRecordStatus | "">("");
+  /* Zaman filtresi + gelir grafiği granularity */
+  const [timeRange, setTimeRange] = useState<TimeRange>("month");
+  const [customRange, setCustomRange] = useState({ from: "", to: "" });
+  const [granularity, setGranularity] = useState<"day" | "week" | "month">("day");
+
+  /* Gelir Hareketleri (Son Finans Hareketleri) filtreleri */
+  const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>(EMPTY_TRANSACTION_FILTERS);
   const [editingShareId, setEditingShareId] = useState<string | null>(null);
   const [editingShareValue, setEditingShareValue] = useState("");
 
@@ -202,29 +204,30 @@ export default function OdemelerPage() {
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
-    const [s, p, g, gr, fs, im] = await Promise.all([
+    const [s, p, g, gr, im, ap] = await Promise.all([
       getStudents(), getPayments(),
       getGyms().catch(() => []),
       getGymReports().catch(() => []),
-      getFinanceSummary().catch(() => ({ totalRevenue: 0, gymShareTotal: 0, netEarnings: 0 })),
       getIncomeMovements().catch(() => []),
+      getAppointments().catch(() => []),
     ]);
     setStudents(s);
     setPayments(p);
     setGyms(g);
     setGymReports(gr);
-    setFinanceSummary(fs);
     setIncomeMovements(im);
+    setAppointments(ap);
   }, []);
 
   useEffect(() => {
     reload().then(() => {
       const thisMonth = format(new Date(), "yyyy-MM");
       setOpenMonths(new Set([thisMonth]));
+      setInitialLoading(false);
     });
   }, [reload]);
 
-  /* Öğrenci seçilince fiyatı otomatik doldur */
+  /* ── Öğrenci seçilince fiyatı otomatik doldur ─────────────────────── */
   const handleStudentChange = (id: string) => {
     setSelStudent(id);
     const s = students.find(x => x.id === id);
@@ -233,51 +236,46 @@ export default function OdemelerPage() {
     if (price) setAmount(String(price));
   };
 
-  /* ── İstatistikler (sadece odendi) ──────────────────────────────── */
-  const thisMonthKey    = format(new Date(), "yyyy-MM");
-  const paidOnly        = payments.filter(p => p.status === "odendi");
-  const pendingOnly     = payments.filter(p => p.status === "beklemede" || p.status === "gecikti");
-  const totalCollected  = paidOnly.reduce((s, p) => s + p.amount, 0);
-  const thisMonthTotal  = paidOnly.filter(p => p.paidAt.startsWith(thisMonthKey)).reduce((s, p) => s + p.amount, 0);
-  const totalPending    = pendingOnly.reduce((s, p) => s + p.amount, 0);
-  const pendingCount    = new Set(pendingOnly.map(p => p.studentId)).size;
+  /* ══════════════════════════════════════════════════════════════════
+     TÜRETİLMİŞ FİNANS VERİLERİ — lib/financeCenter.ts (client-side, salt okunur)
+     ══════════════════════════════════════════════════════════════════ */
+  const kpis = useMemo(
+    () => computeKpis(incomeMovements, payments, students, timeRange, customRange),
+    [incomeMovements, payments, students, timeRange, customRange],
+  );
 
-  /* Salonlara ödenecek tutar — tüm zamanlar, tüm salonların payı toplamı */
-  const totalOwedToGyms = gymReports.reduce((s, r) => s + r.gymShareTotal, 0);
+  const revenueSeries = useMemo(() => {
+    const b = getRangeBounds(timeRange, customRange);
+    return buildRevenueSeries(incomeMovements, b.from, b.to, granularity);
+  }, [incomeMovements, timeRange, customRange, granularity]);
 
-  /* ── Gelir Hareketleri — filtreler uygulanmış ───────────────────── */
-  const filteredMovements = incomeMovements.filter(m => {
-    if (fltDateFrom && m.paymentDate < fltDateFrom) return false;
-    if (fltDateTo && m.paymentDate > fltDateTo) return false;
-    if (fltStudentId && m.studentId !== fltStudentId) return false;
-    if (fltGymId && m.gymId !== fltGymId) return false;
-    if (fltType && m.paymentType !== fltType) return false;
-    if (fltStatus && m.status !== fltStatus) return false;
-    return true;
-  }).sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
+  const revenueSparkline = useMemo(() => buildSparkline(incomeMovements, 14, "paymentAmount"), [incomeMovements]);
+  const netSparkline     = useMemo(() => buildSparkline(incomeMovements, 14, "trainerNetAmount"), [incomeMovements]);
+  const gymShareSparkline = useMemo(() => buildSparkline(incomeMovements, 14, "gymShareAmount"), [incomeMovements]);
+  const pendingSparkline  = useMemo(() => buildPendingAccrualSparkline(payments, 14), [payments]);
+  const studentGrowthSparkline = useMemo(() => buildActiveStudentGrowthSparkline(students, 14), [students]);
 
-  const MOVEMENT_TYPE_LABELS: Record<IncomeMovementType, string> = {
-    yeni_paket: "Yeni Paket", paket_yenileme: "Paket Yenileme",
-    ek_odeme: "Ek Ödeme", ders_tamamlama: "Ders Tamamlama",
-  };
+  const aiInsights = useMemo(
+    () => generateAiInsights(incomeMovements, appointments, gymReports),
+    [incomeMovements, appointments, gymReports],
+  );
 
-  const handleSaveShare = async (m: IncomeMovement) => {
-    const value = Number(editingShareValue);
-    if (isNaN(value)) return;
-    await updateIncomeMovement(m.id, { gymShareAmount: value, trainerNetAmount: m.paymentAmount - value });
-    await reload();
-    setEditingShareId(null);
-  };
+  const gymPerformance = useMemo(() => computeGymPerformance(gymReports), [gymReports]);
+  const snapshots = useMemo(() => computeFinanceSnapshots(incomeMovements, appointments), [incomeMovements, appointments]);
 
-  /* ── Son 6 ay bar grafik (sadece odendi) ─────────────────────────── */
-  const barData = Array.from({ length: 6 }, (_, i) => {
-    const d   = subMonths(new Date(), 5 - i);
-    const key = format(d, "yyyy-MM");
-    const total = paidOnly.filter(p => p.paidAt.startsWith(key)).reduce((s, p) => s + p.amount, 0);
-    return { ay: format(d, "MMM", { locale: tr }), gelir: total, key };
-  });
+  const topStudents = useMemo(() => {
+    const ranked = rankTopPayingStudents(incomeMovements, appointments, 5);
+    const byId = new Map(students.map(s => [s.id, s]));
+    return ranked.map(r => ({ ...r, avatarUrl: byId.get(r.studentId)?.avatarUrl }));
+  }, [incomeMovements, appointments, students]);
 
-  /* ── Aylık gruplar (odendi) ──────────────────────────────────────── */
+  const paymentStatusSlices = useMemo(() => computePaymentStatusBreakdown(students), [students]);
+  const bottomStats = useMemo(() => computeBottomStats(appointments, incomeMovements, gymReports), [appointments, incomeMovements, gymReports]);
+  const filteredMovements = useMemo(() => applyTransactionFilters(incomeMovements, transactionFilters), [incomeMovements, transactionFilters]);
+
+  /* ── Aylık gruplar (odendi) — Payment kayıtları için Ekle/Düzenle/Sil ── */
+  const thisMonthKey = format(new Date(), "yyyy-MM");
+  const pendingOnly  = payments.filter(p => p.status === "beklemede" || p.status === "gecikti");
   const byMonth      = groupByMonth(payments);
   const sortedMonths = Object.keys(byMonth).sort().reverse();
 
@@ -287,6 +285,14 @@ export default function OdemelerPage() {
       n.has(m) ? n.delete(m) : n.add(m);
       return n;
     });
+  };
+
+  const handleSaveShare = async (m: IncomeMovement) => {
+    const value = Number(editingShareValue);
+    if (isNaN(value)) return;
+    await updateIncomeMovement(m.id, { gymShareAmount: value, trainerNetAmount: m.paymentAmount - value });
+    await reload();
+    setEditingShareId(null);
   };
 
   /* ── Ödeme ekle ──────────────────────────────────────────────────── */
@@ -349,10 +355,10 @@ export default function OdemelerPage() {
 
   /* ── Render ──────────────────────────────────────────────────────── */
   return (
-    <div className="max-w-5xl mx-auto space-y-5 pb-20">
+    <div className="max-w-6xl mx-auto space-y-5 pb-20">
 
-      {/* Başlık */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Başlık + Hızlı İşlemler */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <span className="w-8 h-px bg-crimson" />
@@ -372,11 +378,7 @@ export default function OdemelerPage() {
               </motion.div>
             )}
           </AnimatePresence>
-          <button onClick={openAdd}
-            className="flex items-center gap-2 bg-crimson hover:bg-crimson-bright text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all hover:shadow-[0_0_20px_rgba(220,38,38,0.4)]"
-            style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            <Plus size={14} /> Ödeme Ekle
-          </button>
+          <FinanceQuickActions onAddPayment={openAdd} movements={filteredMovements} kpis={kpis} />
         </div>
       </div>
 
@@ -384,7 +386,7 @@ export default function OdemelerPage() {
       <AnimatePresence>
         {addOpen && (
           <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className="bg-carbon border border-crimson/30 relative">
+            className="bg-carbon border border-crimson/30 relative rounded-xl overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
             <div className="p-4 sm:p-5">
               <div className="flex items-center justify-between mb-4">
@@ -490,273 +492,174 @@ export default function OdemelerPage() {
         )}
       </AnimatePresence>
 
-      {/* ── STAT KARTLAR ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {[
-          { label: `${format(new Date(), "MMMM", { locale: tr })} Toplam Ciro`, value: `₺${financeSummary.totalRevenue.toLocaleString("tr-TR")}`, sub: "Bu ayki tüm tahsilat", color: "#FBBF24", icon: <TrendingUp size={16} /> },
-          { label: "Bu Ay Salon Payı",   value: `₺${financeSummary.gymShareTotal.toLocaleString("tr-TR")}`, sub: "Salonlara düşen pay", color: "#A855F7", icon: <Building2 size={16} /> },
-          { label: "Bu Ay Net Kazanç",   value: `₺${financeSummary.netEarnings.toLocaleString("tr-TR")}`,  sub: "Salon payı düşülmüş", color: "#4ADE80", icon: <Wallet size={16} /> },
-          { label: "Bekleyen Öğrenci Borçları", value: `₺${totalPending.toLocaleString("tr-TR")}`, sub: `${pendingCount} öğrenci`, color: "#F87171", icon: <Clock size={16} /> },
-          { label: "Alınan Ödemeler",    value: `₺${totalCollected.toLocaleString("tr-TR")}`, sub: "Tüm zamanlar — ödendi", color: "#60A5FA", icon: <CreditCard size={16} /> },
-          { label: "Salonlara Ödenecek Tutar", value: `₺${totalOwedToGyms.toLocaleString("tr-TR")}`, sub: "Tüm zamanlar — toplam pay", color: "#F472B6", icon: <Receipt size={16} /> },
-        ].map(s => (
-          <div key={s.label} className="bg-carbon border border-white/6 p-4">
-            <div className="flex items-start justify-between mb-2">
-              <span className="text-[10px] text-white/30 tracking-widest uppercase leading-tight" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.label}</span>
-              <span style={{ color: s.color }}>{s.icon}</span>
-            </div>
-            <div className="text-2xl font-display" style={{ fontFamily: "var(--font-bebas)", color: s.color }}>{s.value}</div>
-            <div className="text-[10px] text-white/25 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.sub}</div>
-          </div>
-        ))}
-      </div>
+      {initialLoading ? (
+        <FinanceSkeleton />
+      ) : (
+        <>
+          {/* ── ZAMAN FİLTRESİ ────────────────────────────────────── */}
+          <FinanceTimeFilter range={timeRange} onRangeChange={setTimeRange} custom={customRange} onCustomChange={setCustomRange} />
 
-      {/* ── SALON BAZLI RAPOR ────────────────────────────────────── */}
-      {gymReports.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 px-1 pb-2">
-            <Building2 size={13} style={{ color: "#A855F7" }} />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
-              Salon Bazlı Rapor
-            </span>
-            <div className="h-px flex-1 bg-white/5" />
+          {/* ── KPI KARTLARI ──────────────────────────────────────── */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <FinanceKpiCard index={0} label="Toplam Ciro" value={`₺${kpis.totalRevenue.value.toLocaleString("tr-TR")}`}
+              sub="Seçilen dönem" deltaLabel={kpis.totalRevenue.deltaLabel} deltaPositive={kpis.totalRevenue.deltaPositive}
+              icon={<CreditCard size={16} />} color="#FBBF24" sparkline={revenueSparkline} />
+            <FinanceKpiCard index={1} label="Net Kazanç" value={`₺${kpis.netEarnings.value.toLocaleString("tr-TR")}`}
+              sub="Salon payı düşülmüş" deltaLabel={kpis.netEarnings.deltaLabel} deltaPositive={kpis.netEarnings.deltaPositive}
+              icon={<Check size={16} />} color="#4ADE80" sparkline={netSparkline} />
+            <FinanceKpiCard index={2} label="Salonlara Ödenecek" value={`₺${kpis.owedToGyms.value.toLocaleString("tr-TR")}`}
+              sub="Tüm zamanlar" deltaLabel={kpis.owedToGyms.deltaLabel} deltaPositive={kpis.owedToGyms.deltaPositive}
+              icon={<Clock size={16} />} color="#A855F7" sparkline={gymShareSparkline} />
+            <FinanceKpiCard index={3} label="Bekleyen Tahsilatlar" value={`₺${kpis.pendingCollections.value.toLocaleString("tr-TR")}`}
+              sub="Tüm zamanlar" deltaLabel={kpis.pendingCollections.deltaLabel} deltaPositive={kpis.pendingCollections.deltaPositive}
+              icon={<Clock size={16} />} color="#F87171" sparkline={pendingSparkline} />
+            <FinanceKpiCard index={4} label="Aktif Öğrenci" value={String(kpis.activeStudents.value)}
+              sub="Şu an aktif" deltaLabel={kpis.activeStudents.deltaLabel} deltaPositive={kpis.activeStudents.deltaPositive}
+              icon={<Plus size={16} />} color="#60A5FA" sparkline={studentGrowthSparkline} />
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {gymReports.map(r => (
-              <div key={r.gym.id} className="bg-carbon border border-violet/15 p-4">
-                <h4 className="text-lg font-display text-white tracking-wider mb-2" style={{ fontFamily: "var(--font-bebas)" }}>{r.gym.name}</h4>
-                {r.gym.shareType === "fixed_per_lesson" ? (
-                  <div className="space-y-1.5 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                    <div className="flex justify-between"><span className="text-white/40">Toplam Ders</span><span className="text-white">{r.totalLessons}</span></div>
-                    <div className="flex justify-between"><span className="text-white/40">Ders Başı</span><span className="text-white">₺{(r.gym.fixedLessonFee ?? 0).toLocaleString("tr-TR")}</span></div>
-                    <div className="flex justify-between pt-1.5 border-t border-white/5"><span className="text-violet font-semibold">Ödenecek</span><span className="text-violet font-semibold">₺{r.gymShareTotal.toLocaleString("tr-TR")}</span></div>
-                  </div>
-                ) : r.gym.shareType === "percentage" ? (
-                  <div className="space-y-1.5 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                    <div className="flex justify-between"><span className="text-white/40">Toplam Ciro</span><span className="text-white">₺{r.totalRevenue.toLocaleString("tr-TR")}</span></div>
-                    <div className="flex justify-between"><span className="text-white/40">Salon Payı (%{r.gym.gymPercentage})</span><span className="text-white">₺{r.gymShareTotal.toLocaleString("tr-TR")}</span></div>
-                    <div className="flex justify-between pt-1.5 border-t border-white/5"><span className="text-green-400 font-semibold">Net Kazancım</span><span className="text-green-400 font-semibold">₺{r.netEarnings.toLocaleString("tr-TR")}</span></div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Salon payı yok — toplam ciro ₺{r.totalRevenue.toLocaleString("tr-TR")}</p>
-                )}
+
+          {/* ── GELİR GRAFİĞİ + KEDİ AI ANALİZ ───────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <RevenueAreaChart data={revenueSeries} granularity={granularity} onGranularityChange={setGranularity} />
+            </div>
+            <FinanceAiCard insights={aiInsights} />
+          </div>
+
+          {/* ── SALON PERFORMANSLARI ─────────────────────────────── */}
+          {gymPerformance.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 px-1 pb-2">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+                  Salon Performansları
+                </span>
+                <div className="h-px flex-1 bg-white/5" />
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── GELİR HAREKETLERİ (filtrelenebilir) ─────────────────── */}
-      <div>
-        <div className="flex items-center gap-2 px-1 pb-2">
-          <Receipt size={13} style={{ color: "#60A5FA" }} />
-          <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
-            Gelir Hareketleri
-          </span>
-          <div className="h-px flex-1 bg-white/5" />
-        </div>
-
-        {/* Filtreler */}
-        <div className="bg-carbon border border-white/6 p-3 mb-2 grid sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          <input type="date" value={fltDateFrom} onChange={e => setFltDateFrom(e.target.value)}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily: "var(--font-inter)" }} title="Başlangıç tarihi" />
-          <input type="date" value={fltDateTo} onChange={e => setFltDateTo(e.target.value)}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily: "var(--font-inter)" }} title="Bitiş tarihi" />
-          <select value={fltStudentId} onChange={e => setFltStudentId(e.target.value)}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
-            <option value="" className="bg-carbon">Tüm Öğrenciler</option>
-            {students.sort((a, b) => a.fullName.localeCompare(b.fullName)).map(s => (
-              <option key={s.id} value={s.id} className="bg-carbon">{s.fullName}</option>
-            ))}
-          </select>
-          <select value={fltGymId} onChange={e => setFltGymId(e.target.value)}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
-            <option value="" className="bg-carbon">Tüm Salonlar</option>
-            {gyms.map(g => <option key={g.id} value={g.id} className="bg-carbon">{g.name}</option>)}
-          </select>
-          <select value={fltType} onChange={e => setFltType(e.target.value as IncomeMovementType | "")}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
-            <option value="" className="bg-carbon">Tüm Türler</option>
-            <option value="yeni_paket" className="bg-carbon">Yeni Paket</option>
-            <option value="paket_yenileme" className="bg-carbon">Paket Yenileme</option>
-            <option value="ek_odeme" className="bg-carbon">Ek Ödeme</option>
-            <option value="ders_tamamlama" className="bg-carbon">Ders Tamamlama</option>
-          </select>
-          <select value={fltStatus} onChange={e => setFltStatus(e.target.value as PaymentRecordStatus | "")}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily: "var(--font-inter)" }}>
-            <option value="" className="bg-carbon">Ödenen + Borçlu</option>
-            <option value="odendi" className="bg-carbon">Sadece Ödenen</option>
-            <option value="beklemede" className="bg-carbon">Sadece Borçlu (Beklemede)</option>
-            <option value="gecikti" className="bg-carbon">Sadece Gecikmiş</option>
-          </select>
-        </div>
-
-        {filteredMovements.length === 0 ? (
-          <div className="text-center py-10 bg-carbon border border-white/6">
-            <Receipt size={28} className="text-white/10 mx-auto mb-2" />
-            <p className="text-white/25 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Filtreye uyan gelir hareketi yok</p>
-          </div>
-        ) : (
-          <div className="bg-carbon border border-white/6 overflow-x-auto">
-            <table className="w-full text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-              <thead>
-                <tr className="border-b border-white/5 text-white/30 text-[10px] uppercase tracking-widest">
-                  <th className="text-left px-3 py-2">Tarih</th>
-                  <th className="text-left px-3 py-2">Öğrenci</th>
-                  <th className="text-left px-3 py-2">Tür</th>
-                  <th className="text-left px-3 py-2">Durum</th>
-                  <th className="text-left px-3 py-2">Salon</th>
-                  <th className="text-right px-3 py-2">Tutar</th>
-                  <th className="text-right px-3 py-2">Salon Payı</th>
-                  <th className="text-right px-3 py-2">Net</th>
-                  <th className="px-2 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredMovements.slice(0, 100).map(m => (
-                  <tr key={m.id} className="border-b border-white/5 hover:bg-steel/20">
-                    <td className="px-3 py-2 text-white/40 text-xs whitespace-nowrap">{format(parseISO(m.paymentDate), "dd MMM yy", { locale: tr })}</td>
-                    <td className="px-3 py-2 text-white">{m.studentName}</td>
-                    <td className="px-3 py-2 text-white/50 text-xs">{MOVEMENT_TYPE_LABELS[m.paymentType]}</td>
-                    <td className="px-3 py-2"><StatusBadge status={m.status} /></td>
-                    <td className="px-3 py-2 text-violet text-xs">{m.gymName ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-white tabular-nums">{m.paymentAmount > 0 ? `₺${m.paymentAmount.toLocaleString("tr-TR")}` : "—"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {editingShareId === m.id ? (
-                        <div className="flex items-center gap-1 justify-end">
-                          <input type="number" value={editingShareValue} onChange={e => setEditingShareValue(e.target.value)} autoFocus
-                            className="w-20 bg-steel/60 border border-violet/40 text-white px-1.5 py-1 text-xs outline-none text-right" />
-                          <button onClick={() => handleSaveShare(m)} className="text-green-400 hover:text-green-300"><Check size={13} /></button>
-                          <button onClick={() => setEditingShareId(null)} className="text-white/30 hover:text-white"><X size={13} /></button>
-                        </div>
-                      ) : (
-                        <button onClick={() => { setEditingShareId(m.id); setEditingShareValue(String(m.gymShareAmount)); }}
-                          className="text-violet hover:underline" title="Manuel düzelt">
-                          {m.gymShareAmount > 0 ? `₺${m.gymShareAmount.toLocaleString("tr-TR")}` : "—"}
-                        </button>
-                      )}
-                    </td>
-                    <td className={`px-3 py-2 text-right tabular-nums font-semibold ${m.trainerNetAmount < 0 ? "text-red-400" : "text-green-400"}`}>
-                      ₺{m.trainerNetAmount.toLocaleString("tr-TR")}
-                    </td>
-                    <td className="px-2 py-2" />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── SON 6 AY GELİR GRAFİĞİ (sadece odendi) ──────────────── */}
-      <div className="bg-carbon border border-white/6 p-4 sm:p-5">
-        <h3 className="text-base font-display text-white tracking-wider mb-3" style={{ fontFamily: "var(--font-bebas)" }}>
-          Son 6 Aylık Gelir (Ödendi)
-        </h3>
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={barData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-            <XAxis dataKey="ay" tick={{ fill: "rgba(255,255,255,0.35)", fontSize: 11, fontFamily: "var(--font-barlow-condensed)" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "rgba(255,255,255,0.25)", fontSize: 10 }} axisLine={false} tickLine={false}
-              tickFormatter={v => v === 0 ? "" : `₺${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              contentStyle={{ background: "#121826", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 0, fontSize: 12 }}
-              labelStyle={{ color: "#fff", fontFamily: "var(--font-barlow-condensed)" }}
-              formatter={(v: unknown) => [`₺${Number(v).toLocaleString("tr-TR")}`, "Gelir"]}
-              cursor={{ fill: "rgba(220,38,38,0.06)" }}
-            />
-            <Bar dataKey="gelir" fill="#22C55E" radius={[2, 2, 0, 0]} maxBarSize={48} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* ── BEKLEYENLEr / GECİKMİŞLER ───────────────────────────── */}
-      {pendingOnly.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 px-1 pb-2">
-            <Clock size={13} style={{ color: "#FBBF24" }} />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
-              Bekleyen / Gecikmiş Ödemeler
-            </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(251,191,36,0.15)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
-              {pendingOnly.length}
-            </span>
-            <div className="h-px flex-1 bg-white/5" />
-          </div>
-          <div className="space-y-2">
-            {pendingOnly.sort((a, b) => b.paidAt.localeCompare(a.paidAt)).map(p => (
-              <PaymentCard key={p.id} p={p} onEdit={openEdit} onDelete={setDeleteId} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── AYLIK GELİR LİSTESİ (odendi) ────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <Check size={13} style={{ color: "#4ADE80" }} />
-          <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
-            Ödeme Kayıtları — Aylık Geçmiş (Ekle / Düzenle / Sil)
-          </span>
-          <div className="h-px flex-1 bg-white/5" />
-        </div>
-
-        {sortedMonths.length === 0 && (
-          <div className="text-center py-12 bg-carbon border border-white/6">
-            <CreditCard size={32} className="text-white/10 mx-auto mb-3" />
-            <p className="text-white/25 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Henüz ödeme kaydı yok</p>
-          </div>
-        )}
-
-        {sortedMonths.map(month => {
-          const monthPayments = byMonth[month].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
-          const monthTotal    = monthPayments.reduce((s, p) => s + p.amount, 0);
-          const isOpen        = openMonths.has(month);
-          const isThisMonth   = month === thisMonthKey;
-
-          return (
-            <div key={month} className={`bg-carbon border overflow-hidden transition-colors ${isThisMonth ? "border-green-500/20" : "border-white/6"}`}>
-              <button onClick={() => toggleMonth(month)}
-                className="w-full flex items-center justify-between px-4 sm:px-5 py-3.5 hover:bg-steel/20 transition-colors">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className={`text-base font-display tracking-wider ${isThisMonth ? "text-green-400" : "text-white"}`}
-                    style={{ fontFamily: "var(--font-bebas)" }}>
-                    {monthLabel(month).toUpperCase()}
-                  </div>
-                  {isThisMonth && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Bu Ay</span>
-                  )}
-                  <span className="text-[11px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                    {monthPayments.length} ödeme
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-lg font-display text-green-400" style={{ fontFamily: "var(--font-bebas)" }}>
-                    ₺{monthTotal.toLocaleString("tr-TR")}
-                  </span>
-                  {isOpen ? <ChevronUp size={15} className="text-white/30" /> : <ChevronDown size={15} className="text-white/30" />}
-                </div>
-              </button>
-
-              <AnimatePresence>
-                {isOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }}
-                    className="overflow-hidden">
-                    <div className="border-t border-white/5 p-2 sm:p-3 space-y-1.5">
-                      {monthPayments.map(p => (
-                        <PaymentCard key={p.id} p={p} onEdit={openEdit} onDelete={setDeleteId} />
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {gymPerformance.map((r, i) => <GymPerformanceCard key={r.gym.id} r={r} index={i} />)}
+              </div>
             </div>
-          );
-        })}
-      </div>
+          )}
+
+          {/* ── FİNANS ÖZETİ — Bugün / Hafta / Ay ────────────────── */}
+          <FinanceSnapshotRow snapshots={snapshots} />
+
+          {/* ── TOP ÖĞRENCİLER + ÖDEME DURUMU ────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <TopPayingStudentsCard students={topStudents} />
+            <PaymentStatusDonut slices={paymentStatusSlices} />
+          </div>
+
+          {/* ── SON FİNANS HAREKETLERİ ────────────────────────────── */}
+          <TransactionFeed
+            movements={filteredMovements}
+            students={students}
+            gyms={gyms}
+            filters={transactionFilters}
+            onFiltersChange={patch => setTransactionFilters(prev => ({ ...prev, ...patch }))}
+            editingShareId={editingShareId}
+            editingShareValue={editingShareValue}
+            onShareEditStart={m => { setEditingShareId(m.id); setEditingShareValue(String(m.gymShareAmount)); }}
+            onShareValueChange={setEditingShareValue}
+            onShareSave={handleSaveShare}
+            onShareCancel={() => setEditingShareId(null)}
+          />
+
+          {/* ── AYLIK HEDEF ───────────────────────────────────────── */}
+          <MonthlyGoalCard currentRevenue={snapshots.month.revenue} />
+
+          {/* ── BEKLEYENLER / GECİKMİŞLER (Payment kayıtları) ────── */}
+          {pendingOnly.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 px-1 pb-2">
+                <Clock size={13} style={{ color: "#FBBF24" }} />
+                <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+                  Bekleyen / Gecikmiş Ödemeler
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(251,191,36,0.15)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
+                  {pendingOnly.length}
+                </span>
+                <div className="h-px flex-1 bg-white/5" />
+              </div>
+              <div className="space-y-2">
+                {pendingOnly.sort((a, b) => b.paidAt.localeCompare(a.paidAt)).map(p => (
+                  <PaymentCard key={p.id} p={p} onEdit={openEdit} onDelete={setDeleteId} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── ÖDEME KAYITLARI — AYLIK GEÇMİŞ (Ekle/Düzenle/Sil) ── */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <Check size={13} style={{ color: "#4ADE80" }} />
+              <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+                Ödeme Kayıtları — Aylık Geçmiş (Ekle / Düzenle / Sil)
+              </span>
+              <div className="h-px flex-1 bg-white/5" />
+            </div>
+
+            {sortedMonths.length === 0 && (
+              <div className="text-center py-12 bg-carbon border border-white/6 rounded-xl">
+                <CreditCard size={32} className="text-white/10 mx-auto mb-3" />
+                <p className="text-white/25 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Henüz ödeme kaydı yok</p>
+              </div>
+            )}
+
+            {sortedMonths.map(month => {
+              const monthPayments = byMonth[month].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+              const monthTotal    = monthPayments.reduce((s, p) => s + p.amount, 0);
+              const isOpen        = openMonths.has(month);
+              const isThisMonth   = month === thisMonthKey;
+
+              return (
+                <div key={month} className={`bg-carbon border overflow-hidden transition-colors rounded-xl ${isThisMonth ? "border-green-500/20" : "border-white/6"}`}>
+                  <button onClick={() => toggleMonth(month)}
+                    className="w-full flex items-center justify-between px-4 sm:px-5 py-3.5 hover:bg-steel/20 transition-colors">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className={`text-base font-display tracking-wider ${isThisMonth ? "text-green-400" : "text-white"}`}
+                        style={{ fontFamily: "var(--font-bebas)" }}>
+                        {monthLabel(month).toUpperCase()}
+                      </div>
+                      {isThisMonth && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400"
+                          style={{ fontFamily: "var(--font-barlow-condensed)" }}>Bu Ay</span>
+                      )}
+                      <span className="text-[11px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        {monthPayments.length} ödeme
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-display text-green-400" style={{ fontFamily: "var(--font-bebas)" }}>
+                        ₺{monthTotal.toLocaleString("tr-TR")}
+                      </span>
+                      {isOpen ? <ChevronUp size={15} className="text-white/30" /> : <ChevronDown size={15} className="text-white/30" />}
+                    </div>
+                  </button>
+
+                  <AnimatePresence>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }}
+                        className="overflow-hidden">
+                        <div className="border-t border-white/5 p-2 sm:p-3 space-y-1.5">
+                          {monthPayments.map(p => (
+                            <PaymentCard key={p.id} p={p} onEdit={openEdit} onDelete={setDeleteId} />
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── İSTATİSTİKLER ─────────────────────────────────────── */}
+          <BottomStatsGrid stats={bottomStats} />
+        </>
+      )}
 
       {/* ── DÜZENLEME MODALI ──────────────────────────────────────── */}
       <AnimatePresence>
@@ -870,7 +773,7 @@ export default function OdemelerPage() {
                 </div>
               </div>
               <p className="text-sm text-white/40 mb-4" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                Bu kayıt silinecek. "Ödendi" durumundaysa öğrencinin bakiyesi düzeltilir.
+                Bu kayıt silinecek. &quot;Ödendi&quot; durumundaysa öğrencinin bakiyesi düzeltilir.
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setDeleteId(null)}
