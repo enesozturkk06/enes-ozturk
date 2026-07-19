@@ -55,7 +55,7 @@ function Card({ children, className = "", style = {} }: {
 /* ── Modal onay satırı ─────────────────────────────────────── */
 function InfoRow({ label, val }: { label: string; val: string }) {
   return (
-    <div className="flex gap-3 py-2 border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+    <div className="flex gap-3 py-1.5 border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
       <span className="text-xs flex-shrink-0" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
         {label}
       </span>
@@ -660,18 +660,21 @@ export default function RandevuPage() {
             onClick={e => e.target === e.currentTarget && setConfirmOpen(false)}>
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
               onClick={() => setConfirmOpen(false)} />
-            {/* Mobilde bottom sheet, desktop'ta orta — küçük ekranlarda kayabilir, butonlar her zaman safe-area üstünde */}
+            {/* Mobilde bottom sheet, desktop'ta orta. 100dvh'a göre yükseklik sınırlı,
+                içerik kayabilir; CTA'lar ayrı, hep görünür bir footer'da — asla scroll ile kaybolmaz. */}
             <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
               className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col"
               style={{ background: "rgba(15,15,22,0.99)", border: "1px solid rgba(139,92,246,0.3)", maxHeight: "85dvh" }}
               onClick={e => e.stopPropagation()}>
               <div className="absolute top-0 left-0 right-0 h-px"
                 style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
-              <div className="p-5 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
-                <h3 className="text-xl text-white tracking-wider mb-4" style={{ fontFamily: "var(--font-bebas)" }}>
+
+              {/* Kaydırılabilir özet alanı */}
+              <div className="p-5 pb-3 overflow-y-auto" style={{ flex: "1 1 auto", minHeight: 0 }}>
+                <h3 className="text-lg text-white tracking-wider mb-3" style={{ fontFamily: "var(--font-bebas)" }}>
                   RANDEVU ONAYLA
                 </h3>
-                <div className="space-y-0 mb-4">
+                <div className="space-y-0 mb-3">
                   <InfoRow label="Tarih" val={format(parseISO(selectedDate), "dd MMM yyyy (EEE)", { locale: tr })} />
                   <InfoRow label="Saat" val={`${selectedSlot.startTime} – ${selectedSlot.endTime}`} />
                   <InfoRow label="Tip" val={lessonType === "bireysel" ? "Bireysel" : lessonType === "duet" ? "Düet" : "Grup"} />
@@ -682,14 +685,18 @@ export default function RandevuPage() {
                   <InfoRow label="Antrenör" val={TRAINER_NAME} />
                 </div>
                 {bookError && (
-                  <div className="p-3 rounded-xl mb-3 text-xs text-red-400"
+                  <div className="p-3 rounded-xl mb-2 text-xs text-red-400"
                     style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
                     ⚠️ {bookError}
                   </div>
                 )}
-                <p className="text-xs mb-4" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
                   Ders, antrenör tamamla butonuna basınca düşer. {CANCEL_LIMIT_HOURS} saat içinde iptal edemezsiniz.
                 </p>
+              </div>
+
+              {/* Sabit CTA footer — scroll'dan bağımsız, alt navigasyonun asla altında kalmaz */}
+              <div className="modal-sheet-footer-pb px-5 pt-3 flex-shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => setConfirmOpen(false)}
                     className="py-3 rounded-xl text-xs font-semibold uppercase"
