@@ -84,6 +84,83 @@ export interface IncomeMovement {
   createdAt: string;
 }
 
+/* ── Grup Dersi Finans Modülü — özel ders sisteminden tamamen bağımsız ──── */
+
+export type GroupShareType = "percentage" | "fixed_per_lesson" | "fixed_monthly_rent";
+
+export interface GroupLesson {
+  id: string;
+  name: string;
+  gymId?: string;
+  trainerName?: string;
+  /** Kişi başı aylık aidat */
+  feePerStudent: number;
+  shareType: GroupShareType;
+  /** shareType='percentage' iken: salon payı % (eğitmen payı = 100 - bu) */
+  gymPercentage?: number;
+  /** shareType='fixed_per_lesson' iken: ders başı salona ödenecek sabit tutar */
+  fixedFeePerLesson?: number;
+  /** shareType='fixed_monthly_rent' iken: aylık sabit salon kirası */
+  fixedMonthlyRent?: number;
+  /** Doluluk oranı için — boşsa doluluk gösterilmez */
+  maxCapacity?: number;
+  startDate: string;
+  endDate?: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+/** Grup dersi üyesi — mutlaka uygulama hesabı olan bir öğrenci olmak zorunda değil */
+export interface GroupLessonMember {
+  id: string;
+  groupId: string;
+  /** Bağlıysa push hatırlatması alabilir, değilse sadece gelir/doluluk sayımına dahildir */
+  studentId?: string;
+  fullName: string;
+  phone?: string;
+  joinedAt: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+/** Aylık aidat dönemi — her üye × her ay için bir satır */
+export interface GroupLessonPayment {
+  id: string;
+  memberId: string;
+  groupId: string;
+  /** 'yyyy-MM' */
+  periodMonth: string;
+  amount: number;
+  status: PaymentRecordStatus;
+  paidAt?: string;
+  createdAt: string;
+}
+
+/** Sadece fixed_per_lesson gruplarında kullanılır — grup+ay başına tek satır */
+export interface GroupLessonSession {
+  id: string;
+  groupId: string;
+  periodMonth: string;
+  sessionCount: number;
+  createdAt: string;
+}
+
+/* ── Diğer Gelirler — seminer, sponsorluk, ürün satışı vb. ────────────── */
+
+export type OtherIncomeType =
+  | "seminer" | "workshop" | "sponsorluk" | "urun_satisi"
+  | "online_ders" | "ozel_etkinlik" | "diger";
+
+export interface OtherIncome {
+  id: string;
+  incomeType: OtherIncomeType;
+  description?: string;
+  amount: number;
+  incomeDate: string;
+  createdAt: string;
+}
+
 export interface TimeSlot {
   id: string; date: string; startTime: string; endTime: string;
   isAvailable: boolean; isBlocked: boolean; blockReason?: string;

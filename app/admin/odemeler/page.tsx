@@ -4,9 +4,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   getStudents, getPayments, addPayment, deletePayment, updatePayment,
   getGyms, getGymReports, getIncomeMovements, updateIncomeMovement, getAppointments,
+  getGroupLessons, createGroupLesson, updateGroupLesson, deactivateGroupLesson,
+  getGroupLessonMembers, addGroupLessonMember, removeGroupLessonMember,
+  getGroupLessonPayments, getGroupLessonSessions, ensureCurrentMonthPeriods,
+  markGroupPaymentPaid, setGroupSessionCount, sendGroupPaymentReminder,
+  getOtherIncome, addOtherIncome, deleteOtherIncome,
   type GymReport,
 } from "@/lib/db";
-import type { Student, Payment, PaymentRecordStatus, Gym, IncomeMovement, Appointment } from "@/lib/types";
+import type {
+  Student, Payment, PaymentRecordStatus, Gym, IncomeMovement, Appointment,
+  GroupLesson, GroupLessonMember, GroupLessonPayment, GroupLessonSession, OtherIncome, OtherIncomeType,
+} from "@/lib/types";
 import { LESSON_PRICES } from "@/lib/constants";
 import {
   Plus, Trash2, ChevronDown, ChevronUp, X, Check, Edit2, Clock, CreditCard,
@@ -19,6 +27,7 @@ import {
   rankTopPayingStudents, computePaymentStatusBreakdown, computeGymPerformance,
   computeBottomStats, generateAiInsights,
 } from "@/lib/financeCenter";
+import { computeAllGroupPerformance, computeCategoryTotals } from "@/lib/groupLessonFinance";
 import { STATUS_CFG, StatusBadge } from "@/app/components/finance/StatusBadge";
 import FinanceKpiCard from "@/app/components/finance/FinanceKpiCard";
 import FinanceTimeFilter from "@/app/components/finance/FinanceTimeFilter";
@@ -35,6 +44,10 @@ import MonthlyGoalCard from "@/app/components/finance/MonthlyGoalCard";
 import FinanceQuickActions from "@/app/components/finance/FinanceQuickActions";
 import BottomStatsGrid from "@/app/components/finance/BottomStatsGrid";
 import FinanceSkeleton from "@/app/components/finance/FinanceSkeleton";
+import CategoryBreakdownCards from "@/app/components/finance/CategoryBreakdownCards";
+import GroupLessonsSection from "@/app/components/finance/GroupLessonsSection";
+import OtherIncomeModule from "@/app/components/finance/OtherIncomeModule";
+import type { GroupLessonFormData } from "@/app/components/finance/GroupLessonForm";
 
 /* ── Paket fiyatı hesapla ─────────────────────────────────────────── */
 function getPackagePrice(s: Student): number | null {
@@ -168,6 +181,13 @@ export default function OdemelerPage() {
   const [appointments, setAppointments]       = useState<Appointment[]>([]);
   const [initialLoading, setInitialLoading]   = useState(true);
 
+  /* Grup Dersi Finans Modülü */
+  const [groupLessons, setGroupLessons]   = useState<GroupLesson[]>([]);
+  const [groupMembers, setGroupMembers]   = useState<GroupLessonMember[]>([]);
+  const [groupPayments, setGroupPayments] = useState<GroupLessonPayment[]>([]);
+  const [groupSessions, setGroupSessions] = useState<GroupLessonSession[]>([]);
+  const [otherIncome, setOtherIncome]     = useState<OtherIncome[]>([]);
+
   /* Zaman filtresi + gelir grafiği granularity */
   const [timeRange, setTimeRange] = useState<TimeRange>("month");
   const [customRange, setCustomRange] = useState({ from: "", to: "" });
@@ -204,12 +224,17 @@ export default function OdemelerPage() {
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
-    const [s, p, g, gr, im, ap] = await Promise.all([
+    const [s, p, g, gr, im, ap, gl, glm, glp, gls, oi] = await Promise.all([
       getStudents(), getPayments(),
       getGyms().catch(() => []),
       getGymReports().catch(() => []),
       getIncomeMovements().catch(() => []),
       getAppointments().catch(() => []),
+      getGroupLessons().catch(() => []),
+      getGroupLessonMembers().catch(() => []),
+      getGroupLessonPayments().catch(() => []),
+      getGroupLessonSessions().catch(() => []),
+      getOtherIncome().catch(() => []),
     ]);
     setStudents(s);
     setPayments(p);
@@ -217,13 +242,20 @@ export default function OdemelerPage() {
     setGymReports(gr);
     setIncomeMovements(im);
     setAppointments(ap);
+    setGroupLessons(gl);
+    setGroupMembers(glm);
+    setGroupPayments(glp);
+    setGroupSessions(gls);
+    setOtherIncome(oi);
   }, []);
 
   useEffect(() => {
-    reload().then(() => {
-      const thisMonth = format(new Date(), "yyyy-MM");
-      setOpenMonths(new Set([thisMonth]));
-      setInitialLoading(false);
+    ensureCurrentMonthPeriods().catch(() => {}).finally(() => {
+      reload().then(() => {
+        const thisMonth = format(new Date(), "yyyy-MM");
+        setOpenMonths(new Set([thisMonth]));
+        setInitialLoading(false);
+      });
     });
   }, [reload]);
 
@@ -272,6 +304,20 @@ export default function OdemelerPage() {
   const paymentStatusSlices = useMemo(() => computePaymentStatusBreakdown(students), [students]);
   const bottomStats = useMemo(() => computeBottomStats(appointments, incomeMovements, gymReports), [appointments, incomeMovements, gymReports]);
   const filteredMovements = useMemo(() => applyTransactionFilters(incomeMovements, transactionFilters), [incomeMovements, transactionFilters]);
+
+  /* ── Grup Dersi Finans Modülü — türetilmiş veriler ─────────────────── */
+  const groupPerformances = useMemo(
+    () => computeAllGroupPerformance(groupLessons, groupMembers, groupPayments, groupSessions),
+    [groupLessons, groupMembers, groupPayments, groupSessions],
+  );
+  const categoryTotals = useMemo(
+    () => computeCategoryTotals(incomeMovements, groupPerformances, otherIncome),
+    [incomeMovements, groupPerformances, otherIncome],
+  );
+  const activeGroupMemberCount = useMemo(
+    () => groupMembers.filter(m => m.isActive && groupLessons.some(g => g.id === m.groupId && g.isActive)).length,
+    [groupMembers, groupLessons],
+  );
 
   /* ── Aylık gruplar (odendi) — Payment kayıtları için Ekle/Düzenle/Sil ── */
   const thisMonthKey = format(new Date(), "yyyy-MM");
@@ -348,6 +394,75 @@ export default function OdemelerPage() {
     await deletePayment(deleteId);
     await reload();
     setDeleteId(null);
+  };
+
+  /* ── Grup Dersi Finans Modülü — CRUD ───────────────────────────────── */
+  const handleCreateGroup = async (data: GroupLessonFormData) => {
+    await createGroupLesson({
+      name: data.name, gymId: data.gymId || undefined, trainerName: data.trainerName || undefined,
+      feePerStudent: data.feePerStudent, shareType: data.shareType,
+      gymPercentage: data.gymPercentage, fixedFeePerLesson: data.fixedFeePerLesson,
+      fixedMonthlyRent: data.fixedMonthlyRent, maxCapacity: data.maxCapacity,
+      startDate: data.startDate, endDate: data.endDate || undefined,
+      description: data.description || undefined, isActive: data.isActive,
+    });
+    await ensureCurrentMonthPeriods();
+    await reload();
+  };
+
+  const handleUpdateGroup = async (id: string, data: GroupLessonFormData) => {
+    await updateGroupLesson(id, {
+      name: data.name, gymId: data.gymId || undefined, trainerName: data.trainerName || undefined,
+      feePerStudent: data.feePerStudent, shareType: data.shareType,
+      gymPercentage: data.gymPercentage, fixedFeePerLesson: data.fixedFeePerLesson,
+      fixedMonthlyRent: data.fixedMonthlyRent, maxCapacity: data.maxCapacity,
+      startDate: data.startDate, endDate: data.endDate || undefined,
+      description: data.description || undefined, isActive: data.isActive,
+    });
+    await reload();
+  };
+
+  const handleDeactivateGroup = async (id: string) => {
+    await deactivateGroupLesson(id);
+    await reload();
+  };
+
+  const handleAddGroupMember = async (groupId: string, data: { fullName: string; studentId?: string; phone?: string }) => {
+    await addGroupLessonMember({
+      groupId, studentId: data.studentId, fullName: data.fullName, phone: data.phone,
+      joinedAt: format(new Date(), "yyyy-MM-dd"), isActive: true,
+    });
+    await ensureCurrentMonthPeriods();
+    await reload();
+  };
+
+  const handleRemoveGroupMember = async (id: string) => {
+    await removeGroupLessonMember(id);
+    await reload();
+  };
+
+  const handleMarkGroupPaymentPaid = async (id: string) => {
+    await markGroupPaymentPaid(id);
+    await reload();
+  };
+
+  const handleSendGroupReminder = async (studentId: string, groupName: string, amount: number) => {
+    await sendGroupPaymentReminder(studentId, groupName, amount);
+  };
+
+  const handleSetGroupSessionCount = async (groupId: string, periodMonth: string, count: number) => {
+    await setGroupSessionCount(groupId, periodMonth, count);
+    await reload();
+  };
+
+  const handleAddOtherIncome = async (data: { incomeType: OtherIncomeType; description?: string; amount: number; incomeDate: string }) => {
+    await addOtherIncome(data);
+    await reload();
+  };
+
+  const handleDeleteOtherIncome = async (id: string) => {
+    await deleteOtherIncome(id);
+    await reload();
   };
 
   const selectedStudent = students.find(s => s.id === selStudent);
@@ -496,6 +611,14 @@ export default function OdemelerPage() {
         <FinanceSkeleton />
       ) : (
         <>
+          {/* ── KATEGORİ KIRILIMI — Özel Ders / Grup Dersi / Diğer / Toplam ── */}
+          <CategoryBreakdownCards
+            totals={categoryTotals}
+            activeGroupCount={groupPerformances.length}
+            activeGroupMemberCount={activeGroupMemberCount}
+            otherIncomeCount={otherIncome.filter(o => o.incomeDate.startsWith(format(new Date(), "yyyy-MM"))).length}
+          />
+
           {/* ── ZAMAN FİLTRESİ ────────────────────────────────────── */}
           <FinanceTimeFilter range={timeRange} onRangeChange={setTimeRange} custom={customRange} onCustomChange={setCustomRange} />
 
@@ -541,6 +664,16 @@ export default function OdemelerPage() {
             </div>
           )}
 
+          {/* ── GRUP DERSLERİ ─────────────────────────────────────── */}
+          <GroupLessonsSection
+            groups={groupLessons} members={groupMembers} payments={groupPayments} sessions={groupSessions}
+            gyms={gyms} students={students}
+            onCreateGroup={handleCreateGroup} onUpdateGroup={handleUpdateGroup} onDeactivateGroup={handleDeactivateGroup}
+            onAddMember={handleAddGroupMember} onRemoveMember={handleRemoveGroupMember}
+            onMarkPaid={handleMarkGroupPaymentPaid} onSendReminder={handleSendGroupReminder}
+            onSetSessionCount={handleSetGroupSessionCount}
+          />
+
           {/* ── FİNANS ÖZETİ — Bugün / Hafta / Ay ────────────────── */}
           <FinanceSnapshotRow snapshots={snapshots} />
 
@@ -564,6 +697,9 @@ export default function OdemelerPage() {
             onShareSave={handleSaveShare}
             onShareCancel={() => setEditingShareId(null)}
           />
+
+          {/* ── DİĞER GELİRLER ────────────────────────────────────── */}
+          <OtherIncomeModule entries={otherIncome} onAdd={handleAddOtherIncome} onDelete={handleDeleteOtherIncome} />
 
           {/* ── AYLIK HEDEF ───────────────────────────────────────── */}
           <MonthlyGoalCard currentRevenue={snapshots.month.revenue} />

@@ -8,6 +8,8 @@ import type {
   DuetPartner, PendingInvite, SalonOwner, SalonOwnerStudent,
   PackagePurchase, PackageType, PaymentStatus, ArenaDuel,
   Gym, GymShareType, IncomeMovement, IncomeMovementType, PaymentRecordStatus,
+  GroupLesson, GroupShareType, GroupLessonMember, GroupLessonPayment, GroupLessonSession,
+  OtherIncome, OtherIncomeType,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { isPackageExpired, getDaysRemaining } from "./packageDuration";
@@ -1501,6 +1503,218 @@ export async function getGymReports(): Promise<GymReport[]> {
       netEarnings: gymRows.reduce((s, r) => s + Number(r.trainer_net_amount ?? 0), 0),
     };
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GRUP DERSİ FİNANS MODÜLÜ — özel ders sisteminden tamamen bağımsız,
+   income_movements'a hiç yazmaz. Finans Merkezi bu tabloları ayrıca
+   okuyup kategori toplamlarına dahil eder.
+   ═══════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mgl = (r: any): GroupLesson => ({
+  id: r.id, name: r.name, gymId: r.gym_id ?? undefined, trainerName: r.trainer_name ?? undefined,
+  feePerStudent: Number(r.fee_per_student ?? 0), shareType: r.share_type as GroupShareType,
+  gymPercentage: r.gym_percentage != null ? Number(r.gym_percentage) : undefined,
+  fixedFeePerLesson: r.fixed_fee_per_lesson != null ? Number(r.fixed_fee_per_lesson) : undefined,
+  fixedMonthlyRent: r.fixed_monthly_rent != null ? Number(r.fixed_monthly_rent) : undefined,
+  maxCapacity: r.max_capacity != null ? Number(r.max_capacity) : undefined,
+  startDate: r.start_date, endDate: r.end_date ?? undefined, description: r.description ?? undefined,
+  isActive: r.is_active ?? true, createdAt: r.created_at ?? "",
+});
+
+export async function getGroupLessons(): Promise<GroupLesson[]> {
+  const { data, error } = await db().from("group_lessons").select("*").order("name");
+  if (error) { if (isSchemaError(error)) return []; fail("getGroupLessons", error); }
+  return (data ?? []).map(mgl);
+}
+
+export async function createGroupLesson(g: Omit<GroupLesson, "id" | "createdAt">): Promise<GroupLesson> {
+  const { data, error } = await db().from("group_lessons").insert({
+    name: g.name, gym_id: g.gymId ?? null, trainer_name: g.trainerName ?? null,
+    fee_per_student: g.feePerStudent, share_type: g.shareType,
+    gym_percentage: g.gymPercentage ?? null, fixed_fee_per_lesson: g.fixedFeePerLesson ?? null,
+    fixed_monthly_rent: g.fixedMonthlyRent ?? null, max_capacity: g.maxCapacity ?? null,
+    start_date: g.startDate, end_date: g.endDate ?? null, description: g.description ?? null,
+    is_active: g.isActive ?? true,
+  }).select().single();
+  if (error) fail("createGroupLesson", error);
+  return mgl(data);
+}
+
+export async function updateGroupLesson(id: string, updates: Partial<GroupLesson>): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (updates.name              !== undefined) row.name                 = updates.name;
+  if (updates.gymId              !== undefined) row.gym_id               = updates.gymId ?? null;
+  if (updates.trainerName        !== undefined) row.trainer_name         = updates.trainerName ?? null;
+  if (updates.feePerStudent      !== undefined) row.fee_per_student      = updates.feePerStudent;
+  if (updates.shareType          !== undefined) row.share_type           = updates.shareType;
+  if (updates.gymPercentage       !== undefined) row.gym_percentage       = updates.gymPercentage ?? null;
+  if (updates.fixedFeePerLesson   !== undefined) row.fixed_fee_per_lesson = updates.fixedFeePerLesson ?? null;
+  if (updates.fixedMonthlyRent    !== undefined) row.fixed_monthly_rent   = updates.fixedMonthlyRent ?? null;
+  if (updates.maxCapacity         !== undefined) row.max_capacity         = updates.maxCapacity ?? null;
+  if (updates.startDate          !== undefined) row.start_date           = updates.startDate;
+  if (updates.endDate            !== undefined) row.end_date             = updates.endDate ?? null;
+  if (updates.description         !== undefined) row.description          = updates.description ?? null;
+  if (updates.isActive           !== undefined) row.is_active            = updates.isActive;
+  const { error } = await db().from("group_lessons").update(row).eq("id", id);
+  if (error) fail("updateGroupLesson", error);
+}
+
+/** Grubu pasifleştir — geçmiş dönem kayıtlarını bozmamak için hard delete yapılmaz */
+export async function deactivateGroupLesson(id: string): Promise<void> {
+  const { error } = await db().from("group_lessons").update({ is_active: false }).eq("id", id);
+  if (error) fail("deactivateGroupLesson", error);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mglm = (r: any): GroupLessonMember => ({
+  id: r.id, groupId: r.group_id, studentId: r.student_id ?? undefined,
+  fullName: r.full_name, phone: r.phone ?? undefined,
+  joinedAt: r.joined_at, isActive: r.is_active ?? true, createdAt: r.created_at ?? "",
+});
+
+/** groupId verilmezse tüm gruplardaki üyeler döner (sayfa toplu çekip client-side filtreler) */
+export async function getGroupLessonMembers(groupId?: string): Promise<GroupLessonMember[]> {
+  let q = db().from("group_lesson_members").select("*").order("full_name");
+  if (groupId) q = q.eq("group_id", groupId);
+  const { data, error } = await q;
+  if (error) { if (isSchemaError(error)) return []; fail("getGroupLessonMembers", error); }
+  return (data ?? []).map(mglm);
+}
+
+export async function addGroupLessonMember(m: Omit<GroupLessonMember, "id" | "createdAt">): Promise<GroupLessonMember> {
+  const { data, error } = await db().from("group_lesson_members").insert({
+    group_id: m.groupId, student_id: m.studentId ?? null, full_name: m.fullName,
+    phone: m.phone ?? null, joined_at: m.joinedAt, is_active: m.isActive ?? true,
+  }).select().single();
+  if (error) fail("addGroupLessonMember", error);
+  return mglm(data);
+}
+
+/** Üyeyi gruptan çıkar — geçmiş ödeme dönemlerini bozmamak için hard delete yapılmaz */
+export async function removeGroupLessonMember(id: string): Promise<void> {
+  const { error } = await db().from("group_lesson_members").update({ is_active: false }).eq("id", id);
+  if (error) fail("removeGroupLessonMember", error);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mglp = (r: any): GroupLessonPayment => ({
+  id: r.id, memberId: r.member_id, groupId: r.group_id, periodMonth: r.period_month,
+  amount: Number(r.amount ?? 0), status: r.status as PaymentRecordStatus,
+  paidAt: r.paid_at ?? undefined, createdAt: r.created_at ?? "",
+});
+
+export async function getGroupLessonPayments(groupId?: string): Promise<GroupLessonPayment[]> {
+  let q = db().from("group_lesson_payments").select("*").order("period_month", { ascending: false });
+  if (groupId) q = q.eq("group_id", groupId);
+  const { data, error } = await q;
+  if (error) { if (isSchemaError(error)) return []; fail("getGroupLessonPayments", error); }
+  return (data ?? []).map(mglp);
+}
+
+/**
+ * Her ay otomatik yeni ödeme dönemi — cron yok, sayfa açılınca bir kere
+ * çağrılır (checkPackageExpiryNotification'daki "sayfa açılınca kontrol et"
+ * deseniyle aynı). Aktif her grup × aktif her üye için bu ayın satırını
+ * yoksa oluşturur, unique(member_id,period_month) çakışmasında dokunmaz.
+ */
+export async function ensureCurrentMonthPeriods(): Promise<void> {
+  const periodMonth = new Date().toISOString().slice(0, 7);
+  const [groups, members] = await Promise.all([getGroupLessons(), getGroupLessonMembers()]);
+  const activeGroups = new Set(groups.filter(g => g.isActive).map(g => g.id));
+  const feeByGroup = new Map(groups.map(g => [g.id, g.feePerStudent]));
+  const rows = members
+    .filter(m => m.isActive && activeGroups.has(m.groupId))
+    .map(m => ({
+      member_id: m.id, group_id: m.groupId, period_month: periodMonth,
+      amount: feeByGroup.get(m.groupId) ?? 0, status: "beklemede",
+    }));
+  if (rows.length === 0) return;
+  const { error } = await db().from("group_lesson_payments")
+    .upsert(rows, { onConflict: "member_id,period_month", ignoreDuplicates: true });
+  if (error && !isSchemaError(error)) console.error("[ensureCurrentMonthPeriods]", error.message);
+}
+
+export async function markGroupPaymentPaid(id: string): Promise<void> {
+  const { error } = await db().from("group_lesson_payments")
+    .update({ status: "odendi", paid_at: new Date().toISOString().slice(0, 10) }).eq("id", id);
+  if (error) fail("markGroupPaymentPaid", error);
+}
+
+export async function updateGroupLessonPaymentStatus(id: string, status: PaymentRecordStatus): Promise<void> {
+  const row: Record<string, unknown> = { status };
+  if (status === "odendi") row.paid_at = new Date().toISOString().slice(0, 10);
+  const { error } = await db().from("group_lesson_payments").update(row).eq("id", id);
+  if (error) fail("updateGroupLessonPaymentStatus", error);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mgls = (r: any): GroupLessonSession => ({
+  id: r.id, groupId: r.group_id, periodMonth: r.period_month,
+  sessionCount: Number(r.session_count ?? 0), createdAt: r.created_at ?? "",
+});
+
+export async function getGroupLessonSessions(groupId?: string): Promise<GroupLessonSession[]> {
+  let q = db().from("group_lesson_sessions").select("*");
+  if (groupId) q = q.eq("group_id", groupId);
+  const { data, error } = await q;
+  if (error) { if (isSchemaError(error)) return []; fail("getGroupLessonSessions", error); }
+  return (data ?? []).map(mgls);
+}
+
+/** Sadece fixed_per_lesson gruplarında kullanılır — o ay için "kaç ders yapıldı" sayısını kaydeder */
+export async function setGroupSessionCount(groupId: string, periodMonth: string, sessionCount: number): Promise<void> {
+  const { error } = await db().from("group_lesson_sessions")
+    .upsert({ group_id: groupId, period_month: periodMonth, session_count: sessionCount }, { onConflict: "group_id,period_month" });
+  if (error) fail("setGroupSessionCount", error);
+}
+
+/**
+ * Borçlu grup üyesine push hatırlatması gönder — notifications tablosuna
+ * satır ekler, Supabase'deki notifications_push_trigger otomatik gönderir
+ * (bkz. SUPABASE_PUSH_NOTIFICATIONS.sql). Sadece studentId'si olan
+ * (uygulama hesabına bağlı) üyeler için çağrılabilir.
+ */
+export async function sendGroupPaymentReminder(studentId: string, groupName: string, amount: number): Promise<void> {
+  const { error } = await db().from("notifications").insert({
+    student_id: studentId,
+    title:      "Grup Dersi Aidatı",
+    message:    `${groupName} grup dersi için ₺${amount.toLocaleString("tr-TR")} tutarındaki aidatınız bekleniyor.`,
+    type:       "reminder" as NotifType,
+    is_read:    false,
+  });
+  if (error) fail("sendGroupPaymentReminder", error);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DİĞER GELİRLER — seminer, sponsorluk, ürün satışı vb.
+   ═══════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const moi = (r: any): OtherIncome => ({
+  id: r.id, incomeType: r.income_type as OtherIncomeType, description: r.description ?? undefined,
+  amount: Number(r.amount ?? 0), incomeDate: r.income_date, createdAt: r.created_at ?? "",
+});
+
+export async function getOtherIncome(): Promise<OtherIncome[]> {
+  const { data, error } = await db().from("other_income").select("*").order("income_date", { ascending: false });
+  if (error) { if (isSchemaError(error)) return []; fail("getOtherIncome", error); }
+  return (data ?? []).map(moi);
+}
+
+export async function addOtherIncome(entry: Omit<OtherIncome, "id" | "createdAt">): Promise<OtherIncome> {
+  const { data, error } = await db().from("other_income").insert({
+    income_type: entry.incomeType, description: entry.description ?? null,
+    amount: entry.amount, income_date: entry.incomeDate,
+  }).select().single();
+  if (error) fail("addOtherIncome", error);
+  return moi(data);
+}
+
+export async function deleteOtherIncome(id: string): Promise<void> {
+  const { error } = await db().from("other_income").delete().eq("id", id);
+  if (error) fail("deleteOtherIncome", error);
 }
 
 /* ═══════════════════════════════════════════════════════════════
