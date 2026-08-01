@@ -17,7 +17,7 @@ import type {
 } from "@/lib/types";
 import { LESSON_PRICES } from "@/lib/constants";
 import {
-  Plus, Trash2, ChevronDown, ChevronUp, X, Check, Edit2, Clock, CreditCard,
+  Plus, Trash2, ChevronDown, ChevronUp, X, Check, Edit2, Clock, CreditCard, AlertTriangle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -48,6 +48,13 @@ import CategoryBreakdownCards from "@/app/components/finance/CategoryBreakdownCa
 import GroupLessonsSection from "@/app/components/finance/GroupLessonsSection";
 import OtherIncomeModule from "@/app/components/finance/OtherIncomeModule";
 import type { GroupLessonFormData } from "@/app/components/finance/GroupLessonForm";
+import CountUpNumber from "@/app/components/finance/CountUpNumber";
+
+const stagger = { animate: { transition: { staggerChildren: 0.06 } } };
+const fadeUp  = {
+  initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 /* ── Paket fiyatı hesapla ─────────────────────────────────────────── */
 function getPackagePrice(s: Student): number | null {
@@ -80,13 +87,13 @@ function F({ label, value, onChange, type = "text", placeholder, required }: {
   return (
     <div>
       <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-        style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+        style={{ fontFamily: "var(--font-label)" }}>
         {label}{required && " *"}
       </label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-carbon border border-white/10 focus:border-crimson/50 text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none transition-colors"
-        style={{ fontFamily: "var(--font-inter)" }} />
+        className="glass w-full text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none transition-colors rounded-lg"
+        style={{ fontFamily: "var(--font-label)" }} />
     </div>
   );
 }
@@ -99,18 +106,15 @@ function PaymentCard({
 }) {
   const c = STATUS_CFG[p.status];
   return (
-    <div className="relative overflow-hidden rounded-lg sm:rounded-none"
-      style={{
-        background: "rgba(255,255,255,0.02)",
-        border: `1px solid ${c.bar}22`,
-      }}>
+    <div className="glass relative overflow-hidden rounded-lg transition-transform hover:scale-[1.005]"
+      style={{ borderColor: `${c.bar}30` }}>
       {/* Durum şeridi */}
-      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg sm:rounded-none" style={{ background: c.bar }} />
+      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg" style={{ background: c.bar }} />
 
       <div className="pl-4 pr-3 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         {/* Tarih — gizli küçük ekranda, inline büyük */}
         <div className="hidden sm:block w-14 flex-shrink-0">
-          <div className="text-[11px] text-white/35 leading-tight" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <div className="text-[11px] text-white/35 leading-tight" style={{ fontFamily: "var(--font-label)" }}>
             {format(parseISO(p.paidAt), "dd MMM", { locale: tr })}
           </div>
         </div>
@@ -118,17 +122,17 @@ function PaymentCard({
         {/* Öğrenci + detay */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-white leading-tight" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <span className="text-sm font-semibold text-white leading-tight" style={{ fontFamily: "var(--font-label)" }}>
               {p.studentName}
             </span>
             {/* Tarih — mobil */}
-            <span className="sm:hidden text-[10px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <span className="sm:hidden text-[10px] text-white/30" style={{ fontFamily: "var(--font-label)" }}>
               {format(parseISO(p.paidAt), "dd MMM yyyy", { locale: tr })}
             </span>
           </div>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className="text-[11px]"
-              style={{ color: p.method === "aylik" ? "#A78BFA" : "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+              style={{ color: p.method === "aylik" ? "#A78BFA" : "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
               {p.method === "aylik" ? "Aylık Üyelik" :
                p.method === "nakit" ? "Nakit" :
                p.method === "havale" ? "Havale/EFT" :
@@ -138,7 +142,7 @@ function PaymentCard({
             {p.notes && (
               <>
                 <span className="text-white/15 text-[10px]">·</span>
-                <span className="text-[11px] text-white/25 truncate max-w-[140px]" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                <span className="text-[11px] text-white/25 truncate max-w-[140px]" style={{ fontFamily: "var(--font-label)" }}>
                   {p.notes}
                 </span>
               </>
@@ -150,7 +154,7 @@ function PaymentCard({
         <div className="flex items-center gap-2 sm:gap-3 justify-between sm:justify-end flex-shrink-0">
           <StatusBadge status={p.status} />
           <span className="text-base font-black tabular-nums"
-            style={{ fontFamily: "var(--font-bebas)", color: c.color, minWidth: 80, textAlign: "right", letterSpacing: "0.04em" }}>
+            style={{ fontFamily: "var(--font-display)", color: c.color, minWidth: 80, textAlign: "right", letterSpacing: "0.04em" }}>
             {p.amount > 0 ? `₺${p.amount.toLocaleString("tr-TR")}` : "—"}
           </span>
           <div className="flex items-center gap-1">
@@ -158,8 +162,9 @@ function PaymentCard({
               className="p-1.5 text-white/20 hover:text-white/70 transition-colors">
               <Edit2 size={12} />
             </button>
-            <button onClick={() => onDelete(p.id)} title="Sil"
-              className="p-1.5 text-white/20 hover:text-crimson transition-colors">
+            <button onClick={() => onDelete(p.id)} title="Sil" className="p-1.5 text-white/20 transition-colors"
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--color-error)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.2)")}>
               <Trash2 size={12} />
             </button>
           </div>
@@ -276,6 +281,13 @@ export default function OdemelerPage() {
     [incomeMovements, payments, students, timeRange, customRange],
   );
 
+  /* Toplam Gelir (tüm zamanlar) — yeni hesaplama değil, zaten yüklü incomeMovements'tan
+     salt görüntüleme amaçlı toplama (computeBottomStats'ın iç mantığıyla birebir aynı). */
+  const totalRevenueAllTime = useMemo(
+    () => incomeMovements.filter(m => m.status === "odendi").reduce((sum, m) => sum + m.paymentAmount, 0),
+    [incomeMovements],
+  );
+
   const revenueSeries = useMemo(() => {
     const b = getRangeBounds(timeRange, customRange);
     return buildRevenueSeries(incomeMovements, b.from, b.to, granularity);
@@ -322,6 +334,7 @@ export default function OdemelerPage() {
   /* ── Aylık gruplar (odendi) — Payment kayıtları için Ekle/Düzenle/Sil ── */
   const thisMonthKey = format(new Date(), "yyyy-MM");
   const pendingOnly  = payments.filter(p => p.status === "beklemede" || p.status === "gecikti");
+  const overduePayments = useMemo(() => payments.filter(p => p.status === "gecikti"), [payments]);
   const byMonth      = groupByMonth(payments);
   const sortedMonths = Object.keys(byMonth).sort().reverse();
 
@@ -470,42 +483,63 @@ export default function OdemelerPage() {
 
   /* ── Render ──────────────────────────────────────────────────────── */
   return (
-    <div className="max-w-6xl mx-auto space-y-5 pb-20">
-
-      {/* Başlık + Hızlı İşlemler */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <span className="w-8 h-px bg-crimson" />
-            <span className="text-crimson text-xs tracking-[0.4em] uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Admin</span>
-          </div>
-          <h1 className="text-3xl font-display text-white tracking-wide" style={{ fontFamily: "var(--font-bebas)" }}>FİNANS MERKEZİ</h1>
-          <p className="text-white/35 text-sm mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            {payments.length} ödeme kaydı · {gyms.filter(g => g.isActive).length} aktif salon
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <AnimatePresence>
-            {saved && (
-              <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
-                className="flex items-center gap-1.5 text-green-400 text-xs" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                <Check size={13} /> Kaydedildi
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <FinanceQuickActions onAddPayment={openAdd} movements={filteredMovements} kpis={kpis} />
-        </div>
+    <div className="relative overflow-hidden">
+      {/* Dashboard arka planı — hafif hareketli ışık efekti, dekoratif */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div className="animate-float-slow absolute rounded-full"
+          style={{ width: 420, height: 420, top: -140, right: -120, background: "radial-gradient(circle, rgba(139,92,246,0.08), transparent 70%)", filter: "blur(60px)" }} />
+        <div className="animate-float-medium absolute rounded-full"
+          style={{ width: 360, height: 360, bottom: -100, left: -140, background: "radial-gradient(circle, rgba(236,72,153,0.06), transparent 70%)", filter: "blur(60px)" }} />
       </div>
+
+    <motion.div variants={stagger} initial="initial" animate="animate" className="relative max-w-6xl mx-auto space-y-6 pb-20">
+
+      {/* Hero */}
+      <motion.div variants={fadeUp} className="glass-strong relative overflow-hidden rounded-3xl">
+        <div className="relative p-6 sm:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl text-white tracking-wide" style={{ fontFamily: "var(--font-display)" }}>
+                FİNANS MERKEZİ
+              </h1>
+              <p className="text-xs sm:text-sm text-white/40 mt-1" style={{ fontFamily: "var(--font-label)" }}>
+                {payments.length} ödeme kaydı · {gyms.filter(g => g.isActive).length} aktif salon
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <AnimatePresence>
+                {saved && (
+                  <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+                    className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
+                    <Check size={13} /> Kaydedildi
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <FinanceQuickActions onAddPayment={openAdd} movements={filteredMovements} kpis={kpis} />
+            </div>
+          </div>
+
+          {/* Toplam Gelir — büyük tek kart */}
+          <div className="mt-6 glass rounded-2xl p-5 sm:p-6 inline-flex flex-col">
+            <span className="text-[10px] sm:text-xs text-white/35 tracking-widest uppercase" style={{ fontFamily: "var(--font-label)" }}>
+              Toplam Gelir (Tüm Zamanlar)
+            </span>
+            <span className="text-3xl sm:text-4xl mt-1" style={{ fontFamily: "var(--font-display)", color: "var(--color-achievement)" }}>
+              <CountUpNumber value={totalRevenueAllTime} prefix="₺" />
+            </span>
+          </div>
+        </div>
+      </motion.div>
 
       {/* ── YENİ ÖDEME FORMU ──────────────────────────────────────── */}
       <AnimatePresence>
         {addOpen && (
-          <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className="bg-carbon border border-crimson/30 relative rounded-xl overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
+          <motion.div initial={{ opacity: 0, y: -14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -10 }}
+            className="glass-strong relative rounded-2xl overflow-hidden" style={{ borderColor: "rgba(139,92,246,0.3)" }}>
+            <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-pink-orange" />
             <div className="p-4 sm:p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>
+                <h2 className="text-xl text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>
                   YENİ ÖDEME EKLE
                 </h2>
                 <button onClick={() => setAddOpen(false)} className="text-white/25 hover:text-white transition-colors"><X size={18} /></button>
@@ -515,10 +549,10 @@ export default function OdemelerPage() {
                 {/* Öğrenci seç */}
                 <div className="sm:col-span-2 lg:col-span-1">
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Öğrenci *</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Öğrenci *</label>
                   <select value={selStudent} onChange={e => handleStudentChange(e.target.value)}
-                    className="w-full bg-carbon border border-white/10 focus:border-crimson/50 text-white px-3 py-2.5 text-sm outline-none transition-colors appearance-none"
-                    style={{ fontFamily: "var(--font-inter)" }}>
+                    className="glass w-full text-white px-3 py-2.5 text-sm outline-none transition-colors appearance-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }}>
                     <option value="" className="bg-carbon">Öğrenci seçin...</option>
                     {students.filter(s => s.isActive).sort((a, b) => a.fullName.localeCompare(b.fullName)).map(s => (
                       <option key={s.id} value={s.id} className="bg-carbon">
@@ -528,7 +562,7 @@ export default function OdemelerPage() {
                   </select>
                   {/* Paket fiyatı bilgisi */}
                   {selectedStudent && (
-                    <p className="text-[10px] mt-1 flex items-center gap-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    <p className="text-[10px] mt-1 flex items-center gap-1.5" style={{ fontFamily: "var(--font-label)" }}>
                       <span style={{ color: "rgba(255,255,255,0.25)" }}>
                         {selectedStudent.subscriptionType === "monthly" ? "Aylık üyelik" :
                          `${selectedStudent.totalLessons} ders paketi`}
@@ -543,20 +577,20 @@ export default function OdemelerPage() {
                 {/* Miktar */}
                 <div>
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Miktar (₺) *</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Miktar (₺) *</label>
                   <input type="number" min="0" value={amount} onChange={e => setAmount(e.target.value)}
                     placeholder="0"
-                    className="w-full bg-steel/60 border-2 border-green-500/30 focus:border-green-500/60 text-green-400 px-3 py-2.5 text-lg outline-none transition-colors"
-                    style={{ fontFamily: "var(--font-bebas)", letterSpacing: "0.05em" }} />
+                    className="glass w-full px-3 py-2.5 text-lg outline-none transition-colors rounded-lg"
+                    style={{ fontFamily: "var(--font-display)", letterSpacing: "0.05em", color: "var(--color-success)" }} />
                 </div>
 
                 {/* Durum */}
                 <div>
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödeme Durumu</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Ödeme Durumu</label>
                   <select value={payStatus} onChange={e => setPayStatus(e.target.value as PaymentRecordStatus)}
-                    className="w-full bg-carbon border border-white/10 focus:border-crimson/50 text-white px-3 py-2.5 text-sm outline-none transition-colors appearance-none"
-                    style={{ fontFamily: "var(--font-inter)" }}>
+                    className="glass w-full text-white px-3 py-2.5 text-sm outline-none transition-colors appearance-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }}>
                     <option value="odendi" className="bg-carbon">✅ Ödendi</option>
                     <option value="beklemede" className="bg-carbon">🟡 Beklemede</option>
                     <option value="gecikti" className="bg-carbon">🔴 Gecikti</option>
@@ -568,19 +602,19 @@ export default function OdemelerPage() {
                 {/* Tarih */}
                 <div>
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Tarih *</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Tarih *</label>
                   <input type="date" value={paidDate} onChange={e => setPaidDate(e.target.value)}
-                    className="w-full bg-carbon border border-white/10 focus:border-crimson/50 text-white px-3 py-2.5 text-sm outline-none transition-colors"
-                    style={{ fontFamily: "var(--font-inter)" }} />
+                    className="glass w-full text-white px-3 py-2.5 text-sm outline-none transition-colors rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }} />
                 </div>
 
                 {/* Yöntem */}
                 <div>
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yöntem</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Yöntem</label>
                   <select value={method} onChange={e => setMethod(e.target.value)}
-                    className="w-full bg-carbon border border-white/10 focus:border-crimson/50 text-white px-3 py-2.5 text-sm outline-none transition-colors appearance-none"
-                    style={{ fontFamily: "var(--font-inter)" }}>
+                    className="glass w-full text-white px-3 py-2.5 text-sm outline-none transition-colors appearance-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }}>
                     <option value="nakit" className="bg-carbon">Nakit</option>
                     <option value="havale" className="bg-carbon">Havale / EFT</option>
                     <option value="kredi" className="bg-carbon">Kredi Kartı</option>
@@ -595,10 +629,10 @@ export default function OdemelerPage() {
               <div className="flex gap-3">
                 <button onClick={() => setAddOpen(false)}
                   className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
+                  style={{ fontFamily: "var(--font-label)" }}>Vazgeç</button>
                 <button onClick={handleAdd} disabled={!selStudent || !amount || saving}
-                  className="flex-1 bg-crimson hover:bg-crimson-bright disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  className="gradient-animated gradient-slow gradient-violet-pink-orange flex-1 disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 rounded-lg transition-transform hover:scale-[1.01] active:scale-95"
+                  style={{ fontFamily: "var(--font-label)" }}>
                   {saving ? "Kaydediliyor..." : "Ödemeyi Kaydet"}
                 </button>
               </div>
@@ -610,7 +644,7 @@ export default function OdemelerPage() {
       {initialLoading ? (
         <FinanceSkeleton />
       ) : (
-        <>
+        <motion.div variants={fadeUp} className="space-y-6">
           {/* ── KATEGORİ KIRILIMI — Özel Ders / Grup Dersi / Diğer / Toplam ── */}
           <CategoryBreakdownCards
             totals={categoryTotals}
@@ -623,22 +657,25 @@ export default function OdemelerPage() {
           <FinanceTimeFilter range={timeRange} onRangeChange={setTimeRange} custom={customRange} onCustomChange={setCustomRange} />
 
           {/* ── KPI KARTLARI ──────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <FinanceKpiCard index={0} label="Toplam Ciro" value={`₺${kpis.totalRevenue.value.toLocaleString("tr-TR")}`}
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            <FinanceKpiCard index={0} label="Toplam Ciro" value={kpis.totalRevenue.value} prefix="₺"
               sub="Seçilen dönem" deltaLabel={kpis.totalRevenue.deltaLabel} deltaPositive={kpis.totalRevenue.deltaPositive}
               icon={<CreditCard size={16} />} color="#FBBF24" sparkline={revenueSparkline} />
-            <FinanceKpiCard index={1} label="Net Kazanç" value={`₺${kpis.netEarnings.value.toLocaleString("tr-TR")}`}
+            <FinanceKpiCard index={1} label="Net Kazanç" value={kpis.netEarnings.value} prefix="₺"
               sub="Salon payı düşülmüş" deltaLabel={kpis.netEarnings.deltaLabel} deltaPositive={kpis.netEarnings.deltaPositive}
               icon={<Check size={16} />} color="#4ADE80" sparkline={netSparkline} />
-            <FinanceKpiCard index={2} label="Salonlara Ödenecek" value={`₺${kpis.owedToGyms.value.toLocaleString("tr-TR")}`}
+            <FinanceKpiCard index={2} label="Salonlara Ödenecek" value={kpis.owedToGyms.value} prefix="₺"
               sub="Tüm zamanlar" deltaLabel={kpis.owedToGyms.deltaLabel} deltaPositive={kpis.owedToGyms.deltaPositive}
               icon={<Clock size={16} />} color="#A855F7" sparkline={gymShareSparkline} />
-            <FinanceKpiCard index={3} label="Bekleyen Tahsilatlar" value={`₺${kpis.pendingCollections.value.toLocaleString("tr-TR")}`}
+            <FinanceKpiCard index={3} label="Bekleyen Tahsilatlar" value={kpis.pendingCollections.value} prefix="₺"
               sub="Tüm zamanlar" deltaLabel={kpis.pendingCollections.deltaLabel} deltaPositive={kpis.pendingCollections.deltaPositive}
               icon={<Clock size={16} />} color="#F87171" sparkline={pendingSparkline} />
-            <FinanceKpiCard index={4} label="Aktif Öğrenci" value={String(kpis.activeStudents.value)}
+            <FinanceKpiCard index={4} label="Aktif Öğrenci" value={kpis.activeStudents.value}
               sub="Şu an aktif" deltaLabel={kpis.activeStudents.deltaLabel} deltaPositive={kpis.activeStudents.deltaPositive}
               icon={<Plus size={16} />} color="#60A5FA" sparkline={studentGrowthSparkline} />
+            <FinanceKpiCard index={5} label="Geciken Ödeme" value={overduePayments.length}
+              sub="Ödeme kaydı" deltaLabel={overduePayments.length > 0 ? "Takip gerekiyor" : "Gecikme yok"} deltaPositive={overduePayments.length > 0 ? false : null}
+              icon={<AlertTriangle size={16} />} color="#F87171" />
           </div>
 
           {/* ── GELİR GRAFİĞİ + KEDİ AI ANALİZ ───────────────────── */}
@@ -649,11 +686,49 @@ export default function OdemelerPage() {
             <FinanceAiCard insights={aiInsights} />
           </div>
 
+          {/* ── KÂR ANALİZİ — mevcut net kazanç verilerinin birleşik sunumu ── */}
+          <div className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-green-teal gradient-border-quiet">
+            <div className="glass rounded-2xl p-4 sm:p-5">
+              <h3 className="text-sm uppercase tracking-widest text-white/40 mb-4" style={{ fontFamily: "var(--font-label)" }}>
+                Kâr Analizi
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <div className="text-[10px] text-white/25 uppercase tracking-widest mb-1" style={{ fontFamily: "var(--font-label)" }}>
+                    Net Kazanç (Seçilen Dönem)
+                  </div>
+                  <div className="text-2xl" style={{ fontFamily: "var(--font-display)", color: "var(--color-success)" }}>
+                    <CountUpNumber value={kpis.netEarnings.value} prefix="₺" />
+                  </div>
+                  <p className="text-[11px] text-white/30 mt-0.5" style={{ fontFamily: "var(--font-label)" }}>{kpis.netEarnings.deltaLabel}</p>
+                </div>
+                <div>
+                  <div className="text-[10px] text-white/25 uppercase tracking-widest mb-1" style={{ fontFamily: "var(--font-label)" }}>
+                    Bu Ay Net Kazanç
+                  </div>
+                  <div className="text-2xl" style={{ fontFamily: "var(--font-display)", color: "#60A5FA" }}>
+                    <CountUpNumber value={categoryTotals.netKazanc} prefix="₺" />
+                  </div>
+                  <p className="text-[11px] text-white/30 mt-0.5" style={{ fontFamily: "var(--font-label)" }}>Özel ders + grup dersi + diğer gelirler</p>
+                </div>
+                <div>
+                  <div className="text-[10px] text-white/25 uppercase tracking-widest mb-1" style={{ fontFamily: "var(--font-label)" }}>
+                    Salonlara Ödenecek
+                  </div>
+                  <div className="text-2xl" style={{ fontFamily: "var(--font-display)", color: "var(--color-error)" }}>
+                    <CountUpNumber value={kpis.owedToGyms.value} prefix="₺" />
+                  </div>
+                  <p className="text-[11px] text-white/30 mt-0.5" style={{ fontFamily: "var(--font-label)" }}>Tüm zamanlar</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* ── SALON PERFORMANSLARI ─────────────────────────────── */}
           {gymPerformance.length > 0 && (
             <div>
               <div className="flex items-center gap-2 px-1 pb-2">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-display)" }}>
                   Salon Performansları
                 </span>
                 <div className="h-px flex-1 bg-white/5" />
@@ -709,10 +784,10 @@ export default function OdemelerPage() {
             <div>
               <div className="flex items-center gap-2 px-1 pb-2">
                 <Clock size={13} style={{ color: "#FBBF24" }} />
-                <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-display)" }}>
                   Bekleyen / Gecikmiş Ödemeler
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(251,191,36,0.15)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(251,191,36,0.15)", color: "#FBBF24", fontFamily: "var(--font-label)" }}>
                   {pendingOnly.length}
                 </span>
                 <div className="h-px flex-1 bg-white/5" />
@@ -729,16 +804,16 @@ export default function OdemelerPage() {
           <div className="space-y-3">
             <div className="flex items-center gap-2 px-1">
               <Check size={13} style={{ color: "#4ADE80" }} />
-              <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-display)" }}>
                 Ödeme Kayıtları — Aylık Geçmiş (Ekle / Düzenle / Sil)
               </span>
               <div className="h-px flex-1 bg-white/5" />
             </div>
 
             {sortedMonths.length === 0 && (
-              <div className="text-center py-12 bg-carbon border border-white/6 rounded-xl">
+              <div className="glass text-center py-12 rounded-xl">
                 <CreditCard size={32} className="text-white/10 mx-auto mb-3" />
-                <p className="text-white/25 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Henüz ödeme kaydı yok</p>
+                <p className="text-white/25 text-sm" style={{ fontFamily: "var(--font-label)" }}>Henüz ödeme kaydı yok</p>
               </div>
             )}
 
@@ -749,24 +824,25 @@ export default function OdemelerPage() {
               const isThisMonth   = month === thisMonthKey;
 
               return (
-                <div key={month} className={`bg-carbon border overflow-hidden transition-colors rounded-xl ${isThisMonth ? "border-green-500/20" : "border-white/6"}`}>
+                <div key={month} className="glass overflow-hidden transition-colors rounded-xl"
+                  style={{ borderColor: isThisMonth ? "rgba(34,197,94,0.3)" : undefined }}>
                   <button onClick={() => toggleMonth(month)}
-                    className="w-full flex items-center justify-between px-4 sm:px-5 py-3.5 hover:bg-steel/20 transition-colors">
+                    className="w-full flex items-center justify-between px-4 sm:px-5 py-3.5 hover:bg-white/[0.03] transition-colors">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <div className={`text-base font-display tracking-wider ${isThisMonth ? "text-green-400" : "text-white"}`}
-                        style={{ fontFamily: "var(--font-bebas)" }}>
+                      <div className="text-base tracking-wider"
+                        style={{ fontFamily: "var(--font-display)", color: isThisMonth ? "var(--color-success)" : "#fff" }}>
                         {monthLabel(month).toUpperCase()}
                       </div>
                       {isThisMonth && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400"
-                          style={{ fontFamily: "var(--font-barlow-condensed)" }}>Bu Ay</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", color: "var(--color-success)", fontFamily: "var(--font-label)" }}>Bu Ay</span>
                       )}
-                      <span className="text-[11px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      <span className="text-[11px] text-white/30" style={{ fontFamily: "var(--font-label)" }}>
                         {monthPayments.length} ödeme
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-lg font-display text-green-400" style={{ fontFamily: "var(--font-bebas)" }}>
+                      <span className="text-lg" style={{ fontFamily: "var(--font-display)", color: "var(--color-success)" }}>
                         ₺{monthTotal.toLocaleString("tr-TR")}
                       </span>
                       {isOpen ? <ChevronUp size={15} className="text-white/30" /> : <ChevronDown size={15} className="text-white/30" />}
@@ -794,7 +870,7 @@ export default function OdemelerPage() {
 
           {/* ── İSTATİSTİKLER ─────────────────────────────────────── */}
           <BottomStatsGrid stats={bottomStats} />
-        </>
+        </motion.div>
       )}
 
       {/* ── DÜZENLEME MODALI ──────────────────────────────────────── */}
@@ -803,23 +879,25 @@ export default function OdemelerPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             onClick={() => !editSaving && setEditPayment(null)}>
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-              className="relative z-10 w-full max-w-sm bg-carbon border border-white/10 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+            <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} />
+            <motion.div initial={{ scale: 0.94, y: 16, filter: "blur(6px)" }} animate={{ scale: 1, y: 0, filter: "blur(0px)" }} exit={{ scale: 0.95, filter: "blur(4px)" }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="glass-strong relative z-10 w-full max-w-sm rounded-2xl overflow-hidden p-5"
+              style={{ borderColor: "rgba(139,92,246,0.3)" }}
               onClick={e => e.stopPropagation()}>
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
+              <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-pink-orange" />
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>ÖDEMEYİ DÜZENLE</h3>
+                <h3 className="text-lg text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>ÖDEMEYİ DÜZENLE</h3>
                 <button onClick={() => setEditPayment(null)} className="text-white/25 hover:text-white"><X size={16} /></button>
               </div>
-              <p className="text-xs text-white/40 mb-4 pb-3 border-b border-white/8" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <p className="text-xs text-white/40 mb-4 pb-3 border-b border-white/8" style={{ fontFamily: "var(--font-label)" }}>
                 {editPayment.studentName}
               </p>
               <div className="space-y-3">
                 {/* Durum */}
                 <div>
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödeme Durumu</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Ödeme Durumu</label>
                   <div className="grid grid-cols-3 gap-2">
                     {(["odendi", "beklemede", "gecikti"] as const).map(st => {
                       const c = STATUS_CFG[st];
@@ -830,7 +908,7 @@ export default function OdemelerPage() {
                             background: editStatus === st ? `${c.bar}22` : "rgba(255,255,255,0.03)",
                             border: `1px solid ${editStatus === st ? c.bar + "66" : "rgba(255,255,255,0.08)"}`,
                             color: editStatus === st ? c.color : "rgba(255,255,255,0.35)",
-                            fontFamily: "var(--font-barlow-condensed)",
+                            fontFamily: "var(--font-label)",
                           }}>
                           {c.label}
                         </button>
@@ -842,19 +920,19 @@ export default function OdemelerPage() {
                 {/* Tutar */}
                 <div>
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Tutar (₺)</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Tutar (₺)</label>
                   <input type="number" min="0" value={editAmount} onChange={e => setEditAmount(e.target.value)}
-                    className="w-full bg-steel/60 border-2 border-green-500/30 focus:border-green-500/60 text-green-400 px-3 py-2.5 text-lg outline-none"
-                    style={{ fontFamily: "var(--font-bebas)" }} />
+                    className="glass w-full px-3 py-2.5 text-lg outline-none rounded-lg"
+                    style={{ fontFamily: "var(--font-display)", color: "var(--color-success)" }} />
                 </div>
 
                 {/* Yöntem */}
                 <div>
                   <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yöntem</label>
+                    style={{ fontFamily: "var(--font-label)" }}>Yöntem</label>
                   <select value={editMethod} onChange={e => setEditMethod(e.target.value)}
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none appearance-none"
-                    style={{ fontFamily: "var(--font-inter)" }}>
+                    className="glass w-full text-white px-3 py-2.5 text-sm outline-none appearance-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }}>
                     <option value="nakit" className="bg-carbon">Nakit</option>
                     <option value="havale" className="bg-carbon">Havale / EFT</option>
                     <option value="kredi" className="bg-carbon">Kredi Kartı</option>
@@ -869,10 +947,10 @@ export default function OdemelerPage() {
               <div className="flex gap-3 mt-4">
                 <button onClick={() => setEditPayment(null)}
                   className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
+                  style={{ fontFamily: "var(--font-label)" }}>Vazgeç</button>
                 <button onClick={handleEdit} disabled={editSaving}
-                  className="flex-1 bg-crimson hover:bg-crimson-bright disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  className="gradient-animated gradient-slow gradient-violet-pink-orange flex-1 disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-2.5 rounded-lg transition-transform hover:scale-[1.01] active:scale-95"
+                  style={{ fontFamily: "var(--font-label)" }}>
                   {editSaving ? "Kaydediliyor..." : "Kaydet"}
                 </button>
               </div>
@@ -887,42 +965,46 @@ export default function OdemelerPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             onClick={() => setDeleteId(null)}>
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-              className="relative z-10 w-full max-w-sm bg-carbon border border-white/10 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+            <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} />
+            <motion.div initial={{ scale: 0.94, y: 16, filter: "blur(6px)" }} animate={{ scale: 1, y: 0, filter: "blur(0px)" }} exit={{ scale: 0.95, filter: "blur(4px)" }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="glass-strong relative z-10 w-full max-w-sm rounded-2xl overflow-hidden p-5"
+              style={{ borderColor: "rgba(239,68,68,0.3)" }}
               onClick={e => e.stopPropagation()}>
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
+              <div className="absolute top-0 left-0 right-0 h-px" style={{ background: "linear-gradient(90deg,transparent,var(--color-error),transparent)" }} />
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 bg-crimson/10 border border-crimson/20 flex items-center justify-center flex-shrink-0">
-                  <Trash2 size={16} className="text-crimson" />
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)" }}>
+                  <Trash2 size={16} style={{ color: "var(--color-error)" }} />
                 </div>
                 <div>
-                  <h3 className="text-base font-display text-white" style={{ fontFamily: "var(--font-bebas)" }}>ÖDEMEYİ SİL</h3>
+                  <h3 className="text-base text-white" style={{ fontFamily: "var(--font-display)" }}>ÖDEMEYİ SİL</h3>
                   {(() => {
                     const p = payments.find(x => x.id === deleteId);
                     return p ? (
-                      <p className="text-[11px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      <p className="text-[11px] text-white/30" style={{ fontFamily: "var(--font-label)" }}>
                         {p.studentName} · ₺{p.amount.toLocaleString("tr-TR")}
                       </p>
                     ) : null;
                   })()}
                 </div>
               </div>
-              <p className="text-sm text-white/40 mb-4" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <p className="text-sm text-white/40 mb-4" style={{ fontFamily: "var(--font-label)" }}>
                 Bu kayıt silinecek. &quot;Ödendi&quot; durumundaysa öğrencinin bakiyesi düzeltilir.
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setDeleteId(null)}
                   className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
+                  style={{ fontFamily: "var(--font-label)" }}>Vazgeç</button>
                 <button onClick={handleDelete}
-                  className="flex-1 bg-crimson hover:bg-crimson-bright text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Evet, Sil</button>
+                  className="flex-1 text-white text-xs font-semibold tracking-widest uppercase py-2.5 rounded-lg transition-transform hover:scale-[1.01] active:scale-95"
+                  style={{ background: "var(--color-error)", fontFamily: "var(--font-label)" }}>Evet, Sil</button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+    </motion.div>
     </div>
   );
 }

@@ -26,18 +26,15 @@ function PkgCard({ pkg, i }: { pkg: LessonPackage; i: number }) {
       className="group relative flex flex-col"
       style={{ willChange: "transform" }}
     >
-      {/* Outer glow */}
+      {/* Outer glow — öne çıkan pakette yavaşça kayan altın-mor gradient */}
       {isPopular && (
-        <motion.div className="absolute -inset-0.5 rounded-2xl opacity-70 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none"
-          style={{ background: "linear-gradient(135deg,#8B5CF640,#D946EF30,#8B5CF620)" }} />
+        <motion.div className={`gradient-animated gradient-violet-gold absolute -inset-0.5 rounded-2xl opacity-40 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none`} />
       )}
 
-      <div className="relative flex flex-col flex-1 rounded-2xl p-7 overflow-hidden"
+      <div className="glass relative flex flex-col flex-1 rounded-2xl p-7 overflow-hidden"
         style={{
-          background: isPopular ? "rgba(20,14,36,0.97)" : "rgba(15,15,22,0.95)",
-          border: isPopular ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(139,92,246,0.1)",
-          backdropFilter: "blur(20px)",
-          boxShadow: isPopular ? "0 0 60px rgba(139,92,246,0.12)" : "none",
+          borderColor: isPopular ? "rgba(245,158,11,0.4)" : "rgba(139,92,246,0.1)",
+          boxShadow: isPopular ? "0 0 60px rgba(245,158,11,0.1)" : "none",
           transition: "border-color 0.4s, box-shadow 0.4s",
         }}
         onMouseEnter={e => {
@@ -62,13 +59,8 @@ function PkgCard({ pkg, i }: { pkg: LessonPackage; i: number }) {
         {/* Popüler rozet */}
         {isPopular && (
           <div className="absolute -top-px left-1/2 -translate-x-1/2">
-            <div className="text-[9px] font-bold tracking-widest uppercase px-4 py-1 -translate-y-1/2"
-              style={{
-                background: "linear-gradient(135deg,#8B5CF6,#D946EF)",
-                color: "#fff",
-                fontFamily: "var(--font-barlow-condensed)",
-                borderRadius: "4px",
-              }}>
+            <div className="gradient-violet-gold text-[9px] font-bold tracking-widest uppercase px-4 py-1 -translate-y-1/2 rounded"
+              style={{ color: "#fff", fontFamily: "var(--font-label)" }}>
               En Popüler
             </div>
           </div>
@@ -77,11 +69,11 @@ function PkgCard({ pkg, i }: { pkg: LessonPackage; i: number }) {
         {/* Paket adı */}
         <div className="mb-2 mt-1">
           <p className="text-[10px] tracking-[0.35em] uppercase mb-1"
-            style={{ color: isPopular ? "#A855F7" : "rgba(139,92,246,0.7)", fontFamily: "var(--font-barlow-condensed)" }}>
+            style={{ color: isPopular ? "#A855F7" : "rgba(139,92,246,0.7)", fontFamily: "var(--font-label)" }}>
             {pkg.durationDays} gün geçerli
           </p>
           <h3 className="text-3xl font-display tracking-wider"
-            style={{ fontFamily: "var(--font-bebas)", color: isPopular ? "#C084FC" : "#fff" }}>
+            style={{ fontFamily: "var(--font-display)", color: isPopular ? "#C084FC" : "#fff" }}>
             {pkg.name}
           </h3>
         </div>
@@ -89,16 +81,16 @@ function PkgCard({ pkg, i }: { pkg: LessonPackage; i: number }) {
         {/* Fiyat */}
         <div className="flex items-end gap-2 mb-5">
           <motion.span className="text-5xl font-display"
-            style={{ fontFamily: "var(--font-bebas)", color: "#fff" }}
+            style={{ fontFamily: "var(--font-display)", color: "#fff" }}
             animate={isPopular ? { textShadow: ["0 0 0px transparent","0 0 30px rgba(139,92,246,0.5)","0 0 0px transparent"] } : {}}
             transition={{ duration: 3, repeat: Infinity }}>
             ₺{pkg.price.toLocaleString("tr-TR")}
           </motion.span>
           <div className="pb-2">
-            <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+            <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
               {pkg.lessonCount} ders
             </div>
-            <div className="text-xs" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+            <div className="text-xs" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
               50 dk/ders
             </div>
           </div>
@@ -107,7 +99,7 @@ function PkgCard({ pkg, i }: { pkg: LessonPackage; i: number }) {
         {/* Ders başı fiyat */}
         <div className="mb-5 py-2.5 px-3 rounded-lg"
           style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.12)" }}>
-          <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+          <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
             Ders başı: <strong style={{ color: "#C084FC" }}>₺{Math.round(pkg.price / pkg.lessonCount).toLocaleString("tr-TR")}</strong>
           </span>
         </div>
@@ -134,12 +126,11 @@ function PkgCard({ pkg, i }: { pkg: LessonPackage; i: number }) {
         <motion.a
           href={`https://wa.me/905389714459?text=${encodeURIComponent(`Merhaba Antrenör Enes, ${pkg.name} paket (${pkg.lessonCount} ders) hakkında bilgi almak istiyorum.`)}`}
           target="_blank" rel="noopener noreferrer"
-          whileHover={{ scale: 1.03, boxShadow: isPopular ? "0 0 30px rgba(139,92,246,0.5)" : "0 0 20px rgba(139,92,246,0.25)" }}
+          whileHover={{ scale: 1.03, boxShadow: isPopular ? "0 0 30px rgba(245,158,11,0.45)" : "0 0 20px rgba(139,92,246,0.25)" }}
           whileTap={{ scale: 0.97 }}
-          className="block text-center font-semibold tracking-widest uppercase text-sm py-3.5 rounded-xl transition-all"
+          className={`block text-center font-semibold tracking-widest uppercase text-sm py-3.5 rounded-xl transition-all ${isPopular ? "gradient-animated gradient-violet-gold" : ""}`}
           style={{
-            fontFamily: "var(--font-barlow-condensed)",
-            background: isPopular ? "linear-gradient(135deg,#8B5CF6,#A855F7,#D946EF)" : "transparent",
+            fontFamily: "var(--font-label)",
             border: isPopular ? "none" : "1px solid rgba(139,92,246,0.3)",
             color: isPopular ? "#fff" : "rgba(139,92,246,0.8)",
           }}>
@@ -190,11 +181,11 @@ export default function PackagesSection() {
           <div className="flex items-center justify-center gap-4 mb-5">
             <span className="h-px w-10" style={{ background: "linear-gradient(to right,transparent,#D946EF)" }} />
             <span className="text-xs tracking-[0.4em] uppercase"
-              style={{ color: "#D946EF", fontFamily: "var(--font-barlow-condensed)" }}>Özel Ders Paketleri</span>
+              style={{ color: "#D946EF", fontFamily: "var(--font-label)" }}>Özel Ders Paketleri</span>
             <span className="h-px w-10" style={{ background: "linear-gradient(to left,transparent,#D946EF)" }} />
           </div>
           <h2 className="font-display leading-none tracking-wide text-white"
-            style={{ fontFamily: "var(--font-bebas)", fontSize: "clamp(40px,7vw,88px)" }}>
+            style={{ fontFamily: "var(--font-display)", fontSize: "clamp(40px,7vw,88px)" }}>
             PAKETİNİZİ{" "}
             <span style={{
               background: "linear-gradient(90deg,#8B5CF6,#A855F7,#D946EF,#A855F7,#8B5CF6)",
@@ -218,7 +209,7 @@ export default function PackagesSection() {
 
         <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.4 }}
           className="text-center text-xs mt-7"
-          style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+          style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
           Fiyatlar değişebilir · İndirimli fiyat için WhatsApp&apos;tan iletişime geçin
         </motion.p>
       </div>

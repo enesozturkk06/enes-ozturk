@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
 import type { TopStudent } from "@/lib/financeCenter";
+import CountUpNumber from "./CountUpNumber";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -20,18 +21,18 @@ export default function TopPayingStudentsCard({
   const maxPaid = students[0]?.totalPaid ?? 0;
 
   return (
-    <div className="stat-card-glass rounded-2xl h-full"
-      style={{ background: "rgba(15,15,22,0.95)", border: "1px solid var(--color-iron)" }}>
+    <div className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet h-full">
+    <div className="glass rounded-2xl h-full">
       <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <Trophy size={15} style={{ color: "#FBBF24" }} />
-        <h3 className="text-sm uppercase tracking-widest text-white/40" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+        <h3 className="text-sm uppercase tracking-widest text-white/40" style={{ fontFamily: "var(--font-label)" }}>
           En Çok Kazandıran Öğrenciler
         </h3>
       </div>
 
       <div className="p-4 sm:p-5">
         {students.length === 0 ? (
-          <p className="text-xs text-white/25 text-center py-6" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <p className="text-xs text-white/25 text-center py-6" style={{ fontFamily: "var(--font-label)" }}>
             Henüz ödeme kaydı yok
           </p>
         ) : (
@@ -40,8 +41,9 @@ export default function TopPayingStudentsCard({
               const pct = maxPaid > 0 ? Math.round((s.totalPaid / maxPaid) * 100) : 0;
               return (
                 <motion.div key={s.studentId}
-                  initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                  initial={{ opacity: 0, x: -8, filter: "blur(4px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
                   transition={{ delay: i * 0.06, duration: 0.3 }}
+                  whileHover={{ x: 2 }}
                   className="flex items-center gap-3">
                   <div className="relative flex-shrink-0">
                     {s.avatarUrl ? (
@@ -63,11 +65,11 @@ export default function TopPayingStudentsCard({
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-sm font-semibold text-white truncate" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      <span className="text-sm font-semibold text-white truncate" style={{ fontFamily: "var(--font-label)" }}>
                         {s.studentName}
                       </span>
-                      <span className="text-sm font-bold flex-shrink-0" style={{ color: "#FBBF24", fontFamily: "var(--font-bebas)" }}>
-                        ₺{s.totalPaid.toLocaleString("tr-TR")}
+                      <span className="text-sm font-bold flex-shrink-0" style={{ color: "#FBBF24", fontFamily: "var(--font-display)" }}>
+                        <CountUpNumber value={s.totalPaid} prefix="₺" />
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -76,7 +78,7 @@ export default function TopPayingStudentsCard({
                           transition={{ duration: 0.7, delay: i * 0.06 + 0.1 }}
                           className="h-full rounded-full" style={{ background: MEDAL_COLORS[i] ?? "#8B5CF6" }} />
                       </div>
-                      <span className="text-[10px] text-white/25 flex-shrink-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      <span className="text-[10px] text-white/25 flex-shrink-0" style={{ fontFamily: "var(--font-label)" }}>
                         {s.lessonCount} ders
                       </span>
                     </div>
@@ -87,6 +89,7 @@ export default function TopPayingStudentsCard({
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

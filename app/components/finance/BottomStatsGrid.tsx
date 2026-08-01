@@ -22,7 +22,7 @@ export default function BottomStatsGrid({ stats }: { stats: BottomStats }) {
     <div>
       <div className="flex items-center gap-2 px-1 pb-2">
         <TrendingUp size={13} style={{ color: "#22D3EE" }} />
-        <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-bebas)" }}>
+        <span className="text-[10px] uppercase tracking-[0.2em] text-white/25" style={{ fontFamily: "var(--font-display)" }}>
           İstatistikler
         </span>
         <div className="h-px flex-1 bg-white/5" />
@@ -30,20 +30,21 @@ export default function BottomStatsGrid({ stats }: { stats: BottomStats }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {tiles.map((t, i) => (
           <motion.div key={t.label}
-            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: i * 0.04 }}
-            className="stat-card-glass rounded-xl p-3.5"
-            style={{ background: "rgba(15,15,22,0.95)", border: "1px solid var(--color-iron)" }}>
+            initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: i * 0.04 }}
+            whileHover={{ y: -2 }}
+            className="glass rounded-xl p-3.5">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[9px] text-white/30 uppercase tracking-widest leading-tight" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <span className="text-[9px] text-white/30 uppercase tracking-widest leading-tight" style={{ fontFamily: "var(--font-label)" }}>
                 {t.label}
               </span>
               <span style={{ color: t.color }} className="flex-shrink-0">{t.icon}</span>
             </div>
-            <div className="text-base font-display truncate" style={{ fontFamily: "var(--font-bebas)", color: t.color }} title={t.value}>
+            <div className="text-base font-display truncate" style={{ fontFamily: "var(--font-display)", color: t.color }} title={t.value}>
               {t.value}
             </div>
-            <div className="text-[10px] text-white/25 mt-0.5 truncate" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <div className="text-[10px] text-white/25 mt-0.5 truncate" style={{ fontFamily: "var(--font-label)" }}>
               {t.sub}
             </div>
           </motion.div>

@@ -36,7 +36,7 @@ export default function GroupPaymentPeriodList({
   };
 
   if (members.length === 0) {
-    return <p className="text-xs text-white/25 text-center py-3" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Öğrenci yok</p>;
+    return <p className="text-xs text-white/25 text-center py-3" style={{ fontFamily: "var(--font-label)" }}>Öğrenci yok</p>;
   }
 
   return (
@@ -46,21 +46,21 @@ export default function GroupPaymentPeriodList({
         const c = payment ? STATUS_CFG[payment.status] : STATUS_CFG.beklemede;
         const isUnpaid = !payment || payment.status !== "odendi";
         return (
-          <div key={m.id} className="flex items-center justify-between gap-2 py-2 px-2.5 rounded-lg"
-            style={{ background: "rgba(255,255,255,0.02)", borderLeft: `2px solid ${c.bar}` }}>
-            <span className="text-xs text-white truncate flex-1 min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <div key={m.id} className="glass flex items-center justify-between gap-2 py-2 px-2.5 rounded-lg"
+            style={{ borderLeft: `2px solid ${c.bar}` }}>
+            <span className="text-xs text-white truncate flex-1 min-w-0" style={{ fontFamily: "var(--font-label)" }}>
               {m.fullName}
             </span>
             {payment ? (
               <>
-                <span className="text-xs font-bold text-white tabular-nums flex-shrink-0" style={{ fontFamily: "var(--font-bebas)" }}>
+                <span className="text-xs font-bold text-white tabular-nums flex-shrink-0" style={{ fontFamily: "var(--font-display)" }}>
                   ₺{payment.amount.toLocaleString("tr-TR")}
                 </span>
                 <StatusBadge status={payment.status} />
                 {isUnpaid && (
                   <button onClick={() => handleMarkPaid(payment.id)} disabled={busy === payment.id}
-                    className="text-[10px] px-2 py-1 rounded-md font-semibold disabled:opacity-40 flex-shrink-0"
-                    style={{ background: "rgba(74,222,128,0.12)", color: "#4ADE80", fontFamily: "var(--font-barlow-condensed)" }}>
+                    className="text-[10px] px-2 py-1 rounded-md font-semibold disabled:opacity-40 flex-shrink-0 transition-transform hover:scale-[1.03] active:scale-95"
+                    style={{ background: "rgba(74,222,128,0.12)", color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
                     <Check size={11} className="inline -mt-0.5 mr-0.5" /> Ödendi
                   </button>
                 )}
@@ -71,8 +71,8 @@ export default function GroupPaymentPeriodList({
                     </span>
                   ) : (
                     <button onClick={() => handleReminder(m.id, m.studentId!, payment.amount)} disabled={busy === m.id}
-                      className="text-[10px] px-2 py-1 rounded-md font-semibold disabled:opacity-40 flex-shrink-0"
-                      style={{ background: "rgba(251,191,36,0.12)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}
+                      className="text-[10px] px-2 py-1 rounded-md font-semibold disabled:opacity-40 flex-shrink-0 transition-transform hover:scale-[1.03] active:scale-95"
+                      style={{ background: "rgba(245,158,11,0.12)", color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}
                       title="Push bildirimi ile hatırlat">
                       <BellRing size={11} className="inline -mt-0.5 mr-0.5" /> Hatırlat
                     </button>

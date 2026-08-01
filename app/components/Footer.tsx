@@ -20,7 +20,7 @@ export default function Footer() {
         <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "repeating-linear-gradient(-45deg,white 0px,white 1px,transparent 1px,transparent 22px)" }} />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-9 flex flex-col sm:flex-row items-center justify-between gap-5">
           <div>
-            <h3 className="text-2xl lg:text-3xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>
+            <h3 className="text-2xl lg:text-3xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>
               ÖZEL DERS İÇİN RANDEVU ALIN
             </h3>
             <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)" }}>
@@ -28,10 +28,9 @@ export default function Footer() {
             </p>
           </div>
           <a href={`https://wa.me/${WA}`} target="_blank" rel="noopener noreferrer"
-            className="flex-shrink-0 flex items-center gap-2 text-white font-semibold tracking-widest uppercase px-7 py-3 text-sm rounded-xl transition-all"
+            className="gradient-animated gradient-violet-blue gradient-slow flex-shrink-0 flex items-center gap-2 text-white font-semibold tracking-widest uppercase px-7 py-3 text-sm rounded-xl transition-all"
             style={{
-              background: "linear-gradient(135deg,#8B5CF6,#A855F7,#D946EF)",
-              fontFamily: "var(--font-barlow-condensed)",
+              fontFamily: "var(--font-label)",
               boxShadow: "0 0 20px rgba(139,92,246,0.35)",
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 0 35px rgba(139,92,246,0.55)"; (e.currentTarget as HTMLElement).style.transform = "scale(1.04)"; }}
@@ -52,8 +51,8 @@ export default function Footer() {
             <div className="flex items-center gap-3 mb-4">
               <Logo size={38} />
               <div>
-                <div className="text-white text-base tracking-[0.15em] leading-none" style={{ fontFamily: "var(--font-bebas)" }}>ENES ÖZTÜRK</div>
-                <div className="text-xs tracking-[0.3em]" style={{ fontFamily: "var(--font-bebas)", color: "#8B5CF6" }}>KİŞİSEL ANTRENÖR</div>
+                <div className="text-white text-base tracking-[0.15em] leading-none" style={{ fontFamily: "var(--font-display)" }}>ENES ÖZTÜRK</div>
+                <div className="text-xs tracking-[0.3em]" style={{ fontFamily: "var(--font-display)", color: "#8B5CF6" }}>KİŞİSEL ANTRENÖR</div>
               </div>
             </div>
             <p className="text-sm leading-relaxed mb-5 max-w-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter)" }}>
@@ -71,7 +70,7 @@ export default function Footer() {
                     background: `${s.accent}0D`,
                     border: `1px solid ${s.accent}25`,
                     color: `${s.accent}AA`,
-                    fontFamily: "var(--font-barlow-condensed)",
+                    fontFamily: "var(--font-label)",
                     transition: "all 0.2s",
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${s.accent}50`; (e.currentTarget as HTMLElement).style.color = s.accent; }}
@@ -86,14 +85,14 @@ export default function Footer() {
           {/* Sayfalar */}
           <div>
             <h4 className="text-sm font-semibold tracking-[0.2em] uppercase mb-4 pb-2"
-              style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-barlow-condensed)", borderBottom: "1px solid rgba(139,92,246,0.12)" }}>
+              style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-label)", borderBottom: "1px solid rgba(139,92,246,0.12)" }}>
               Sayfalar
             </h4>
             <ul className="space-y-2.5">
               {NAV.map(([l, h]) => (
                 <li key={l}><a href={h}
                   className="text-xs transition-colors"
-                  style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-barlow-condensed)", transition: "color 0.2s" }}
+                  style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-label)", transition: "color 0.2s" }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#A855F7"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.28)"; }}>
                   {l}
@@ -105,14 +104,14 @@ export default function Footer() {
           {/* Sistem */}
           <div>
             <h4 className="text-sm font-semibold tracking-[0.2em] uppercase mb-4 pb-2"
-              style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-barlow-condensed)", borderBottom: "1px solid rgba(139,92,246,0.12)" }}>
+              style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-label)", borderBottom: "1px solid rgba(139,92,246,0.12)" }}>
               Sistem
             </h4>
             <ul className="space-y-2.5">
               {SYS.map(([l, h]) => (
                 <li key={l}><a href={h}
                   className="text-xs transition-colors"
-                  style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-barlow-condensed)", transition: "color 0.2s" }}
+                  style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-label)", transition: "color 0.2s" }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#A855F7"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.28)"; }}>
                   {l}
@@ -126,14 +125,14 @@ export default function Footer() {
       {/* Alt çubuk */}
       <div className="px-4 sm:px-6 lg:px-8 py-5" style={{ borderTop: "1px solid rgba(139,92,246,0.08)" }}>
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-xs tracking-wider" style={{ color: "rgba(255,255,255,0.18)", fontFamily: "var(--font-barlow-condensed)" }}>
+          <p className="text-xs tracking-wider" style={{ color: "rgba(255,255,255,0.18)", fontFamily: "var(--font-label)" }}>
             © {new Date().getFullYear()} Antrenör Enes Öztürk. Tüm hakları saklıdır.
           </p>
           <div className="flex gap-5">
             {["Gizlilik Politikası","Kullanım Şartları"].map(t => (
               <a key={t} href="#"
                 className="text-xs transition-colors"
-                style={{ color: "rgba(255,255,255,0.15)", fontFamily: "var(--font-barlow-condensed)" }}
+                style={{ color: "rgba(255,255,255,0.15)", fontFamily: "var(--font-label)" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.4)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.15)"; }}>
                 {t}

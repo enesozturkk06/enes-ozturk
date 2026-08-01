@@ -21,8 +21,7 @@ export default function FinanceTimeFilter({
 }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-      <div className="inline-flex items-center gap-1 p-1 rounded-xl overflow-x-auto"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--color-iron)" }}>
+      <div className="glass inline-flex items-center gap-1 p-1 rounded-xl overflow-x-auto">
         {OPTIONS.map(opt => {
           const active = range === opt.value;
           return (
@@ -30,13 +29,12 @@ export default function FinanceTimeFilter({
               className="relative px-3 py-1.5 text-xs font-semibold whitespace-nowrap rounded-lg transition-colors"
               style={{
                 color: active ? "#fff" : "rgba(255,255,255,0.4)",
-                fontFamily: "var(--font-barlow-condensed)",
+                fontFamily: "var(--font-label)",
               }}>
               {active && (
                 <motion.span layoutId="finance-time-filter-pill"
-                  className="absolute inset-0 rounded-lg"
-                  style={{ background: "linear-gradient(135deg,#8B5CF6,#A855F7)" }}
-                  transition={{ type: "spring", stiffness: 400, damping: 32 }} />
+                  className="gradient-animated gradient-slow gradient-violet-pink-orange absolute inset-0 rounded-lg"
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} />
               )}
               <span className="relative z-10">{opt.label}</span>
             </button>
@@ -47,12 +45,12 @@ export default function FinanceTimeFilter({
       {range === "custom" && (
         <div className="flex items-center gap-2">
           <input type="date" value={custom.from} onChange={e => onCustomChange({ ...custom, from: e.target.value })}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-1.5 text-xs outline-none rounded-lg"
-            style={{ fontFamily: "var(--font-inter)" }} />
+            className="glass text-white px-2 py-1.5 text-xs outline-none rounded-lg"
+            style={{ fontFamily: "var(--font-label)" }} />
           <span className="text-white/20 text-xs">—</span>
           <input type="date" value={custom.to} onChange={e => onCustomChange({ ...custom, to: e.target.value })}
-            className="bg-steel/40 border border-white/10 text-white px-2 py-1.5 text-xs outline-none rounded-lg"
-            style={{ fontFamily: "var(--font-inter)" }} />
+            className="glass text-white px-2 py-1.5 text-xs outline-none rounded-lg"
+            style={{ fontFamily: "var(--font-label)" }} />
         </div>
       )}
     </div>

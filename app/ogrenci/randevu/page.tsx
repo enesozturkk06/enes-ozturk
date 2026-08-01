@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
@@ -10,7 +10,10 @@ import {
 } from "@/lib/db";
 import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry } from "@/lib/types";
 import { PageHeader } from "@/app/components/ui";
-import { TRAINER_NAME, TRAINER_WHATSAPP, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_BOOKING_TEXT } from "@/lib/constants";
+import {
+  TRAINER_NAME, TRAINER_WHATSAPP, TRAINER_LOCATION, CANCEL_LIMIT_HOURS,
+  LESSON_DURATION_MINUTES, PACKAGE_EXPIRED_BOOKING_TEXT,
+} from "@/lib/constants";
 import { isPackageExpired } from "@/lib/packageDuration";
 import {
   Calendar, Clock, CheckCircle, XCircle, AlertTriangle,
@@ -34,16 +37,15 @@ const LESSON_TYPES: { value: LessonType; label: string; icon: React.ReactNode }[
   { value: "duet",     label: "Düet",     icon: <Users size={15} /> },
 ];
 
-/* ── Kart sarmalayıcı ──────────────────────────────────────── */
-function Card({ children, className = "", style = {} }: {
-  children: React.ReactNode; className?: string; style?: React.CSSProperties;
+/* ── Kart sarmalayıcı — premium glass ─────────────────────── */
+function Card({ children, className = "", style = {}, glass = "glass" }: {
+  children: React.ReactNode; className?: string; style?: React.CSSProperties; glass?: "glass" | "glass-strong";
 }) {
   return (
     <div
-      className={`rounded-2xl overflow-hidden w-full ${className}`}
+      className={`${glass} relative rounded-2xl overflow-hidden w-full ${className}`}
       style={{
-        background: "rgba(15,15,22,0.95)",
-        border: "1px solid rgba(139,92,246,0.12)",
+        borderColor: "rgba(139,92,246,0.14)",
         ...style,
       }}
     >
@@ -52,14 +54,14 @@ function Card({ children, className = "", style = {} }: {
   );
 }
 
-/* ── Modal onay satırı ─────────────────────────────────────── */
+/* ── Özet satırı (tarih/saat/durum vb.) ───────────────────── */
 function InfoRow({ label, val }: { label: string; val: string }) {
   return (
-    <div className="flex gap-3 py-1.5 border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-      <span className="text-xs flex-shrink-0" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+    <div className="flex gap-3 py-2 border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+      <span className="text-xs flex-shrink-0" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)" }}>
         {label}
       </span>
-      <span className="text-xs font-semibold text-white text-right flex-1 min-w-0 break-all" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+      <span className="text-xs font-semibold text-white text-right flex-1 min-w-0 break-all" style={{ fontFamily: "var(--font-label)" }}>
         {val}
       </span>
     </div>
@@ -84,7 +86,6 @@ export default function RandevuPage() {
   const [partnerLoading, setPartnerLoading] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [inviteLoading, setInviteLoading]   = useState<string | null>(null);
-  const [confirmOpen, setConfirmOpen]       = useState(false);
   const [successOpen, setSuccessOpen]       = useState(false);
   const [cancelId, setCancelId]             = useState<string | null>(null);
   const [cancelBlocked, setCancelBlocked]   = useState<Appointment | null>(null);
@@ -94,6 +95,13 @@ export default function RandevuPage() {
   /* Bekleme listesi */
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [waitlistBusy, setWaitlistBusy] = useState<string | null>(null);
+
+  /* Saat seçilince inline "Ders Bilgisi Kartı" görünüme kayar — Apple Calendar
+     tarzı: seç → hemen altta önizle → onayla, popup'a gerek yok. */
+  const summaryRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedSlot) summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedSlot]);
 
   const dates = Array.from({ length: 14 }, (_, i) =>
     format(addDays(new Date(), i), "yyyy-MM-dd")
@@ -150,7 +158,7 @@ export default function RandevuPage() {
     }
   };
 
-  const handleSlotClick = (slot: TimeSlot) => { setBookError(""); setSelectedSlot(slot); setConfirmOpen(true); };
+  const handleSlotClick = (slot: TimeSlot) => { setBookError(""); setSelectedSlot(slot); };
 
   const confirmBook = async () => {
     if (!selectedSlot || !student) return;
@@ -178,7 +186,7 @@ export default function RandevuPage() {
         lessonType, partnerStudentIds: lessonType === "duet" && partner ? [partner.id] : [],
         status: "onaylandi",
       });
-      setConfirmOpen(false); setSuccessOpen(true); await reload();
+      setSelectedSlot(null); setSuccessOpen(true); await reload();
     } catch (err: unknown) {
       setBookError(err instanceof Error ? err.message : "Randevu oluşturulamadı.");
     } finally { setSaving(false); }
@@ -228,7 +236,7 @@ export default function RandevuPage() {
      ══════════════════════════════════════════════════════════ */
   return (
     // w-full + max-w-full → hiçbir zaman parent'ı aşmaz
-    <div className="w-full max-w-5xl mx-auto" style={{ minWidth: 0 }}>
+    <div className="w-full max-w-5xl mx-auto pb-28" style={{ minWidth: 0 }}>
       <PageHeader title="Randevu Al" subtitle="Ders tipini seç, saat seç, randevu oluştur" accent="Özel Ders" />
 
       {/* Ders bilgilendirmesi — onaylanmadıysa tam kart, onaylandıysa kısa hatırlatma */}
@@ -242,7 +250,7 @@ export default function RandevuPage() {
         <div className="flex items-start gap-3 p-4 rounded-xl mb-4"
           style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
           <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-300 min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <p className="text-sm text-red-300 min-w-0" style={{ fontFamily: "var(--font-label)" }}>
             {PACKAGE_EXPIRED_BOOKING_TEXT}
           </p>
         </div>
@@ -253,7 +261,7 @@ export default function RandevuPage() {
         <div className="flex items-start gap-3 p-4 rounded-xl mb-4"
           style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
           <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-300 min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <p className="text-sm text-red-300 min-w-0" style={{ fontFamily: "var(--font-label)" }}>
             Paketinizde ders kalmadı. Yeni paket almadan randevu oluşturamazsınız.
           </p>
         </div>
@@ -267,7 +275,7 @@ export default function RandevuPage() {
               {/* Başlık */}
               <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: "rgba(139,92,246,0.15)" }}>
                 <Bell size={14} style={{ color: V, flexShrink: 0 }} />
-                <span className="text-sm font-semibold" style={{ color: V, fontFamily: "var(--font-barlow-condensed)" }}>
+                <span className="text-sm font-semibold" style={{ color: V, fontFamily: "var(--font-label)" }}>
                   Bekleyen Davet ({pendingInvites.length})
                 </span>
               </div>
@@ -277,16 +285,16 @@ export default function RandevuPage() {
                   {/* Kim davet etti */}
                   <div className="flex items-center gap-2 mb-1">
                     <Users size={13} style={{ color: V, flexShrink: 0 }} />
-                    <span className="text-sm font-semibold text-white min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    <span className="text-sm font-semibold text-white min-w-0" style={{ fontFamily: "var(--font-label)" }}>
                       {inv.creatorName} düet davet etti
                     </span>
                   </div>
                   {/* Tarih saat */}
-                  <p className="text-xs mb-2" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  <p className="text-xs mb-2" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
                     {format(parseISO(inv.date), "dd MMM yyyy (EEE)", { locale: tr })} · {inv.startTime}–{inv.endTime}
                   </p>
                   {student && student.remainingLessons === 0 && (
-                    <p className="text-xs text-red-400 mb-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    <p className="text-xs text-red-400 mb-2" style={{ fontFamily: "var(--font-label)" }}>
                       ⚠️ Kalan dersiniz yok — onaylarsanız ders düşülmez.
                     </p>
                   )}
@@ -295,14 +303,14 @@ export default function RandevuPage() {
                     <button onClick={() => handleInviteResponse(inv, true)}
                       disabled={inviteLoading === inv.appointmentStudentId}
                       className="flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl disabled:opacity-50"
-                      style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.35)", color: "#22c55e", fontFamily: "var(--font-barlow-condensed)" }}>
+                      style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.35)", color: "#22c55e", fontFamily: "var(--font-label)" }}>
                       <CheckCircle size={12} />
                       {inviteLoading === inv.appointmentStudentId ? "..." : "Onayla"}
                     </button>
                     <button onClick={() => handleInviteResponse(inv, false)}
                       disabled={inviteLoading === inv.appointmentStudentId}
                       className="flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl disabled:opacity-50"
-                      style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", fontFamily: "var(--font-barlow-condensed)" }}>
+                      style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", fontFamily: "var(--font-label)" }}>
                       <XCircle size={12} />
                       Reddet
                     </button>
@@ -323,23 +331,26 @@ export default function RandevuPage() {
           {/* 1. Ders tipi seçimi */}
           <Card>
             <div className="p-4">
-              <p className="text-xs uppercase mb-3" style={{ color: V, fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+              <p className="text-xs uppercase mb-3" style={{ color: V, fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                 Ders Tipi
               </p>
               {/* grid-cols-2: her zaman 2 eşit sütun */}
               <div className="grid grid-cols-2 gap-3">
                 {LESSON_TYPES.map(t => (
-                  <button key={t.value} onClick={() => setLessonType(t.value)}
-                    className="flex flex-col items-center gap-2 py-4 rounded-xl transition-all"
+                  <motion.button key={t.value} onClick={() => setLessonType(t.value)}
+                    whileTap={{ scale: 0.96 }}
+                    transition={{ type: "tween", duration: 0.15 }}
+                    className="flex flex-col items-center gap-2 py-4 rounded-xl transition-colors"
                     style={{
                       background: lessonType === t.value ? `${V}18` : "rgba(255,255,255,0.03)",
                       border: lessonType === t.value ? `1px solid ${V}60` : "1px solid rgba(255,255,255,0.08)",
+                      boxShadow: lessonType === t.value ? "0 0 16px rgba(139,92,246,0.15)" : "none",
                     }}>
                     <span style={{ color: lessonType === t.value ? V : "rgba(255,255,255,0.3)" }}>{t.icon}</span>
-                    <span className="text-sm font-semibold" style={{ color: lessonType === t.value ? "#fff" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    <span className="text-sm font-semibold" style={{ color: lessonType === t.value ? "#fff" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
                       {t.label}
                     </span>
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
@@ -356,13 +367,13 @@ export default function RandevuPage() {
                     : "1px solid rgba(139,92,246,0.25)",
                 }}>
                   <div className="p-4">
-                    <p className="text-xs uppercase mb-3" style={{ color: V, fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+                    <p className="text-xs uppercase mb-3" style={{ color: V, fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                       Düet Partnerin
                     </p>
                     {partnerLoading ? (
                       <div className="flex items-center gap-2 py-2">
                         <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${V}40`, borderTopColor: "transparent" }} />
-                        <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>Yükleniyor...</span>
+                        <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>Yükleniyor...</span>
                       </div>
                     ) : partner ? (
                       <>
@@ -375,10 +386,10 @@ export default function RandevuPage() {
                           </div>
                           {/* İsim + kod */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-white truncate" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                            <p className="text-sm font-semibold text-white truncate" style={{ fontFamily: "var(--font-label)" }}>
                               {partner.fullName}
                             </p>
-                            <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                            <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
                               {partner.code} · {partner.remainingLessons} ders kaldı
                             </p>
                           </div>
@@ -386,17 +397,17 @@ export default function RandevuPage() {
                             ? <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
                             : <XCircle size={16} className="text-yellow-400 flex-shrink-0" />}
                         </div>
-                        <p className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                        <p className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
                           Randevu oluşturulunca partnerine davet gider. Onaylarsa aynı derse katılır.
                         </p>
                       </>
                     ) : (
                       <div className="p-4 rounded-xl text-center"
                         style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
-                        <p className="text-sm text-red-400 mb-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                        <p className="text-sm text-red-400 mb-1" style={{ fontFamily: "var(--font-label)" }}>
                           Düet partnerin tanımlanmamış
                         </p>
-                        <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                        <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
                           Antrenörünüzden düet partneri atamasını isteyin.
                         </p>
                       </div>
@@ -414,7 +425,7 @@ export default function RandevuPage() {
             <div className="p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Calendar size={13} style={{ color: "rgba(255,255,255,0.35)", flexShrink: 0 }} />
-                <span className="text-xs uppercase" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+                <span className="text-xs uppercase" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                   Tarih Seçin
                 </span>
               </div>
@@ -422,23 +433,34 @@ export default function RandevuPage() {
               <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
                 {dates.map(d => {
                   const active = d === selectedDate;
+                  const isToday = d === format(new Date(), "yyyy-MM-dd");
                   const hasApt = appointments.some(a => a.date === d && a.status === "onaylandi");
                   return (
-                    <button key={d}
+                    <motion.button key={d}
+                      whileTap={{ scale: 0.94 }}
+                      transition={{ type: "tween", duration: 0.15 }}
                       onClick={() => { setSelectedDate(d); setSelectedSlot(null); }}
-                      className="flex flex-col items-center py-2 rounded-xl transition-all"
+                      className={`flex flex-col items-center py-2.5 rounded-xl transition-colors ${active ? "gradient-violet-blue-red" : ""}`}
                       style={{
-                        background: active ? `${V}20` : "rgba(255,255,255,0.03)",
-                        border: active ? `1px solid ${V}55` : "1px solid rgba(255,255,255,0.07)",
+                        background: active ? undefined : "rgba(255,255,255,0.03)",
+                        border: active
+                          ? "1px solid rgba(139,92,246,0.65)"
+                          : isToday
+                            ? "1.5px solid var(--color-achievement-bright)"
+                            : "1px solid rgba(255,255,255,0.07)",
+                        boxShadow: isToday && !active ? "0 0 12px rgba(251,191,36,0.22)" : "none",
                       }}>
-                      <span className="text-[9px] leading-tight" style={{ color: active ? "#C084FC" : "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                      <span className="text-[9px] leading-tight" style={{
+                        color: active ? "#fff" : isToday ? "var(--color-achievement-bright)" : "rgba(255,255,255,0.3)",
+                        fontFamily: "var(--font-label)",
+                      }}>
                         {format(parseISO(d), "EEE", { locale: tr }).toUpperCase()}
                       </span>
-                      <span className="text-base leading-tight font-bold" style={{ fontFamily: "var(--font-bebas)", color: active ? "#fff" : "rgba(255,255,255,0.45)" }}>
+                      <span className="text-base leading-tight font-bold" style={{ fontFamily: "var(--font-display)", color: active ? "#fff" : "rgba(255,255,255,0.45)" }}>
                         {format(parseISO(d), "dd")}
                       </span>
-                      {hasApt && <div className="w-1 h-1 rounded-full mt-0.5" style={{ background: "#22c55e" }} />}
-                    </button>
+                      {hasApt && <div className="w-1 h-1 rounded-full mt-0.5" style={{ background: "var(--color-success)" }} />}
+                    </motion.button>
                   );
                 })}
               </div>
@@ -452,10 +474,10 @@ export default function RandevuPage() {
               <div className="flex items-start gap-2 mb-3">
                 <Clock size={13} style={{ color: "rgba(255,255,255,0.35)", flexShrink: 0, marginTop: 2 }} />
                 <div className="min-w-0">
-                  <p className="text-xs uppercase" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+                  <p className="text-xs uppercase" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                     Müsait Saatler
                   </p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
                     {format(parseISO(selectedDate), "dd MMM yyyy, EEE", { locale: tr })}
                   </p>
                 </div>
@@ -465,7 +487,7 @@ export default function RandevuPage() {
                 <div className="mb-3 p-3 rounded-xl flex items-center gap-2"
                   style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
                   <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
-                  <span className="text-xs text-green-400 min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  <span className="text-xs text-green-400 min-w-0" style={{ fontFamily: "var(--font-label)" }}>
                     Randevunuz var: {myAptOnDate.startTime}–{myAptOnDate.endTime}
                   </span>
                 </div>
@@ -478,72 +500,147 @@ export default function RandevuPage() {
               ) : slots.length === 0 ? (
                 <div className="text-center py-8">
                   <Clock size={24} className="mx-auto mb-2" style={{ color: "rgba(255,255,255,0.1)" }} />
-                  <p className="text-sm" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  <p className="text-sm" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
                     Bu gün için müsait saat yok
                   </p>
                 </div>
               ) : (
-                /* 2 sütun mobilde, 3 büyük ekranda — her zaman grid */
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {slots.map(slot => {
-                    const taken    = !slot.isAvailable || !!myAptOnDate;
-                    const blocked  = slot.isBlocked;
-                    const canWait  = taken && !blocked && !myAptOnDate && !packageExpired && student && student.remainingLessons > 0;
-                    const wlKey    = `${slot.date ?? selectedDate}-${slot.startTime}`;
-                    const inWl     = waitlist.some(w => w.date === (slot.date ?? selectedDate) && w.startTime === slot.startTime);
-                    const wlBusy   = waitlistBusy === wlKey;
+                /* 2 sütun mobilde, 3 büyük ekranda — her zaman grid.
+                   AnimatePresence + key={selectedDate}: tarih değişince yumuşak çapraz geçiş. */
+                <AnimatePresence mode="wait">
+                  <motion.div key={selectedDate}
+                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {slots.map((slot, i) => {
+                      const taken     = !slot.isAvailable || !!myAptOnDate;
+                      const blocked   = slot.isBlocked;
+                      const selected  = selectedSlot?.id === slot.id;
+                      const canWait   = taken && !blocked && !myAptOnDate && !packageExpired && student && student.remainingLessons > 0;
+                      const wlKey     = `${slot.date ?? selectedDate}-${slot.startTime}`;
+                      const inWl      = waitlist.some(w => w.date === (slot.date ?? selectedDate) && w.startTime === slot.startTime);
+                      const wlBusy    = waitlistBusy === wlKey;
 
-                    const disabled = taken || packageExpired;
-                    return (
-                      <div key={slot.id} className="flex flex-col gap-1">
-                        <button disabled={disabled} onClick={() => handleSlotClick(slot)}
-                          className="p-3 rounded-xl text-center transition-all w-full"
-                          style={{
-                            background: disabled ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.06)",
-                            border: disabled
-                              ? `1px solid rgba(255,255,255,${blocked ? "0.02" : "0.04"})`
-                              : `1px solid ${V}25`,
-                            cursor: disabled ? "not-allowed" : "pointer",
-                            opacity: blocked ? 0.2 : disabled ? 0.6 : 1,
-                          }}>
-                          <div className="text-sm font-semibold text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                            {slot.startTime}
-                          </div>
-                          <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
-                            {slot.endTime}
-                          </div>
-                          {taken && (
-                            <div className="text-xs mt-0.5" style={{ color: blocked ? "rgba(255,255,255,0.15)" : "rgba(251,113,133,0.7)", fontFamily: "var(--font-barlow-condensed)" }}>
-                              {blocked ? "Kapalı" : "Dolu"}
-                            </div>
-                          )}
-                        </button>
-
-                        {/* Bekleme listesi butonu — sadece dolu ve kapalı olmayan slotlar */}
-                        {canWait && (
-                          <button
-                            onClick={() => handleWaitlist(slot)}
-                            disabled={wlBusy}
-                            className="w-full py-1 text-[10px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
+                      const disabled = taken || packageExpired;
+                      return (
+                        <div key={slot.id} className="flex flex-col gap-1">
+                          <motion.button disabled={disabled} onClick={() => handleSlotClick(slot)}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0, scale: selected ? 1.03 : 1 }}
+                            transition={{ duration: 0.28, delay: i * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                            whileTap={!disabled ? { scale: 0.96 } : undefined}
+                            className={`glass p-3.5 rounded-xl text-center w-full transition-colors ${disabled ? "" : "cursor-pointer"}`}
                             style={{
-                              background: inWl ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
-                              border: `1px solid ${inWl ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.08)"}`,
-                              color: inWl ? "#FBBF24" : "rgba(255,255,255,0.3)",
-                              fontFamily: "var(--font-barlow-condensed)",
-                              opacity: wlBusy ? 0.5 : 1,
-                            }}
-                          >
-                            <Clock3 size={9} />
-                            {wlBusy ? "..." : inWl ? "Listeden Çık" : "Sıraya Gir"}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                              borderColor: selected
+                                ? "var(--color-achievement)"
+                                : taken
+                                  ? "rgba(239,68,68,0.3)"
+                                  : "rgba(139,92,246,0.3)",
+                              borderWidth: selected ? 1.5 : 1,
+                              cursor: disabled ? "not-allowed" : "pointer",
+                              opacity: blocked ? 0.25 : disabled ? 0.55 : 1,
+                              boxShadow: selected
+                                ? "0 0 20px rgba(245,158,11,0.35), 0 0 45px rgba(245,158,11,0.12)"
+                                : taken ? "none" : "0 0 14px rgba(139,92,246,0.07)",
+                            }}>
+                            <div className="text-sm font-semibold" style={{
+                              color: selected ? "var(--color-achievement-bright)" : "#fff",
+                              fontFamily: "var(--font-label)",
+                            }}>
+                              {slot.startTime}
+                            </div>
+                            <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
+                              {slot.endTime}
+                            </div>
+                            {taken && (
+                              <div className="text-xs mt-0.5 font-semibold" style={{ color: blocked ? "rgba(255,255,255,0.15)" : "var(--color-error)", fontFamily: "var(--font-label)" }}>
+                                {blocked ? "Kapalı" : "Dolu"}
+                              </div>
+                            )}
+                          </motion.button>
+
+                          {/* Bekleme listesi butonu — sadece dolu ve kapalı olmayan slotlar */}
+                          {canWait && (
+                            <button
+                              onClick={() => handleWaitlist(slot)}
+                              disabled={wlBusy}
+                              className="w-full py-1 text-[10px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
+                              style={{
+                                background: inWl ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
+                                border: `1px solid ${inWl ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.08)"}`,
+                                color: inWl ? "#FBBF24" : "rgba(255,255,255,0.3)",
+                                fontFamily: "var(--font-label)",
+                                opacity: wlBusy ? 0.5 : 1,
+                              }}
+                            >
+                              <Clock3 size={9} />
+                              {wlBusy ? "..." : inWl ? "Listeden Çık" : "Sıraya Gir"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </motion.div>
+                </AnimatePresence>
               )}
             </div>
           </Card>
+
+          {/* ── Ders Bilgisi Kartı — saat seçilince inline özet + onay ── */}
+          <AnimatePresence>
+            {selectedSlot && (
+              <motion.div
+                ref={summaryRef}
+                key={selectedSlot.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <Card glass="glass-strong" style={{ borderColor: "rgba(139,92,246,0.3)" }}>
+                  <div className="absolute top-0 left-0 right-0 h-px"
+                    style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
+                  <div className="p-5">
+                    <h3 className="text-lg text-white tracking-wider mb-3" style={{ fontFamily: "var(--font-display)" }}>
+                      DERS BİLGİSİ
+                    </h3>
+                    <div className="space-y-0 mb-3">
+                      <InfoRow label="Tarih" val={format(parseISO(selectedDate), "dd MMM yyyy (EEE)", { locale: tr })} />
+                      <InfoRow label="Saat" val={`${selectedSlot.startTime} – ${selectedSlot.endTime}`} />
+                      <InfoRow label="Ders Süresi" val={`${LESSON_DURATION_MINUTES} dk`} />
+                      <InfoRow label="Salon" val={TRAINER_LOCATION} />
+                      <InfoRow label="Antrenör" val={TRAINER_NAME} />
+                      <InfoRow label="Durum" val="Onay Bekliyor" />
+                      {lessonType === "duet" && partner && (
+                        <InfoRow label="Davet" val={`${partner.fullName} (${partner.remainingLessons} ders)`} />
+                      )}
+                    </div>
+                    {bookError && (
+                      <div className="p-3 rounded-xl mb-3 text-xs text-red-400"
+                        style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-label)" }}>
+                        ⚠️ {bookError}
+                      </div>
+                    )}
+                    <p className="text-xs mb-4" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
+                      Ders, antrenör tamamla butonuna basınca düşer. {CANCEL_LIMIT_HOURS} saat içinde iptal edemezsiniz.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button onClick={() => setSelectedSlot(null)}
+                        className="py-3 rounded-xl text-xs font-semibold uppercase"
+                        style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
+                        Vazgeç
+                      </button>
+                      <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
+                        className="gradient-animated gradient-slow gradient-violet-blue-red py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50 transition-transform active:scale-[0.97]"
+                        style={{ fontFamily: "var(--font-label)" }}>
+                        {saving ? "Oluşturuluyor..." : "Randevuyu Onayla"}
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* ── Sağ sidebar ──────────────────────────────────── */}
@@ -555,7 +652,7 @@ export default function RandevuPage() {
               <div className="p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Clock3 size={13} style={{ color: "#FBBF24" }} />
-                  <p className="text-xs uppercase" style={{ color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+                  <p className="text-xs uppercase" style={{ color: "#FBBF24", fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                     Bekleme Listem ({waitlist.length})
                   </p>
                 </div>
@@ -563,17 +660,17 @@ export default function RandevuPage() {
                   <div key={w.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
                     style={{ borderColor: "rgba(251,191,36,0.08)" }}>
                     <div>
-                      <div className="text-xs font-semibold text-white/70" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      <div className="text-xs font-semibold text-white/70" style={{ fontFamily: "var(--font-label)" }}>
                         {w.date} · {w.startTime}
                       </div>
-                      <div className="text-[10px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                      <div className="text-[10px] text-white/30" style={{ fontFamily: "var(--font-label)" }}>
                         {w.notified ? "🔔 Bildirim gönderildi — hemen randevu al!" : "Sırada bekliyorsun"}
                       </div>
                     </div>
                     <button
                       onClick={() => student && leaveWaitlist(student.id, w.date, w.startTime).then(() => reload())}
                       className="text-[10px] px-2 py-1 transition-colors"
-                      style={{ border: "1px solid rgba(239,68,68,0.3)", color: "rgba(239,68,68,0.7)", borderRadius: 4, fontFamily: "var(--font-barlow-condensed)" }}
+                      style={{ border: "1px solid rgba(239,68,68,0.3)", color: "rgba(239,68,68,0.7)", borderRadius: 4, fontFamily: "var(--font-label)" }}
                     >
                       Çık
                     </button>
@@ -586,33 +683,33 @@ export default function RandevuPage() {
           {/* Yaklaşan randevular */}
           <Card>
             <div className="p-4">
-              <p className="text-xs uppercase mb-3" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+              <p className="text-xs uppercase mb-3" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                 Yaklaşan
               </p>
               {upcoming.length === 0 ? (
-                <p className="text-xs text-center py-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+                <p className="text-xs text-center py-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
                   Randevu yok
                 </p>
               ) : upcoming.map(apt => (
                 <div key={apt.id} className="mb-3 last:mb-0 p-3 rounded-xl"
                   style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  <p className="text-xs font-semibold text-white mb-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  <p className="text-xs font-semibold text-white mb-1" style={{ fontFamily: "var(--font-label)" }}>
                     {format(parseISO(apt.date), "dd MMM, EEE", { locale: tr })}
                   </p>
                   <div className="flex items-center gap-1 mb-1.5 flex-wrap">
                     <Clock size={10} style={{ color: "rgba(255,255,255,0.35)", flexShrink: 0 }} />
-                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)" }}>
                       {apt.startTime}–{apt.endTime}
                     </span>
                     {apt.lessonType !== "bireysel" && (
                       <span className="px-1.5 py-0.5 text-[9px] rounded"
-                        style={{ background: `${V}20`, color: V, fontFamily: "var(--font-barlow-condensed)" }}>
+                        style={{ background: `${V}20`, color: V, fontFamily: "var(--font-label)" }}>
                         {apt.lessonType === "duet" ? "Düet" : "Grup"}
                       </span>
                     )}
                   </div>
                   <button onClick={() => handleCancelClick(apt)}
-                    className="text-xs" style={{ color: "rgba(239,68,68,0.5)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    className="text-xs" style={{ color: "rgba(239,68,68,0.5)", fontFamily: "var(--font-label)" }}>
                     İptal et
                   </button>
                 </div>
@@ -623,11 +720,11 @@ export default function RandevuPage() {
           {/* Geçmiş dersler */}
           <Card>
             <div className="p-4">
-              <p className="text-xs uppercase mb-3" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.12em" }}>
+              <p className="text-xs uppercase mb-3" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                 Geçmiş
               </p>
               {past.length === 0 ? (
-                <p className="text-xs text-center py-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+                <p className="text-xs text-center py-3" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
                   Kayıt yok
                 </p>
               ) : past.map(apt => {
@@ -637,11 +734,11 @@ export default function RandevuPage() {
                 return (
                   <div key={apt.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
                     style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                    <span className="text-xs text-white min-w-0" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    <span className="text-xs text-white min-w-0" style={{ fontFamily: "var(--font-label)" }}>
                       {format(parseISO(apt.date), "dd MMM", { locale: tr })} · {apt.startTime}
                     </span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0"
-                      style={{ background: `${statusColor}18`, color: statusColor, fontFamily: "var(--font-barlow-condensed)" }}>
+                      style={{ background: `${statusColor}18`, color: statusColor, fontFamily: "var(--font-label)" }}>
                       {statusLabel}
                     </span>
                   </div>
@@ -652,84 +749,6 @@ export default function RandevuPage() {
         </div>
       </div>
 
-      {/* ══ Onay Modalı ══════════════════════════════════════════ */}
-      <AnimatePresence>
-        {confirmOpen && selectedSlot && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center"
-            onClick={e => e.target === e.currentTarget && setConfirmOpen(false)}>
-            <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
-              onClick={() => setConfirmOpen(false)} />
-            {/* Mobilde tam ekran mobil-first sheet: 100dvh tabanlı, kendi içinde kaydırılabilir.
-                CTA footer'ı, kaydırılan alanın İÇİNDE position:sticky ile alta yapışık —
-                içerik ne kadar uzasa da buton hep ekranda, yatay çevirmeye gerek yok. */}
-            <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
-              className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl flex flex-col"
-              style={{
-                background: "rgba(15,15,22,0.99)",
-                border: "1px solid rgba(139,92,246,0.3)",
-                maxHeight: "calc(100dvh - 32px)",
-              }}
-              onClick={e => e.stopPropagation()}>
-              <div className="absolute top-0 left-0 right-0 h-px"
-                style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
-
-              {/* Tek kaydırma alanı — özet + CTA footer birlikte, footer alta yapışık kalır */}
-              <div className="overflow-y-auto rounded-t-2xl sm:rounded-2xl" style={{ flex: "1 1 auto", minHeight: 0 }}>
-                <div className="p-5 pb-3">
-                  <h3 className="text-lg text-white tracking-wider mb-3" style={{ fontFamily: "var(--font-bebas)" }}>
-                    RANDEVU ONAYLA
-                  </h3>
-                  <div className="space-y-0 mb-3">
-                    <InfoRow label="Tarih" val={format(parseISO(selectedDate), "dd MMM yyyy (EEE)", { locale: tr })} />
-                    <InfoRow label="Saat" val={`${selectedSlot.startTime} – ${selectedSlot.endTime}`} />
-                    <InfoRow label="Tip" val={lessonType === "bireysel" ? "Bireysel" : lessonType === "duet" ? "Düet" : "Grup"} />
-                    {student && <InfoRow label="Öğrenci" val={`${student.fullName} (${student.remainingLessons} ders)`} />}
-                    {lessonType === "duet" && partner && (
-                      <InfoRow label="Davet" val={`${partner.fullName} (${partner.remainingLessons} ders)`} />
-                    )}
-                    <InfoRow label="Antrenör" val={TRAINER_NAME} />
-                  </div>
-                  {bookError && (
-                    <div className="p-3 rounded-xl mb-2 text-xs text-red-400"
-                      style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
-                      ⚠️ {bookError}
-                    </div>
-                  )}
-                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
-                    Ders, antrenör tamamla butonuna basınca düşer. {CANCEL_LIMIT_HOURS} saat içinde iptal edemezsiniz.
-                  </p>
-                </div>
-
-                {/* CTA footer — scroll konteynerinin içinde, alta yapışık (position:sticky) */}
-                <div
-                  className="modal-sheet-footer-pb px-5 pt-3"
-                  style={{
-                    position: "sticky",
-                    bottom: 0,
-                    background: "rgba(15,15,22,0.99)",
-                    borderTop: "1px solid rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setConfirmOpen(false)}
-                      className="py-3 rounded-xl text-xs font-semibold uppercase"
-                      style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
-                      Vazgeç
-                    </button>
-                    <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
-                      className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50"
-                      style={{ background: "linear-gradient(135deg,#8B5CF6,#A855F7)", fontFamily: "var(--font-barlow-condensed)" }}>
-                      {saving ? "Oluşturuluyor..." : "Randevuyu Onayla"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* ══ Başarı Modalı ══════════════════════════════════════== */}
       <AnimatePresence>
         {successOpen && (
@@ -737,15 +756,15 @@ export default function RandevuPage() {
             className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} />
             <motion.div initial={{ scale: 0.9, y: 16 }} animate={{ scale: 1, y: 0 }}
-              className="relative z-10 w-full max-w-sm rounded-2xl overflow-hidden text-center"
-              style={{ background: "rgba(15,15,22,0.99)", border: "1px solid rgba(34,197,94,0.3)" }}>
+              className="glass-strong relative z-10 w-full max-w-sm rounded-2xl overflow-hidden text-center"
+              style={{ borderColor: "rgba(34,197,94,0.3)" }}>
               <div className="absolute top-0 left-0 right-0 h-px"
-                style={{ background: "linear-gradient(90deg,transparent,#22c55e,transparent)" }} />
+                style={{ background: "linear-gradient(90deg,transparent,var(--color-success),transparent)" }} />
               <div className="p-6">
                 <CheckCircle size={40} className="text-green-400 mx-auto mb-3" />
-                <h3 className="text-xl text-white mb-2" style={{ fontFamily: "var(--font-bebas)" }}>RANDEVU OLUŞTURULDU!</h3>
+                <h3 className="text-xl text-white mb-2" style={{ fontFamily: "var(--font-display)" }}>RANDEVU OLUŞTURULDU!</h3>
                 {lessonType === "duet" && partner && (
-                  <p className="text-xs mb-1" style={{ color: "#A855F7", fontFamily: "var(--font-barlow-condensed)" }}>
+                  <p className="text-xs mb-1" style={{ color: "#A855F7", fontFamily: "var(--font-label)" }}>
                     Davet gönderildi → {partner.fullName}
                   </p>
                 )}
@@ -755,7 +774,7 @@ export default function RandevuPage() {
                 <a href={`https://wa.me/${TRAINER_WHATSAPP}?text=${encodeURIComponent(waMsg)}`}
                   target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-xs font-semibold uppercase mb-3"
-                  style={{ background: "rgba(34,197,94,0.8)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  style={{ background: "rgba(34,197,94,0.8)", fontFamily: "var(--font-label)" }}>
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 flex-shrink-0">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                   </svg>
@@ -763,7 +782,7 @@ export default function RandevuPage() {
                 </a>
                 <button onClick={() => setSuccessOpen(false)}
                   className="w-full py-2.5 rounded-xl text-xs font-semibold uppercase"
-                  style={{ border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  style={{ border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)" }}>
                   Kapat
                 </button>
               </div>
@@ -780,25 +799,25 @@ export default function RandevuPage() {
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
               onClick={() => setCancelId(null)} />
             <motion.div initial={{ scale: 0.95, y: 12 }} animate={{ scale: 1, y: 0 }}
-              className="relative z-10 w-full max-w-sm rounded-2xl overflow-hidden"
-              style={{ background: "rgba(15,15,22,0.99)", border: "1px solid rgba(239,68,68,0.3)" }}
+              className="glass-strong relative z-10 w-full max-w-sm rounded-2xl overflow-hidden"
+              style={{ borderColor: "rgba(239,68,68,0.3)" }}
               onClick={e => e.stopPropagation()}>
               <div className="absolute top-0 left-0 right-0 h-px"
-                style={{ background: "linear-gradient(90deg,transparent,#ef4444,transparent)" }} />
+                style={{ background: "linear-gradient(90deg,transparent,var(--color-error),transparent)" }} />
               <div className="p-5">
-                <h3 className="text-xl text-white mb-2" style={{ fontFamily: "var(--font-bebas)" }}>RANDEVU İPTAL</h3>
+                <h3 className="text-xl text-white mb-2" style={{ fontFamily: "var(--font-display)" }}>RANDEVU İPTAL</h3>
                 <p className="text-sm mb-5" style={{ color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-inter)" }}>
                   Bu randevuyu iptal etmek istediğinize emin misiniz?
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => setCancelId(null)}
                     className="py-3 rounded-xl text-xs font-semibold uppercase"
-                    style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
                     Vazgeç
                   </button>
                   <button onClick={confirmCancel}
                     className="py-3 rounded-xl text-white text-xs font-semibold uppercase"
-                    style={{ background: "rgba(239,68,68,0.7)", fontFamily: "var(--font-barlow-condensed)" }}>
+                    style={{ background: "rgba(239,68,68,0.7)", fontFamily: "var(--font-label)" }}>
                     İptal Et
                   </button>
                 </div>
@@ -812,40 +831,40 @@ export default function RandevuPage() {
       {cancelBlocked && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           style={{ background:"rgba(0,0,0,0.75)", backdropFilter:"blur(8px)" }}>
-          <div className="w-full max-w-sm rounded-2xl overflow-hidden"
-            style={{ background:"rgba(15,15,22,0.99)", border:"1px solid rgba(217,119,6,0.35)" }}>
-            <div className="h-0.5" style={{ background:"linear-gradient(90deg,transparent,#d97706,transparent)" }} />
+          <div className="glass-strong relative w-full max-w-sm rounded-2xl overflow-hidden"
+            style={{ borderColor: "rgba(251,146,60,0.35)" }}>
+            <div className="h-0.5" style={{ background:"linear-gradient(90deg,transparent,var(--color-warning),transparent)" }} />
             <div className="p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center"
-                  style={{ background:"rgba(217,119,6,0.12)", border:"1px solid rgba(217,119,6,0.25)" }}>
+                  style={{ background:"rgba(251,146,60,0.12)", border:"1px solid rgba(251,146,60,0.25)" }}>
                   <span className="text-lg">⏱</span>
                 </div>
                 <div>
-                  <p className="text-white font-semibold text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <p className="text-white font-semibold text-sm" style={{ fontFamily:"var(--font-label)" }}>
                     İptal Edilemiyor
                   </p>
-                  <p className="text-[10px] uppercase tracking-widest" style={{ color:"rgba(217,119,6,0.8)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  <p className="text-[10px] uppercase tracking-widest" style={{ color:"rgba(251,146,60,0.8)", fontFamily:"var(--font-label)" }}>
                     {CANCEL_LIMIT_HOURS} Saat Kuralı
                   </p>
                 </div>
               </div>
 
-              <div className="mb-4 p-3 rounded-xl" style={{ background:"rgba(217,119,6,0.06)", border:"1px solid rgba(217,119,6,0.15)" }}>
-                <p className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+              <div className="mb-4 p-3 rounded-xl" style={{ background:"rgba(251,146,60,0.06)", border:"1px solid rgba(251,146,60,0.15)" }}>
+                <p className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>
                   {format(parseISO(cancelBlocked.date), "dd MMMM yyyy (EEEE)", { locale: tr })}
                 </p>
-                <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+                <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
                   {cancelBlocked.startTime} – {cancelBlocked.endTime}
                 </p>
               </div>
 
-              <p className="text-sm leading-relaxed mb-4" style={{ color:"rgba(255,255,255,0.6)", fontFamily:"var(--font-barlow-condensed)" }}>
-                Dersinize <strong style={{ color:"#d97706" }}>{CANCEL_LIMIT_HOURS} saatten az</strong> süre
+              <p className="text-sm leading-relaxed mb-4" style={{ color:"rgba(255,255,255,0.6)", fontFamily:"var(--font-label)" }}>
+                Dersinize <strong style={{ color:"var(--color-warning)" }}>{CANCEL_LIMIT_HOURS} saatten az</strong> süre
                 kaldığı için iptal edemezsiniz.
               </p>
-              <div className="p-3 rounded-xl mb-4" style={{ background:"rgba(220,38,38,0.06)", border:"1px solid rgba(220,38,38,0.15)" }}>
-                <p className="text-xs leading-relaxed" style={{ color:"rgba(220,38,38,0.8)", fontFamily:"var(--font-barlow-condensed)" }}>
+              <div className="p-3 rounded-xl mb-4" style={{ background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.15)" }}>
+                <p className="text-xs leading-relaxed" style={{ color:"rgba(239,68,68,0.8)", fontFamily:"var(--font-label)" }}>
                   ⚠️ Derse katılmazsanız ders hakkınız kullanılmış sayılır.
                   Zorunlu durumlarda antrenörünüzle iletişime geçin.
                 </p>
@@ -853,7 +872,7 @@ export default function RandevuPage() {
 
               <button onClick={() => setCancelBlocked(null)}
                 className="w-full py-3 text-sm font-semibold tracking-widest uppercase transition-all"
-                style={{ background:"rgba(217,119,6,0.15)", border:"1px solid rgba(217,119,6,0.3)", color:"#d97706", fontFamily:"var(--font-barlow-condensed)" }}>
+                style={{ background:"rgba(251,146,60,0.15)", border:"1px solid rgba(251,146,60,0.3)", color:"var(--color-warning)", fontFamily:"var(--font-label)" }}>
                 Anladım
               </button>
             </div>

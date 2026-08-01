@@ -88,12 +88,8 @@ function ServiceCard({ s, i }: { s: typeof services[0]; i: number }) {
 
       {/* Kart gövdesi */}
       <div
-        className="relative flex flex-col flex-1 rounded-2xl p-6 overflow-hidden transition-all duration-500"
-        style={{
-          background: "rgba(18,18,24,0.9)",
-          border: `1px solid rgba(139,92,246,0.12)`,
-          backdropFilter: "blur(20px)",
-        }}
+        className="glass relative flex flex-col flex-1 rounded-2xl p-6 overflow-hidden transition-all duration-500"
+        style={{ borderColor: "rgba(139,92,246,0.12)" }}
       >
         {/* Hover'da çerçeve parlıyor */}
         <motion.div
@@ -115,7 +111,7 @@ function ServiceCard({ s, i }: { s: typeof services[0]; i: number }) {
               background: `${s.accent}20`,
               border: `1px solid ${s.accent}40`,
               color: s.accent,
-              fontFamily: "var(--font-barlow-condensed)",
+              fontFamily: "var(--font-label)",
             }}
           >
             {s.badge}
@@ -135,7 +131,7 @@ function ServiceCard({ s, i }: { s: typeof services[0]; i: number }) {
         {/* Subtitle */}
         <p
           className="text-[10px] tracking-[0.35em] uppercase mb-1 font-semibold"
-          style={{ color: s.accent, fontFamily: "var(--font-barlow-condensed)" }}
+          style={{ color: s.accent, fontFamily: "var(--font-label)" }}
         >
           {s.subtitle}
         </p>
@@ -143,7 +139,7 @@ function ServiceCard({ s, i }: { s: typeof services[0]; i: number }) {
         {/* Title */}
         <h3
           className="text-xl text-white font-display tracking-wider mb-3"
-          style={{ fontFamily: "var(--font-bebas)" }}
+          style={{ fontFamily: "var(--font-display)" }}
         >
           {s.title}
         </h3>
@@ -166,7 +162,7 @@ function ServiceCard({ s, i }: { s: typeof services[0]; i: number }) {
               />
               <span
                 className="text-xs text-white/40"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}
+                style={{ fontFamily: "var(--font-label)" }}
               >
                 {f}
               </span>
@@ -231,7 +227,7 @@ export default function Services() {
             />
             <span
               className="text-xs tracking-[0.4em] uppercase"
-              style={{ color: "#8B5CF6", fontFamily: "var(--font-barlow-condensed)" }}
+              style={{ color: "#8B5CF6", fontFamily: "var(--font-label)" }}
             >
               Neler Sunuyorum
             </span>
@@ -245,7 +241,7 @@ export default function Services() {
 
           <h2
             className="font-display leading-none tracking-wide text-white"
-            style={{ fontFamily: "var(--font-bebas)", fontSize: "clamp(40px,7vw,88px)" }}
+            style={{ fontFamily: "var(--font-display)", fontSize: "clamp(40px,7vw,88px)" }}
           >
             HİZMETLER &{" "}
             <span
@@ -289,11 +285,8 @@ export default function Services() {
             href="#contact"
             whileHover={{ scale: 1.04, boxShadow: "0 0 40px rgba(139,92,246,0.55)" }}
             whileTap={{ scale: 0.97 }}
-            className="inline-flex items-center gap-3 text-white font-semibold tracking-widest uppercase px-10 py-4 text-sm"
-            style={{
-              background: "linear-gradient(135deg,#8B5CF6,#A855F7,#D946EF)",
-              fontFamily: "var(--font-barlow-condensed)",
-            }}
+            className="gradient-animated gradient-violet-pink inline-flex items-center gap-3 text-white font-semibold tracking-widest uppercase px-10 py-4 text-sm rounded-xl"
+            style={{ fontFamily: "var(--font-label)" }}
           >
             Hizmet Hakkında Bilgi Al
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

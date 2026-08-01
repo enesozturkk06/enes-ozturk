@@ -21,7 +21,22 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(npx vercel *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(jobs -l)",
+      "Bash(netstat -ano)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(cd \"/c/Users/incek/Desktop/enes\" && wc -l app/components/shared/BlackCatAI.tsx lib/types.ts lib/db.ts lib/xp.ts)",
+      "Read(//c/c/Users/incek/Desktop/enes/app/components/shared/**)",
+      "Bash(cd \"/c/Users/incek/Desktop/enes/app/ogrenci\" && ls -d */ 2>/dev/null)",
+      "Read(//c/c/Users/incek/Desktop/enes/app/**)",
+      "Bash(find public *)",
+      "Bash(cat public/manifest.json)",
+      "Bash(cd \"/c/Users/incek/Desktop/enes\" && cat package.json | head -40 && echo \"---env---\" && grep -o \"^[A-Z_]*=\" .env.local 2>/dev/null)",
+      "Read(//c/c/Users/incek/Desktop/enes/**)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(24\\).toString\\('hex'\\)\\)\")",
+      "Bash(curl -s -X POST \"https://enes-ozturk.vercel.app/api/push/send\" -H \"Content-Type: application/json\" -d '{\"title\":\"test\",\"message\":\"test\"}' -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\")",
+      "Bash(curl -s https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/push_subscriptions?select=* -H 'apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -H 'Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -w '\\\\nHTTP_STATUS:%{http_code}\\\\n')"
     ],
     "additionalDirectories": [
       "c:\\Users\\incek\\Desktop"

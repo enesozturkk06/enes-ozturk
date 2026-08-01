@@ -1,16 +1,28 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner, renewStudentPackage, getStudentPackageHistory, getGyms, addPayment } from "@/lib/db";
+import { getStudents, createStudent, updateStudent, deleteStudent, getDuetPartner, setDuetPartner, removeDuetPartner, renewStudentPackage, getStudentPackageHistory, getGyms, addPayment, getAppointments, getLessonRecords, getAllXPAdjustments, getPayments } from "@/lib/db";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { getPackages, getActivePackages, type LessonPackage } from "@/lib/packages";
-import type { Student, PackagePurchase, Gym, GymShareType } from "@/lib/types";
-import { PAYMENT_LABELS, LEVEL_LABELS, LESSON_DURATIONS, MONTHLY_DURATION_DAYS } from "@/lib/constants";
+import type { Student, PackagePurchase, Gym, GymShareType, Appointment, LessonRecord, XPAdjustment, Payment } from "@/lib/types";
+import { PAYMENT_LABELS, LESSON_DURATIONS, MONTHLY_DURATION_DAYS } from "@/lib/constants";
 import { getPackageDurationDays, calcPackageEndDate, getDaysRemaining, getPackageUrgency, isPackageExpired } from "@/lib/packageDuration";
-import { Search, Plus, Edit, Trash2, Phone, User, QrCode, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History, CalendarClock, Infinity as InfinityIcon } from "lucide-react";
+import { computeFullXP, getCurrentSeason, sumManualXP } from "@/lib/xp";
+import { computeBadges } from "@/lib/badges";
+import { User, X, AlertTriangle, CheckCircle, RefreshCw, Wand2, Users, Link as LinkIcon, Unlink, Package as PackageIcon, RotateCcw, ChevronDown, ChevronUp, History, CalendarClock } from "lucide-react";
 import { useToast } from "@/app/components/shared/Toast";
 import { format } from "date-fns";
+import StudentsHero from "@/app/components/ogrenciler/StudentsHero";
+import SearchAndFilters from "@/app/components/ogrenciler/SearchAndFilters";
+import StudentCard from "@/app/components/ogrenciler/StudentCard";
+import ExpiredWarningCard from "@/app/components/ogrenciler/ExpiredWarningCard";
+
+const stagger = { animate: { transition: { staggerChildren: 0.06 } } };
+const fadeUp  = {
+  initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 /* ── Sıralı kod üret: ENES001, ENES002... ────────────────────────────── */
 function genCodeSequential(students: Student[]): string {
@@ -50,11 +62,11 @@ function F({ label, value, onChange, type = "text", placeholder, col2 }: {
   return (
     <div className={col2 ? "sm:col-span-2" : ""}>
       <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-        style={{ fontFamily: "var(--font-barlow-condensed)" }}>{label}</label>
+        style={{ fontFamily: "var(--font-label)" }}>{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-carbon border border-white/10 focus:border-crimson/50 text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none transition-colors"
-        style={{ fontFamily: "var(--font-inter)" }} />
+        className="w-full glass text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none rounded-lg transition-colors"
+        style={{ fontFamily: "var(--font-label)" }} />
     </div>
   );
 }
@@ -66,10 +78,10 @@ function Sel({ label, value, onChange, options }: {
   return (
     <div>
       <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-        style={{ fontFamily: "var(--font-barlow-condensed)" }}>{label}</label>
+        style={{ fontFamily: "var(--font-label)" }}>{label}</label>
       <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-carbon border border-white/10 focus:border-crimson/50 text-white px-3 py-2.5 text-sm outline-none transition-colors appearance-none"
-        style={{ fontFamily: "var(--font-inter)" }}>
+        className="w-full glass text-white px-3 py-2.5 text-sm outline-none rounded-lg appearance-none transition-colors"
+        style={{ fontFamily: "var(--font-label)" }}>
         {options.map(o => <option key={o.value} value={o.value} className="bg-carbon">{o.label}</option>)}
       </select>
     </div>
@@ -79,6 +91,11 @@ function Sel({ label, value, onChange, options }: {
 /* ── Ana bileşen ─────────────────────────────────────────────────────── */
 export default function OgrencilerPage() {
   const [students, setStudents]   = useState<Student[]>([]);
+  /* XP/Rozet/Son Ders/Son Ödeme kartları için salt-okunur toplu veri — Admin Dashboard'daki aynı desen */
+  const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
+  const [allRecords, setAllRecords]           = useState<LessonRecord[]>([]);
+  const [allAdjustments, setAllAdjustments]   = useState<XPAdjustment[]>([]);
+  const [allPayments, setAllPayments]         = useState<Payment[]>([]);
   const [packages, setPackages]   = useState<LessonPackage[]>([]);
   const [gyms, setGyms]           = useState<Gym[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -257,8 +274,18 @@ export default function OgrencilerPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getStudents();
+      const [data, apts, recs, adjustments, payments] = await Promise.all([
+        getStudents(),
+        getAppointments().catch(() => []),
+        getLessonRecords().catch(() => []),
+        getAllXPAdjustments().catch(() => []),
+        getPayments().catch(() => []),
+      ]);
       setStudents(data);
+      setAllAppointments(apts);
+      setAllRecords(recs);
+      setAllAdjustments(adjustments);
+      setAllPayments(payments);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
@@ -270,13 +297,38 @@ export default function OgrencilerPage() {
 
   useEffect(() => { reload(); }, [reload]);
 
+  /* ── Kart için türetilmiş veri: XP / Rozetler / Son Ders / Son Ödeme ──
+     Salt-okunur, sadece kaynak veri değiştiğinde yeniden hesaplanır — arama/filtre
+     tuşlarında tüm liste için tekrar hesaplama YAPILMAZ (performans). Admin
+     Dashboard'daki computeFullXP/computeBadges kullanımıyla birebir aynı desen. */
+  const studentExtras = useMemo(() => {
+    const season = getCurrentSeason();
+    const map = new Map<string, { xpTotal: number; badges: ReturnType<typeof computeBadges>; lastLessonDate: string | null; lastPaymentDate: string | null }>();
+    for (const s of students) {
+      const apts = allAppointments.filter(a => a.studentId === s.id);
+      const recs = allRecords.filter(r => r.studentId === s.id);
+      const adjs = allAdjustments.filter(a => a.studentId === s.id);
+      const manualXP = sumManualXP(adjs);
+      const xpTotal = computeFullXP(s.completedLessons, apts, recs, season, adjs).lifetimeResult.breakdown.total;
+      const badges = computeBadges(s, apts, recs, {}, manualXP).filter(b => b.earned);
+      const lastLessonDate = apts
+        .filter(a => a.status === "tamamlandi")
+        .sort((a, b) => `${b.date}T${b.startTime}`.localeCompare(`${a.date}T${a.startTime}`))[0]?.date ?? null;
+      const lastPaymentDate = allPayments.find(p => p.studentId === s.id)?.paidAt ?? null;
+      map.set(s.id, { xpTotal, badges, lastLessonDate, lastPaymentDate });
+    }
+    return map;
+  }, [students, allAppointments, allRecords, allAdjustments, allPayments]);
+
   /* ── Filtre ─────────────────────────────────────────────────────── */
   const filtered = students.filter(s => {
     const q = search.toLowerCase();
     const match = s.fullName.toLowerCase().includes(q) || s.code.toLowerCase().includes(q) || s.phone.includes(q);
-    const filt = filter === "all" ? true
+    const filt = filter === "all"      ? true
       : filter === "active"   ? s.isActive
+      : filter === "inactive" ? !s.isActive
       : filter === "payment"  ? s.paymentStatus !== "odendi"
+      : filter === "expired"  ? isPackageExpired(s.packageEndDate)
       : filter === "low"      ? s.remainingLessons <= 2 : true;
     return match && filt;
   });
@@ -529,44 +581,36 @@ export default function OgrencilerPage() {
 
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
+    <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5">
 
-      {/* Başlık */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <span className="w-8 h-px bg-crimson" />
-            <span className="text-crimson text-xs tracking-[0.4em] uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Admin</span>
-          </div>
-          <h1 className="text-3xl font-display text-white tracking-wide" style={{ fontFamily: "var(--font-bebas)" }}>ÖĞRENCİ YÖNETİMİ</h1>
-          <p className="text-white/35 text-sm mt-0.5" style={{ fontFamily: "var(--font-inter)" }}>
-            {loading ? "Yükleniyor..." : `${students.length} toplam öğrenci`}
-          </p>
-        </div>
-        <button onClick={openAdd}
-          className="flex items-center gap-2 bg-crimson hover:bg-crimson-bright text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all hover:shadow-[0_0_20px_rgba(220,38,38,0.4)]"
-          style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-          <Plus size={14} />Yeni Öğrenci
-        </button>
-      </div>
+      {/* Hero */}
+      <motion.div variants={fadeUp}>
+        <StudentsHero
+          totalCount={students.length}
+          activeCount={students.filter(s => s.isActive).length}
+          expiredCount={expiredStudents.length}
+          pendingPaymentCount={students.filter(s => s.paymentStatus !== "odendi").length}
+          onAddStudent={openAdd}
+        />
+      </motion.div>
 
       {/* Supabase bağlantı durumu */}
       {!isSupabaseConfigured ? (
-        <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30">
-          <AlertTriangle size={18} className="text-yellow-400 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 p-4 rounded-xl" style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)" }}>
+          <AlertTriangle size={18} style={{ color:"var(--color-achievement)" }} className="flex-shrink-0 mt-0.5" />
           <div>
-            <div className="text-sm text-yellow-400 font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <div className="text-sm font-semibold" style={{ color:"var(--color-achievement)", fontFamily: "var(--font-label)" }}>
               ⚠️ Supabase bağlı değil — veriler kalıcı olmaz!
             </div>
-            <div className="text-xs text-yellow-400/60 mt-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <div className="text-xs mt-0.5" style={{ color:"var(--color-achievement)", opacity:0.6, fontFamily: "var(--font-label)" }}>
               .env.local dosyasını doldurun ve npm run dev&apos;i yeniden başlatın.
             </div>
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-500/8 border border-green-500/20">
-          <CheckCircle size={14} className="text-green-400" />
-          <span className="text-xs text-green-400 tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.2)" }}>
+          <CheckCircle size={14} style={{ color:"var(--color-success)" }} />
+          <span className="text-xs tracking-wider" style={{ color:"var(--color-success)", fontFamily: "var(--font-label)" }}>
             Supabase bağlı — tüm veriler kalıcı olarak kaydedilir
           </span>
         </div>
@@ -574,7 +618,7 @@ export default function OgrencilerPage() {
 
       {/* Genel hata */}
       {error && (
-        <div className="p-3 bg-crimson/10 border border-crimson/30 text-xs text-crimson" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+        <div className="p-3 rounded-xl text-xs" style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"var(--color-error)", fontFamily: "var(--font-label)" }}>
           ⛔ {error}
         </div>
       )}
@@ -582,18 +626,18 @@ export default function OgrencilerPage() {
       {/* ── YENİ ÖĞRENCİ FORMU ────────────────────────────────────── */}
       <AnimatePresence>
         {addOpen && (
-          <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className="bg-carbon border border-crimson/30 relative">
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
-            <div className="p-5">
+          <motion.div initial={{ opacity: 0, y: -14, scale: 0.98, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }} exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+            <div className="glass-strong relative rounded-2xl p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>YENİ ÖĞRENCİ EKLE</h2>
+                <h2 className="text-xl text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>YENİ ÖĞRENCİ EKLE</h2>
                 <button onClick={() => setAddOpen(false)} className="text-white/25 hover:text-white transition-colors"><X size={18} /></button>
               </div>
               {/* ── GİRİŞ KODU ──────────────────────────────────── */}
-              <div className="mb-4 p-3 bg-steel/30 border border-gold/20">
-                <label className="block text-xs text-gold/70 tracking-widest uppercase mb-2"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              <div className="mb-4 p-3 glass rounded-xl">
+                <label className="block text-xs tracking-widest uppercase mb-2"
+                  style={{ color: "var(--color-achievement)", opacity: 0.8, fontFamily: "var(--font-label)" }}>
                   Giriş Kodu <span className="text-white/30">(öğrencinin sisteme giriş şifresi)</span>
                 </label>
                 <div className="flex gap-2">
@@ -601,12 +645,12 @@ export default function OgrencilerPage() {
                     value={aCode}
                     onChange={e => setACode(e.target.value.toUpperCase())}
                     placeholder="ENES001"
-                    className={`flex-1 bg-carbon border-2 px-4 py-2.5 text-xl outline-none transition-all tracking-widest font-display uppercase ${
-                      aCode && isCodeTaken(aCode, students)
-                        ? "border-crimson/60 text-crimson"
-                        : "border-gold/40 focus:border-gold text-gold-bright"
-                    }`}
-                    style={{ fontFamily: "var(--font-bebas)" }}
+                    className="flex-1 glass rounded-lg border-2 px-4 py-2.5 text-xl outline-none transition-all tracking-widest uppercase"
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      borderColor: aCode && isCodeTaken(aCode, students) ? "rgba(239,68,68,0.6)" : "rgba(245,158,11,0.4)",
+                      color: aCode && isCodeTaken(aCode, students) ? "var(--color-error)" : "var(--color-achievement)",
+                    }}
                   />
                   {/* İsimden üret */}
                   <button
@@ -614,8 +658,8 @@ export default function OgrencilerPage() {
                     onClick={() => setACode(genCodeFromName(aName, students))}
                     disabled={!aName.trim()}
                     title="İsmin baş harflerinden kod üret"
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gold/10 hover:bg-gold/20 border border-gold/30 text-gold disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs font-semibold tracking-wider uppercase"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs font-semibold tracking-wider uppercase"
+                    style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}
                   >
                     <Wand2 size={14} />
                     <span className="hidden sm:inline">İsimden</span>
@@ -625,8 +669,8 @@ export default function OgrencilerPage() {
                     type="button"
                     onClick={() => setACode(genCodeSequential(students))}
                     title="Sıralı kod üret (ENES001, ENES002...)"
-                    className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/15 text-white/50 hover:text-white transition-all text-xs font-semibold tracking-wider uppercase"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-white/50 hover:text-white transition-all text-xs font-semibold tracking-wider uppercase"
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", fontFamily: "var(--font-label)" }}
                   >
                     <RefreshCw size={14} />
                     <span className="hidden sm:inline">Sıralı</span>
@@ -634,17 +678,17 @@ export default function OgrencilerPage() {
                 </div>
                 {/* Çakışma uyarısı */}
                 {aCode && isCodeTaken(aCode, students) && (
-                  <p className="text-xs text-crimson mt-1.5 flex items-center gap-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
                     <AlertTriangle size={12} />
                     Bu kod zaten kullanımda — farklı bir kod girin
                   </p>
                 )}
                 {aCode && !isCodeTaken(aCode, students) && (
-                  <p className="text-xs text-green-400/60 mt-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  <p className="text-xs mt-1.5" style={{ color: "var(--color-success)", opacity: 0.7, fontFamily: "var(--font-label)" }}>
                     ✓ Bu kod kullanılabilir
                   </p>
                 )}
-                <p className="text-xs text-white/20 mt-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                <p className="text-xs text-white/20 mt-1.5" style={{ fontFamily: "var(--font-label)" }}>
                   Manuel yazabilir, isimden üretebilir veya sıralı kod kullanabilirsiniz.
                 </p>
               </div>
@@ -657,19 +701,19 @@ export default function OgrencilerPage() {
               </div>
 
               {/* Paket Seçimi */}
-              <div className="mb-3 p-3 bg-steel/30 border border-gold/20">
+              <div className="mb-3 p-3 glass rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
-                  <PackageIcon size={14} className="text-gold" />
-                  <span className="text-xs text-gold tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <PackageIcon size={14} style={{ color: "var(--color-achievement)" }} />
+                  <span className="text-xs tracking-widest uppercase" style={{ color: "var(--color-achievement)", fontFamily:"var(--font-label)" }}>
                     Ders Paketi Seç (otomatik doldurur)
                   </span>
                 </div>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
                   <div className="sm:col-span-2">
-                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Paket</label>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>Paket</label>
                     <select value={aPackageId} onChange={e => handlePackageSelect(e.target.value)}
-                      className="w-full bg-carbon border border-gold/25 focus:border-gold text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors"
-                      style={{ fontFamily:"var(--font-inter)" }}>
+                      className="w-full glass text-white px-3 py-2.5 text-sm outline-none appearance-none rounded-lg transition-colors"
+                      style={{ fontFamily:"var(--font-label)" }}>
                       <option value="" className="bg-carbon">— Paket seçin veya manuel girin —</option>
                       {packages.filter(p => p.isActive).map(p => (
                         <option key={p.id} value={p.id} className="bg-carbon">
@@ -680,35 +724,35 @@ export default function OgrencilerPage() {
                   </div>
                   {/* Toplam ders */}
                   <div>
-                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>
                       Toplam Ders *
                     </label>
                     <input type="number" min="1" value={aTotalLessons} onChange={e => handleTotalLessonsChange(e.target.value)}
-                      className="w-full bg-steel/60 border-2 border-gold/30 focus:border-gold text-gold-bright px-3 py-2.5 text-lg outline-none"
-                      style={{ fontFamily:"var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg px-3 py-2.5 text-lg outline-none"
+                      style={{ color: "var(--color-achievement)", fontFamily:"var(--font-display)" }} />
                   </div>
                   {/* Standart fiyat (paket fiyatı) */}
                   <div>
-                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>
                       Standart Fiyat (₺)
                     </label>
                     <input type="number" min="0" value={aAmountDue} onChange={e => setAAD(e.target.value)} placeholder="Paket fiyatı"
-                      className="w-full bg-steel/60 border-2 border-white/15 focus:border-white/30 text-white/70 px-3 py-2.5 text-lg outline-none"
-                      style={{ fontFamily:"var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg text-white/70 px-3 py-2.5 text-lg outline-none"
+                      style={{ fontFamily:"var(--font-display)" }} />
                   </div>
                 </div>
                 {/* Paket geçerlilik süresi */}
                 <div className="mt-2 grid sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>
                       Paket Geçerlilik Süresi (gün)
                     </label>
                     <input type="number" min="1" value={aDurationDays} onChange={e => setADurationDays(e.target.value)}
-                      className="w-full bg-steel/60 border-2 border-violet/30 focus:border-violet text-white px-3 py-2.5 text-lg outline-none"
-                      style={{ fontFamily:"var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg text-white px-3 py-2.5 text-lg outline-none"
+                      style={{ fontFamily:"var(--font-display)" }} />
                   </div>
                   <div className="flex flex-col justify-end">
-                    <p className="text-xs text-white/20" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    <p className="text-xs text-white/20" style={{ fontFamily:"var(--font-label)" }}>
                       Bugün başlar, {format(new Date(calcPackageEndDate(new Date(), Number(aDurationDays) || 0)), "dd MMMM yyyy")} tarihinde sona erer.
                     </p>
                   </div>
@@ -716,39 +760,39 @@ export default function OgrencilerPage() {
                 {/* İndirimli fiyat */}
                 <div className="mt-2 grid sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)", color:"#f59e0b" }}>
+                    <label className="block text-xs tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)", color:"var(--color-achievement)" }}>
                       İndirimli / Özel Fiyat (₺) — isteğe bağlı
                     </label>
                     <input type="number" min="0" value={aCustomPrice} onChange={e => setACustom(e.target.value)}
                       placeholder={aAmountDue ? `Standart: ₺${Number(aAmountDue).toLocaleString("tr-TR")}` : "Boş = standart fiyat"}
-                      className="w-full bg-steel/60 border-2 border-gold/40 focus:border-gold text-gold-bright px-3 py-2.5 text-lg outline-none"
-                      style={{ fontFamily:"var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg px-3 py-2.5 text-lg outline-none"
+                      style={{ color: "var(--color-achievement)", fontFamily:"var(--font-display)" }} />
                     {aCustomPrice && aAmountDue && Number(aCustomPrice) < Number(aAmountDue) && (
-                      <p className="text-xs text-gold mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      <p className="text-xs mt-1" style={{ color: "var(--color-achievement)", fontFamily:"var(--font-label)" }}>
                         İndirim: ₺{(Number(aAmountDue) - Number(aCustomPrice)).toLocaleString("tr-TR")} (%{Math.round((1-Number(aCustomPrice)/Number(aAmountDue))*100)})
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Ödenen (₺)</label>
+                    <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>Ödenen (₺)</label>
                     <input type="number" min="0" value={aAmountPaid} onChange={e => setAAP(e.target.value)} placeholder="0"
-                      className="w-full bg-steel/60 border-2 border-green-500/25 focus:border-green-500/60 text-green-400 px-3 py-2.5 text-lg outline-none"
-                      style={{ fontFamily:"var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg px-3 py-2.5 text-lg outline-none"
+                      style={{ color: "var(--color-success)", fontFamily:"var(--font-display)" }} />
                   </div>
                 </div>
-                <p className="text-xs text-white/20 mt-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                <p className="text-xs text-white/20 mt-2" style={{ fontFamily:"var(--font-label)" }}>
                   İndirimli fiyat girilirse borç = indirimli fiyat − ödenen. Girilmezse standart fiyat kullanılır.
                 </p>
               </div>
 
               {/* Salon ataması — gelir paylaşımı */}
-              <div className="mb-3 p-3 bg-steel/30 border border-violet/20">
-                <p className="text-xs tracking-widest uppercase mb-2" style={{ color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>
+              <div className="mb-3 p-3 glass rounded-xl">
+                <p className="text-xs tracking-widest uppercase mb-2" style={{ color:"#A855F7", fontFamily:"var(--font-label)" }}>
                   Salon (gelir paylaşımı)
                 </p>
                 <select value={aGymId} onChange={e => setAGymId(e.target.value)}
-                  className="w-full bg-carbon border border-violet/25 focus:border-violet text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors mb-2"
-                  style={{ fontFamily:"var(--font-inter)" }}>
+                  className="w-full glass text-white px-3 py-2.5 text-sm outline-none appearance-none rounded-lg transition-colors mb-2"
+                  style={{ fontFamily:"var(--font-label)" }}>
                   <option value="" className="bg-carbon">— Salon yok (tamamen kendi öğrencin) —</option>
                   {gyms.filter(g => g.isActive).map(g => (
                     <option key={g.id} value={g.id} className="bg-carbon">
@@ -758,12 +802,12 @@ export default function OgrencilerPage() {
                 </select>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" checked={aGymOverride} onChange={e => setAGymOverride(e.target.checked)} className="w-3.5 h-3.5" />
-                  <span className="text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Bu öğrenci için özel anlaşma uygula</span>
+                  <span className="text-xs text-white/40" style={{ fontFamily:"var(--font-label)" }}>Bu öğrenci için özel anlaşma uygula</span>
                 </label>
                 {aGymOverride && (
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <select value={aGymOvType} onChange={e => setAGymOvType(e.target.value as GymShareType)}
-                      className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      className="glass text-white px-2 py-2 text-xs outline-none appearance-none rounded-lg" style={{ fontFamily:"var(--font-label)" }}>
                       <option value="fixed_per_lesson">Ders Başı Sabit</option>
                       <option value="percentage">Yüzdelik</option>
                       <option value="no_share">Pay Yok</option>
@@ -771,7 +815,7 @@ export default function OgrencilerPage() {
                     {aGymOvType !== "no_share" && (
                       <input type="number" value={aGymOvValue} onChange={e => setAGymOvValue(e.target.value)}
                         placeholder={aGymOvType === "percentage" ? "Salon %" : "Ders başı ₺"}
-                        className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily:"var(--font-inter)" }} />
+                        className="glass text-white px-2 py-2 text-xs outline-none rounded-lg" style={{ fontFamily:"var(--font-label)" }} />
                     )}
                   </div>
                 )}
@@ -792,11 +836,11 @@ export default function OgrencilerPage() {
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setAddOpen(false)}
-                  className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
+                  className="flex-1 rounded-lg text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
+                  style={{ border: "1px solid rgba(255,255,255,0.1)", fontFamily: "var(--font-label)" }}>Vazgeç</button>
                 <button onClick={handleAdd} disabled={!aName.trim() || !aPhone.trim() || aSaving}
-                  className="flex-1 bg-crimson hover:bg-crimson-bright disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  className="gradient-animated gradient-slow gradient-violet-pink-orange flex-1 rounded-lg disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-transform hover:scale-[1.01] active:scale-95"
+                  style={{ fontFamily: "var(--font-label)" }}>
                   {aSaving ? "Kaydediliyor..." : "Öğrenci Ekle"}
                 </button>
               </div>
@@ -806,286 +850,93 @@ export default function OgrencilerPage() {
       </AnimatePresence>
 
       {/* Arama + filtre */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Ad, kod veya telefon..."
-            className="w-full bg-carbon border border-white/10 text-white placeholder-white/20 pl-9 pr-4 py-2.5 text-sm outline-none focus:border-crimson/50 transition-all"
-            style={{ fontFamily: "var(--font-inter)" }} />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {[["all","Tümü"],["active","Aktif"],["payment","Ödeme Bekl."],["low","Ders Az"]].map(([v,l]) => (
-            <button key={v} onClick={() => setFilter(v)}
-              className={`px-3 py-2 text-xs tracking-wider transition-all border ${filter === v ? "bg-crimson border-crimson text-white" : "border-white/10 text-white/35 hover:border-white/20"}`}
-              style={{ fontFamily: "var(--font-barlow-condensed)" }}>{l}</button>
-          ))}
-        </div>
-      </div>
+      <motion.div variants={fadeUp}>
+        <SearchAndFilters search={search} onSearchChange={setSearch} filter={filter} onFilterChange={setFilter} />
+      </motion.div>
 
       {/* ── SÜRESİ DOLAN ÖĞRENCİLER ──────────────────────────────── */}
       {expiredStudents.length > 0 && (
-        <div className="bg-carbon border border-crimson/30 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
-          <div className="p-4 sm:p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle size={16} className="text-crimson" />
-              <h2 className="text-base font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>
-                SÜRESİ DOLAN ÖĞRENCİLER ({expiredStudents.length})
-              </h2>
-            </div>
-            <div className="space-y-2">
-              {expiredStudents.map(s => {
-                const days = getDaysRemaining(s.packageEndDate);
-                const busy = expiredBusy === s.id;
-                return (
-                  <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl"
-                    style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)" }}>
-                    <div className="min-w-0">
-                      <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.fullName}</div>
-                      <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                        {s.code} · {days !== null ? `${Math.abs(days)} gün önce doldu` : "—"} · {s.remainingLessons} ders kaldı
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button onClick={() => handleExtendPackage(s)} disabled={busy}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg disabled:opacity-40 transition-all"
-                        style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)", color: "#A855F7", fontFamily: "var(--font-barlow-condensed)" }}>
-                        <CalendarClock size={12} />Süre Uzat
-                      </button>
-                      <button onClick={() => openRenewModal(s)} disabled={busy}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg disabled:opacity-40 transition-all"
-                        style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
-                        <PackageIcon size={12} />Yeni Paket Ata
-                      </button>
-                      <button onClick={() => handleMakeUnlimited(s)} disabled={busy}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg disabled:opacity-40 transition-all"
-                        style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", color: "#22c55e", fontFamily: "var(--font-barlow-condensed)" }}>
-                        <InfinityIcon size={12} />Sınırsız Yap
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <motion.div variants={fadeUp} className="space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} style={{ color: "var(--color-error)" }} />
+            <h2 className="text-base text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>
+              SÜRESİ DOLAN ÖĞRENCİLER ({expiredStudents.length})
+            </h2>
           </div>
-        </div>
+          <div className="space-y-2.5">
+            {expiredStudents.map(s => (
+              <ExpiredWarningCard
+                key={s.id}
+                student={s}
+                busy={expiredBusy === s.id}
+                onExtend={handleExtendPackage}
+                onRenew={openRenewModal}
+                onUnlimited={handleMakeUnlimited}
+              />
+            ))}
+          </div>
+        </motion.div>
       )}
 
-      {/* ── Kart görünümü — mobil (sm altı) ───────────────────────── */}
-      <div className="block sm:hidden space-y-3">
-        {loading ? (
-          <div className="text-center py-12 text-white/30 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yükleniyor...</div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-12">
-            <User size={28} className="text-white/10 mx-auto mb-2" />
-            <p className="text-white/20 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Öğrenci bulunamadı</p>
-          </div>
-        ) : (
+      {/* ── Öğrenci kartları — tüm ekran boyutlarında tek responsive grid ── */}
+      {loading ? (
+        <div className="text-center py-12 text-white/30 text-sm" style={{ fontFamily: "var(--font-label)" }}>Yükleniyor...</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <User size={28} className="text-white/10 mx-auto mb-2" />
+          <p className="text-white/20 text-sm" style={{ fontFamily: "var(--font-label)" }}>Öğrenci bulunamadı</p>
+        </div>
+      ) : (
+        <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           <AnimatePresence>
-            {filtered.map((s, i) => {
-              const days = getDaysRemaining(s.packageEndDate);
-              const u = days !== null ? getPackageUrgency(days) : null;
+            {filtered.map(s => {
+              const extra = studentExtras.get(s.id);
               return (
-                <motion.div key={s.id}
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  transition={{ delay: i * 0.02 }}
-                  className="relative overflow-hidden bg-carbon border border-white/8 p-4 space-y-3"
-                  style={{ isolation: "isolate" }}>
-
-                  {/* Üst: Ad, Kod, Ödeme durumu */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 bg-crimson/10 border border-crimson/20 flex items-center justify-center text-xs text-crimson flex-shrink-0"
-                        style={{ fontFamily: "var(--font-bebas)" }}>
-                        {s.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm text-white font-semibold truncate" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.fullName}</div>
-                        <div className="text-xs text-gold font-mono tracking-wider">{s.code}</div>
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 border flex-shrink-0 ${s.paymentStatus === "odendi" ? "border-green-500/20 bg-green-500/8 text-green-400" : s.paymentStatus === "kismi" ? "border-gold/20 bg-gold/8 text-gold" : "border-crimson/20 bg-crimson/8 text-crimson"}`}
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                      {PAYMENT_LABELS[s.paymentStatus]}
-                    </span>
-                  </div>
-
-                  {/* İstatistik satırı */}
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-steel/20 p-2">
-                      <div className="text-[10px] text-white/30 mb-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Ders</div>
-                      <div className={`text-lg leading-none ${s.remainingLessons <= 2 ? "text-crimson" : "text-white"}`}
-                        style={{ fontFamily: "var(--font-bebas)" }}>
-                        {s.remainingLessons}<span className="text-xs text-white/25">/{s.totalLessons}</span>
-                      </div>
-                    </div>
-                    <div className="bg-steel/20 p-2">
-                      <div className="text-[10px] text-white/30 mb-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödenen</div>
-                      <div className="text-sm text-green-400 font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                        {s.amountPaid > 0 ? `₺${s.amountPaid.toLocaleString("tr-TR")}` : "—"}
-                      </div>
-                    </div>
-                    <div className="bg-steel/20 p-2">
-                      <div className="text-[10px] text-white/30 mb-0.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Borç</div>
-                      <div className={`text-sm font-semibold ${s.amountDue > 0 ? "text-crimson" : "text-white/25"}`}
-                        style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                        {s.amountDue > 0 ? `₺${s.amountDue.toLocaleString("tr-TR")}` : "✓"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Paket süresi */}
-                  {u && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Paket Süresi:</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${u.color}`}
-                        style={{ background: u.bg, border: `1px solid ${u.border}`, fontFamily: "var(--font-barlow-condensed)" }}>
-                        {days! < 0 ? "Süresi Doldu" : `${days} gün`}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Aksiyon butonları */}
-                  <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
-                    <button onClick={() => openRenewModal(s)}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
-                      style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22c55e", fontFamily: "var(--font-barlow-condensed)" }}>
-                      <RotateCcw size={12} />Yenile
-                    </button>
-                    <button onClick={() => openEdit(s)}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
-                      style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", color: "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
-                      <Edit size={12} />Düzenle
-                    </button>
-                    <button onClick={() => openPartnerModal(s)}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
-                      style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)", color: "#A855F7", fontFamily: "var(--font-barlow-condensed)" }}>
-                      <Users size={12} />Düet
-                    </button>
-                    <button onClick={() => setQrSt(s)}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
-                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
-                      <QrCode size={12} />QR
-                    </button>
-                    <button onClick={() => setDelSt(s)}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wider uppercase rounded-lg transition-all"
-                      style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", color: "#F87171", fontFamily: "var(--font-barlow-condensed)" }}>
-                      <Trash2 size={12} />Sil
-                    </button>
-                  </div>
-                </motion.div>
+                <StudentCard
+                  key={s.id}
+                  student={s}
+                  xpTotal={extra?.xpTotal ?? 0}
+                  badges={extra?.badges ?? []}
+                  lastLessonDate={extra?.lastLessonDate ?? null}
+                  lastPaymentDate={extra?.lastPaymentDate ?? null}
+                  onEdit={openEdit}
+                  onPartner={openPartnerModal}
+                  onQr={setQrSt}
+                  onDelete={setDelSt}
+                  onRenew={openRenewModal}
+                />
               );
             })}
           </AnimatePresence>
-        )}
-      </div>
-
-      {/* ── Tablo — masaüstü (sm ve üzeri) ─────────────────────── */}
-      <div className="hidden sm:block bg-carbon border border-white/6 overflow-hidden">
-        <div className="overflow-x-auto overscroll-x-contain" style={{ WebkitOverflowScrolling: "touch" }}>
-          <table className="w-full" style={{ minWidth: 640 }}>
-            <thead>
-              <tr className="border-b border-white/5 bg-steel/30">
-                {["Öğrenci","Kod","Kalan / Toplam","Paket Süresi","Ödenen","Borç","Ödeme","İşlem"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs text-white/30 tracking-widest uppercase whitespace-nowrap"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8} className="text-center py-12 text-white/30 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Yükleniyor...</td></tr>
-              ) : (
-                <AnimatePresence>
-                  {filtered.map((s, i) => (
-                    <motion.tr key={s.id}
-                      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      transition={{ delay: i * 0.02 }}
-                      className={`border-b border-white/5 hover:bg-steel/15 transition-colors ${editSt?.id === s.id ? "bg-crimson/5" : ""}`}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 bg-crimson/10 border border-crimson/20 flex items-center justify-center text-xs text-crimson font-display flex-shrink-0" style={{ fontFamily: "var(--font-bebas)" }}>
-                            {s.fullName.split(" ").map(n => n[0]).join("").slice(0,2)}
-                          </div>
-                          <div>
-                            <div className="text-sm text-white" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.fullName}</div>
-                            <div className="text-xs text-white/25" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.phone}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3"><span className="text-sm text-gold font-mono tracking-wider">{s.code}</span></td>
-                      <td className="px-4 py-3">
-                        <span className={`text-lg font-display ${s.remainingLessons <= 2 ? "text-crimson" : "text-white"}`} style={{ fontFamily: "var(--font-bebas)" }}>{s.remainingLessons}</span>
-                        <span className="text-sm text-white/25 font-display" style={{ fontFamily: "var(--font-bebas)" }}>/{s.totalLessons}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {(() => {
-                          const days = getDaysRemaining(s.packageEndDate);
-                          if (days === null) return <span className="text-xs text-white/20" style={{ fontFamily: "var(--font-barlow-condensed)" }}>—</span>;
-                          const u = getPackageUrgency(days);
-                          return (
-                            <span className={`text-xs px-2 py-0.5 rounded ${u.color}`}
-                              style={{ background: u.bg, border: `1px solid ${u.border}`, fontFamily: "var(--font-barlow-condensed)" }}>
-                              {days < 0 ? "Süresi Doldu" : `${days} gün`}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-4 py-3"><span className="text-sm text-green-400 font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.amountPaid > 0 ? `₺${s.amountPaid.toLocaleString("tr-TR")}` : "—"}</span></td>
-                      <td className="px-4 py-3"><span className={`text-sm font-semibold ${s.amountDue > 0 ? "text-crimson" : "text-white/25"}`} style={{ fontFamily: "var(--font-barlow-condensed)" }}>{s.amountDue > 0 ? `₺${s.amountDue.toLocaleString("tr-TR")}` : "✓"}</span></td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 border ${s.paymentStatus === "odendi" ? "border-green-500/20 bg-green-500/8 text-green-400" : s.paymentStatus === "kismi" ? "border-gold/20 bg-gold/8 text-gold" : "border-crimson/20 bg-crimson/8 text-crimson"}`}
-                          style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                          {PAYMENT_LABELS[s.paymentStatus]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-0.5">
-                          <button onClick={() => setQrSt(s)} className="p-1.5 text-white/25 hover:text-gold transition-colors" title="QR"><QrCode size={13} /></button>
-                          <a href={`https://wa.me/90${s.phone.replace(/\D/g,"").slice(-10)}`} target="_blank" rel="noopener noreferrer"
-                            className="p-1.5 text-white/25 hover:text-green-400 transition-colors" title="WhatsApp"><Phone size={13} /></a>
-                          <button onClick={() => openEdit(s)} className="p-1.5 text-white/25 hover:text-gold transition-colors" title="Düzenle"><Edit size={13} /></button>
-                          <button onClick={() => openRenewModal(s)} className="p-1.5 text-white/25 hover:text-green-400 transition-colors" title="Paket Yenile"><RotateCcw size={13} /></button>
-                          <button onClick={() => openPartnerModal(s)} className="p-1.5 text-white/25 hover:text-violet transition-colors" title="Düet Partneri"><Users size={13} /></button>
-                          <button onClick={() => setDelSt(s)} className="p-1.5 text-white/25 hover:text-crimson transition-colors" title="Sil"><Trash2 size={13} /></button>
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
-              )}
-            </tbody>
-          </table>
-          {!loading && filtered.length === 0 && (
-            <div className="text-center py-12"><User size={28} className="text-white/10 mx-auto mb-2" /><p className="text-white/20 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Öğrenci bulunamadı</p></div>
-          )}
-        </div>
-      </div>
+        </motion.div>
+      )}
 
       {/* ── DÜZENLEME MODAL ───────────────────────────────────────── */}
-      {editSt && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
+      <AnimatePresence>
+        {editSt && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
           onClick={() => setEditSt(null)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-            className="relative z-10 w-full sm:max-w-2xl bg-carbon border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] flex flex-col"
+          <motion.div initial={{ y: 40, opacity: 0, scale: 0.98, filter: "blur(6px)" }} animate={{ y: 0, opacity: 1, scale: 1, filter: "blur(0px)" }} exit={{ y: 20, opacity: 0, filter: "blur(4px)" }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="glass-strong relative z-10 w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl flex flex-col"
             style={{
-              borderRadius: "16px 16px 0 0",
               maxHeight: "92dvh",        /* dvh = dynamic viewport, iOS Safari safe */
             }}
             onClick={e => e.stopPropagation()}>
             {/* ── Sabit header — scroll edilince kaybolmaz ── */}
             <div className="flex-shrink-0 relative">
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson rounded-t-2xl" />
+              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl gradient-animated gradient-slow gradient-violet-pink-orange" />
               <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/6">
-                <div className="w-9 h-9 bg-crimson/10 border border-crimson/20 flex-shrink-0 flex items-center justify-center text-crimson font-display text-sm"
-                  style={{ fontFamily: "var(--font-bebas)" }}>
+                <div className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center text-sm"
+                  style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", color: "#A78BFA", fontFamily: "var(--font-display)" }}>
                   {editSt.fullName.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-base font-display text-white tracking-wider truncate"
-                    style={{ fontFamily: "var(--font-bebas)" }}>{editSt.fullName}</div>
-                  <div className="text-xs text-gold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{editSt.code}</div>
+                  <div className="text-base text-white tracking-wider truncate"
+                    style={{ fontFamily: "var(--font-display)" }}>{editSt.fullName}</div>
+                  <div className="text-xs" style={{ color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>{editSt.code}</div>
                 </div>
                 {/* X butonu — her zaman görünür, scroll'dan etkilenmez */}
                 <button onClick={() => setEditSt(null)}
@@ -1113,37 +964,37 @@ export default function OgrencilerPage() {
               ]} />
 
               {/* Üyelik tipi */}
-              <div className="p-3 border space-y-3" style={{ borderColor:"rgba(139,92,246,0.2)", background:"rgba(139,92,246,0.04)" }}>
-                <p className="text-xs tracking-widest uppercase" style={{ color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>Üyelik Tipi</p>
+              <div className="p-3 glass rounded-xl space-y-3">
+                <p className="text-xs tracking-widest uppercase" style={{ color:"#A855F7", fontFamily:"var(--font-label)" }}>Üyelik Tipi</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[{ v:"lesson_pack", l:"Ders Paketi", d:"Kalan ders sayılır" }, { v:"monthly", l:"Aylık Üyelik", d:"Sınırsız ders" }].map(opt => (
                     <button key={opt.v} type="button" onClick={() => setESubType(opt.v as "lesson_pack"|"monthly")}
-                      className="flex flex-col gap-0.5 p-3 text-left transition-all"
+                      className="flex flex-col gap-0.5 p-3 text-left transition-all rounded-lg"
                       style={{
                         background: eSubType===opt.v ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
                         border: eSubType===opt.v ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
                       }}>
-                      <span className="text-xs font-semibold" style={{ color: eSubType===opt.v ? "#fff" : "rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>{opt.l}</span>
-                      <span className="text-[10px]" style={{ color:"rgba(255,255,255,0.25)", fontFamily:"var(--font-barlow-condensed)" }}>{opt.d}</span>
+                      <span className="text-xs font-semibold" style={{ color: eSubType===opt.v ? "#fff" : "rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>{opt.l}</span>
+                      <span className="text-[10px]" style={{ color:"rgba(255,255,255,0.25)", fontFamily:"var(--font-label)" }}>{opt.d}</span>
                     </button>
                   ))}
                 </div>
                 {eSubType === "monthly" && (
                   <div>
-                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Aylık Tutar (₺)</label>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>Aylık Tutar (₺)</label>
                     <input type="number" value={eMonthlyFee} onChange={e => setEMonthlyFee(e.target.value)} placeholder="Örn: 1500"
-                      className="w-full bg-carbon border border-white/10 focus:border-violet/50 text-white px-3 py-2.5 text-sm outline-none"
-                      style={{ fontFamily:"var(--font-inter)" }} />
+                      className="w-full glass rounded-lg text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily:"var(--font-label)" }} />
                   </div>
                 )}
               </div>
 
               {/* Salon ataması — gelir paylaşımı */}
-              <div className="p-3 border space-y-2" style={{ borderColor:"rgba(139,92,246,0.2)", background:"rgba(139,92,246,0.04)" }}>
-                <p className="text-xs tracking-widest uppercase" style={{ color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>Salon (gelir paylaşımı)</p>
+              <div className="p-3 glass rounded-xl space-y-2">
+                <p className="text-xs tracking-widest uppercase" style={{ color:"#A855F7", fontFamily:"var(--font-label)" }}>Salon (gelir paylaşımı)</p>
                 <select value={eGymId} onChange={e => setEGymId(e.target.value)}
-                  className="w-full bg-carbon border border-violet/25 focus:border-violet text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors"
-                  style={{ fontFamily:"var(--font-inter)" }}>
+                  className="w-full glass text-white px-3 py-2.5 text-sm outline-none appearance-none rounded-lg transition-colors"
+                  style={{ fontFamily:"var(--font-label)" }}>
                   <option value="" className="bg-carbon">— Salon yok (tamamen kendi öğrencin) —</option>
                   {gyms.filter(g => g.isActive || g.id === eGymId).map(g => (
                     <option key={g.id} value={g.id} className="bg-carbon">
@@ -1153,12 +1004,12 @@ export default function OgrencilerPage() {
                 </select>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" checked={eGymOverride} onChange={e => setEGymOverride(e.target.checked)} className="w-3.5 h-3.5" />
-                  <span className="text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Bu öğrenci için özel anlaşma uygula</span>
+                  <span className="text-xs text-white/40" style={{ fontFamily:"var(--font-label)" }}>Bu öğrenci için özel anlaşma uygula</span>
                 </label>
                 {eGymOverride && (
                   <div className="grid grid-cols-2 gap-2">
                     <select value={eGymOvType} onChange={e => setEGymOvType(e.target.value as GymShareType)}
-                      className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none appearance-none" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                      className="glass text-white px-2 py-2 text-xs outline-none appearance-none rounded-lg" style={{ fontFamily:"var(--font-label)" }}>
                       <option value="fixed_per_lesson">Ders Başı Sabit</option>
                       <option value="percentage">Yüzdelik</option>
                       <option value="no_share">Pay Yok</option>
@@ -1166,49 +1017,49 @@ export default function OgrencilerPage() {
                     {eGymOvType !== "no_share" && (
                       <input type="number" value={eGymOvValue} onChange={e => setEGymOvValue(e.target.value)}
                         placeholder={eGymOvType === "percentage" ? "Salon %" : "Ders başı ₺"}
-                        className="bg-carbon border border-violet/25 text-white px-2 py-2 text-xs outline-none" style={{ fontFamily:"var(--font-inter)" }} />
+                        className="glass text-white px-2 py-2 text-xs outline-none rounded-lg" style={{ fontFamily:"var(--font-label)" }} />
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="p-4 bg-steel/30 border border-gold/15 space-y-3">
-                <div className="text-xs text-gold tracking-widest uppercase"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ders Bilgileri</div>
+              <div className="p-4 glass rounded-xl space-y-3">
+                <div className="text-xs tracking-widest uppercase"
+                  style={{ color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>Ders Bilgileri</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Ders *</label>
+                      style={{ fontFamily: "var(--font-label)" }}>Kalan Ders *</label>
                     <input type="number" min="0" value={eRL} onChange={e => setERL(e.target.value)}
-                      className="w-full bg-carbon border-2 border-gold/40 focus:border-gold text-gold-bright px-3 py-3 text-lg outline-none font-display tracking-wider"
-                      style={{ fontFamily: "var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg px-3 py-3 text-lg outline-none tracking-wider"
+                      style={{ color: "var(--color-achievement)", fontFamily: "var(--font-display)" }} />
                     <p className="text-xs text-white/20 mt-1"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: {editSt.remainingLessons}</p>
+                      style={{ fontFamily: "var(--font-label)" }}>Mevcut: {editSt.remainingLessons}</p>
                   </div>
                   <div>
                     <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Toplam Ders</label>
+                      style={{ fontFamily: "var(--font-label)" }}>Toplam Ders</label>
                     <input type="number" min="0" value={eTL} onChange={e => setETL(e.target.value)}
-                      className="w-full bg-carbon border-2 border-white/15 focus:border-white/30 text-white px-3 py-3 text-lg outline-none font-display tracking-wider"
-                      style={{ fontFamily: "var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg text-white px-3 py-3 text-lg outline-none tracking-wider"
+                      style={{ fontFamily: "var(--font-display)" }} />
                     <p className="text-xs text-white/20 mt-1"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: {editSt.totalLessons}</p>
+                      style={{ fontFamily: "var(--font-label)" }}>Mevcut: {editSt.totalLessons}</p>
                   </div>
                 </div>
               </div>
 
               {/* Paket süresi */}
-              <div className="p-4 bg-steel/30 border border-violet/10 space-y-3">
+              <div className="p-4 glass rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs text-violet tracking-widest uppercase"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>Paket Süresi</div>
+                  <div className="text-xs tracking-widest uppercase"
+                    style={{ color: "#A78BFA", fontFamily: "var(--font-label)" }}>Paket Süresi</div>
                   {(() => {
                     const days = getDaysRemaining(eEndDate);
                     if (days === null) return null;
                     const u = getPackageUrgency(days);
                     return (
-                      <span className={`text-xs px-2 py-0.5 rounded ${u.color}`}
-                        style={{ background: u.bg, border: `1px solid ${u.border}`, fontFamily: "var(--font-barlow-condensed)" }}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.color}`}
+                        style={{ background: u.bg, border: `1px solid ${u.border}`, fontFamily: "var(--font-label)" }}>
                         {days < 0 ? "Süresi Doldu" : `${days} gün kaldı`}
                       </span>
                     );
@@ -1217,17 +1068,17 @@ export default function OgrencilerPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Başlangıç Tarihi</label>
+                      style={{ fontFamily: "var(--font-label)" }}>Başlangıç Tarihi</label>
                     <input type="date" value={eStartDate} onChange={e => setEStartDate(e.target.value)}
-                      className="w-full bg-carbon border-2 border-white/15 focus:border-violet/50 text-white px-3 py-2.5 text-sm outline-none"
-                      style={{ fontFamily: "var(--font-inter)" }} />
+                      className="w-full glass rounded-lg text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily: "var(--font-label)" }} />
                   </div>
                   <div>
                     <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Bitiş Tarihi</label>
+                      style={{ fontFamily: "var(--font-label)" }}>Bitiş Tarihi</label>
                     <input type="date" value={eEndDate} onChange={e => setEEndDate(e.target.value)}
-                      className="w-full bg-carbon border-2 border-white/15 focus:border-violet/50 text-white px-3 py-2.5 text-sm outline-none"
-                      style={{ fontFamily: "var(--font-inter)" }} />
+                      className="w-full glass rounded-lg text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily: "var(--font-label)" }} />
                   </div>
                 </div>
                 <button type="button"
@@ -1237,33 +1088,33 @@ export default function OgrencilerPage() {
                     setEStartDate(start);
                     setEEndDate(calcPackageEndDate(start, duration));
                   }}
-                  className="flex items-center justify-center gap-2 w-full border border-violet/30 text-violet hover:bg-violet/10 text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                  className="flex items-center justify-center gap-2 w-full rounded-lg hover:bg-violet-500/10 text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
+                  style={{ border: "1px solid rgba(139,92,246,0.3)", color: "#A78BFA", fontFamily: "var(--font-label)" }}>
                   <CalendarClock size={13} />Süreyi Bugünden Başlat ve Yenile
                 </button>
               </div>
 
-              <div className="p-4 bg-steel/30 border border-crimson/10 space-y-3">
-                <div className="text-xs text-crimson tracking-widest uppercase"
-                  style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödeme Bilgileri</div>
+              <div className="p-4 glass rounded-xl space-y-3">
+                <div className="text-xs tracking-widest uppercase"
+                  style={{ color: "var(--color-error)", fontFamily: "var(--font-label)" }}>Ödeme Bilgileri</div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Ödenen (₺)</label>
+                      style={{ fontFamily: "var(--font-label)" }}>Ödenen (₺)</label>
                     <input type="number" min="0" value={eAP} onChange={e => setEAP(e.target.value)}
-                      className="w-full bg-carbon border-2 border-green-500/30 text-green-400 px-3 py-3 text-lg outline-none font-display tracking-wider"
-                      style={{ fontFamily: "var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg px-3 py-3 text-lg outline-none tracking-wider"
+                      style={{ color: "var(--color-success)", fontFamily: "var(--font-display)" }} />
                     <p className="text-xs text-white/20 mt-1"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: ₺{editSt.amountPaid.toLocaleString("tr-TR")}</p>
+                      style={{ fontFamily: "var(--font-label)" }}>Mevcut: ₺{editSt.amountPaid.toLocaleString("tr-TR")}</p>
                   </div>
                   <div>
                     <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kalan Borç (₺)</label>
+                      style={{ fontFamily: "var(--font-label)" }}>Kalan Borç (₺)</label>
                     <input type="number" min="0" value={eAD} onChange={e => setEAD(e.target.value)}
-                      className="w-full bg-carbon border-2 border-crimson/25 text-crimson px-3 py-3 text-lg outline-none font-display tracking-wider"
-                      style={{ fontFamily: "var(--font-bebas)" }} />
+                      className="w-full glass rounded-lg px-3 py-3 text-lg outline-none tracking-wider"
+                      style={{ color: "var(--color-error)", fontFamily: "var(--font-display)" }} />
                     <p className="text-xs text-white/20 mt-1"
-                      style={{ fontFamily: "var(--font-barlow-condensed)" }}>Mevcut: ₺{editSt.amountDue.toLocaleString("tr-TR")}</p>
+                      style={{ fontFamily: "var(--font-label)" }}>Mevcut: ₺{editSt.amountDue.toLocaleString("tr-TR")}</p>
                   </div>
                   <Sel label="Ödeme Durumu" value={ePS} onChange={setEPS} options={[
                     { value: "beklemede", label: "Beklemede" },
@@ -1283,57 +1134,63 @@ export default function OgrencilerPage() {
             <div className="flex-shrink-0 flex gap-3 px-5 py-4 border-t border-white/6"
               style={{ background: "rgba(24,24,27,0.98)" }}>
               <button onClick={() => setEditSt(null)}
-                className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
+                className="flex-1 rounded-lg text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
+                style={{ border: "1px solid rgba(255,255,255,0.1)", fontFamily: "var(--font-label)" }}>Vazgeç</button>
               <button onClick={handleEdit} disabled={eSaving}
-                className="flex-1 bg-crimson hover:bg-crimson-bright disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                className="gradient-animated gradient-slow gradient-violet-pink-orange flex-1 rounded-lg disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-transform hover:scale-[1.01] active:scale-95"
+                style={{ fontFamily: "var(--font-label)" }}>
                 {eSaving ? "Kaydediliyor..." : "Kaydet"}
               </button>
             </div>
           </motion.div>
-        </div>
-      )}
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── SİLME ONAYI ─────────────────────────────────────────────── */}
-      {delSt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setDelSt(null)}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }}
-            className="relative z-10 w-full max-w-sm bg-carbon border border-white/10 p-6"
-            onClick={e => e.stopPropagation()}>
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />
-            <h3 className="text-xl font-display text-white tracking-wider mb-2" style={{ fontFamily: "var(--font-bebas)" }}>ÖĞRENCİYİ SİL</h3>
-            <p className="text-sm text-white/50 mb-5" style={{ fontFamily: "var(--font-inter)" }}>
-              <strong>{delSt.fullName}</strong> ({delSt.code}) ve tüm verileri Supabase&apos;den kalıcı olarak silinecek.
-            </p>
-            <div className="flex gap-3">
-              <button onClick={() => setDelSt(null)}
-                className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
-              <button onClick={handleDelete} disabled={delSaving}
-                className="flex-1 bg-crimson hover:bg-crimson-bright disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                {delSaving ? "Siliniyor..." : "Evet, Sil"}
-              </button>
-            </div>
+      <AnimatePresence>
+        {delSt && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setDelSt(null)}>
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, y: 16, filter: "blur(6px)" }} animate={{ scale: 1, y: 0, filter: "blur(0px)" }} exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="glass-strong relative z-10 w-full max-w-sm rounded-2xl p-6"
+              onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl text-white tracking-wider mb-2" style={{ fontFamily: "var(--font-display)" }}>ÖĞRENCİYİ SİL</h3>
+              <p className="text-sm text-white/50 mb-5" style={{ fontFamily: "var(--font-label)" }}>
+                <strong>{delSt.fullName}</strong> ({delSt.code}) ve tüm verileri Supabase&apos;den kalıcı olarak silinecek.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setDelSt(null)}
+                  className="flex-1 rounded-lg text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
+                  style={{ border: "1px solid rgba(255,255,255,0.1)", fontFamily: "var(--font-label)" }}>Vazgeç</button>
+                <button onClick={handleDelete} disabled={delSaving}
+                  className="flex-1 rounded-lg disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-2.5 transition-all"
+                  style={{ background: "var(--color-error)", fontFamily: "var(--font-label)" }}>
+                  {delSaving ? "Siliniyor..." : "Evet, Sil"}
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* ── DÜET PARTNER MODAL ────────────────────────────────────── */}
-      {partnerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setPartnerModal(null)}>
+      <AnimatePresence>
+        {partnerModal && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setPartnerModal(null)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setPartnerModal(null)} />
-          <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }}
-            className="relative z-10 w-full max-w-md bg-carbon border border-white/10 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+          <motion.div initial={{ scale: 0.95, y: 16, filter: "blur(6px)" }} animate={{ scale: 1, y: 0, filter: "blur(0px)" }} exit={{ scale: 0.96, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="glass-strong relative z-10 w-full max-w-md rounded-2xl p-6"
             onClick={e => e.stopPropagation()}>
-            <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background:"linear-gradient(90deg,transparent,#8B5CF6,transparent)" }} />
             <div className="flex items-center gap-3 mb-5">
-              <Users size={20} className="text-violet" />
+              <Users size={20} style={{ color: "#A78BFA" }} />
               <div>
-                <h3 className="text-lg font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>DÜET PARTNERİ</h3>
-                <p className="text-xs text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{partnerModal.fullName} ({partnerModal.code})</p>
+                <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>DÜET PARTNERİ</h3>
+                <p className="text-xs text-white/35" style={{ fontFamily:"var(--font-label)" }}>{partnerModal.fullName} ({partnerModal.code})</p>
               </div>
               <button onClick={() => setPartnerModal(null)} className="ml-auto text-white/25 hover:text-white"><X size={18}/></button>
             </div>
@@ -1346,26 +1203,26 @@ export default function OgrencilerPage() {
                     {currentPartner.fullName.split(" ").map(n=>n[0]).join("").slice(0,2)}
                   </div>
                   <div>
-                    <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{currentPartner.fullName}</div>
-                    <div className="text-xs text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{currentPartner.code} · {currentPartner.remainingLessons} ders</div>
+                    <div className="text-sm text-white font-semibold" style={{ fontFamily:"var(--font-label)" }}>{currentPartner.fullName}</div>
+                    <div className="text-xs text-white/35" style={{ fontFamily:"var(--font-label)" }}>{currentPartner.code} · {currentPartner.remainingLessons} ders</div>
                   </div>
                 </div>
                 <button onClick={handleRemovePartner} disabled={partnerSaving}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-400 border border-red-400/25 hover:border-red-400/50 rounded transition-all"
-                  style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs border rounded-lg transition-all"
+                  style={{ color: "var(--color-error)", borderColor: "rgba(239,68,68,0.25)", fontFamily:"var(--font-label)" }}>
                   <Unlink size={12}/> Kaldır
                 </button>
               </div>
             ) : (
-              <p className="text-xs text-white/30 mb-4 text-center py-3" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Henüz düet partneri yok</p>
+              <p className="text-xs text-white/30 mb-4 text-center py-3" style={{ fontFamily:"var(--font-label)" }}>Henüz düet partneri yok</p>
             )}
 
             {/* Arama */}
             <div className="space-y-1.5 mb-4">
-              <label className="text-xs text-white/40 tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Partner Seç</label>
+              <label className="text-xs text-white/40 tracking-widest uppercase" style={{ fontFamily:"var(--font-label)" }}>Partner Seç</label>
               <input value={partnerSearch} onChange={e => setPartnerSearch(e.target.value)} placeholder="İsim veya kod ara..."
-                className="w-full bg-carbon border border-white/10 focus:border-violet/50 text-white placeholder-white/20 px-3 py-2 text-sm outline-none rounded-lg"
-                style={{ fontFamily:"var(--font-inter)" }} />
+                className="w-full glass text-white placeholder-white/20 px-3 py-2 text-sm outline-none rounded-lg"
+                style={{ fontFamily:"var(--font-label)" }} />
             </div>
 
             <div className="space-y-1.5 max-h-52 overflow-y-auto">
@@ -1375,56 +1232,64 @@ export default function OgrencilerPage() {
                  s.code.toLowerCase().includes(partnerSearch.toLowerCase()))
               ).slice(0,8).map(s => (
                 <button key={s.id} onClick={() => handleSetPartner(s.id)} disabled={partnerSaving}
-                  className="w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-all hover:bg-steel/40 disabled:opacity-50"
-                  style={{ border:"1px solid rgba(255,255,255,0.05)" }}>
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-all glass disabled:opacity-50">
                   <div>
-                    <div className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.fullName}</div>
-                    <div className="text-[10px] text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.code} · {s.remainingLessons} ders</div>
+                    <div className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>{s.fullName}</div>
+                    <div className="text-[10px] text-white/30" style={{ fontFamily:"var(--font-label)" }}>{s.code} · {s.remainingLessons} ders</div>
                   </div>
-                  <LinkIcon size={13} className="text-violet/50" />
+                  <LinkIcon size={13} style={{ color: "rgba(167,139,250,0.5)" }} />
                 </button>
               ))}
             </div>
           </motion.div>
-        </div>
-      )}
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── QR MODAL ──────────────────────────────────────────────── */}
-      {qrSt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setQrSt(null)}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <div className="relative z-10 w-full max-w-xs bg-carbon border border-gold/20 p-8 text-center" onClick={e => e.stopPropagation()}>
-            <div className="text-6xl font-display text-gold-bright mb-3" style={{ fontFamily: "var(--font-bebas)", letterSpacing: "0.2em" }}>{qrSt.code}</div>
-            <div className="text-white font-semibold mb-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{qrSt.fullName}</div>
-            <p className="text-xs text-white/25 mt-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-              Bu kodu öğrenciye verin. /giris sayfasında kullanacaklar.
-            </p>
-            <button onClick={() => setQrSt(null)} className="mt-4 text-xs text-white/30 hover:text-white tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kapat</button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {qrSt && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setQrSt(null)}>
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, y: 16, filter: "blur(6px)" }} animate={{ scale: 1, y: 0, filter: "blur(0px)" }} exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="glass-strong relative z-10 w-full max-w-xs rounded-2xl p-8 text-center" onClick={e => e.stopPropagation()}>
+              <div className="text-6xl mb-3" style={{ color: "var(--color-achievement)", fontFamily: "var(--font-display)", letterSpacing: "0.2em" }}>{qrSt.code}</div>
+              <div className="text-white font-semibold mb-1" style={{ fontFamily: "var(--font-label)" }}>{qrSt.fullName}</div>
+              <p className="text-xs text-white/25 mt-2" style={{ fontFamily: "var(--font-label)" }}>
+                Bu kodu öğrenciye verin. /giris sayfasında kullanacaklar.
+              </p>
+              <button onClick={() => setQrSt(null)} className="mt-4 text-xs text-white/30 hover:text-white tracking-widest uppercase transition-colors" style={{ fontFamily: "var(--font-label)" }}>Kapat</button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── PAKET YENİLE MODAL ──────────────────────────────────────── */}
-      {renewSt && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      <AnimatePresence>
+        {renewSt && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
           style={{ padding: 0 }} onClick={() => setRenewSt(null)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-            className="relative z-10 w-full sm:max-w-2xl bg-carbon border border-white/10 flex flex-col"
-            style={{ borderRadius: "16px 16px 0 0", maxHeight: "92dvh" }}
+          <motion.div initial={{ y: 40, opacity: 0, scale: 0.98, filter: "blur(6px)" }} animate={{ y: 0, opacity: 1, scale: 1, filter: "blur(0px)" }} exit={{ y: 20, opacity: 0, filter: "blur(4px)" }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="glass-strong relative z-10 w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl flex flex-col"
+            style={{ maxHeight: "92dvh" }}
             onClick={e => e.stopPropagation()}>
 
             {/* Header */}
             <div className="flex-shrink-0 relative">
               <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl" style={{ background:"linear-gradient(90deg,#22c55e,#86efac)" }} />
               <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/6">
-                <div className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-green-400 font-display text-sm"
-                  style={{ background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.25)", fontFamily:"var(--font-bebas)" }}>
+                <div className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center text-sm"
+                  style={{ background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.25)", color: "var(--color-success)", fontFamily:"var(--font-display)" }}>
                   {renewSt.fullName.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-base font-display text-white tracking-wider truncate" style={{ fontFamily:"var(--font-bebas)" }}>{renewSt.fullName}</div>
-                  <div className="text-xs" style={{ color:"rgba(34,197,94,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  <div className="text-base text-white tracking-wider truncate" style={{ fontFamily:"var(--font-display)" }}>{renewSt.fullName}</div>
+                  <div className="text-xs" style={{ color:"rgba(34,197,94,0.7)", fontFamily:"var(--font-label)" }}>
                     {renewSt.code} · Mevcut kalan: <strong>{renewSt.remainingLessons}</strong> ders
                   </div>
                 </div>
@@ -1444,12 +1309,12 @@ export default function OgrencilerPage() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs tracking-widest uppercase"
-                    style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    style={{ color:"rgba(255,255,255,0.35)", fontFamily:"var(--font-label)" }}>
                     Paket Seç
                   </p>
                   <a href="/admin/paketler" target="_blank"
                     className="text-[10px] tracking-widest uppercase transition-colors"
-                    style={{ color:"rgba(139,92,246,0.5)", fontFamily:"var(--font-barlow-condensed)" }}
+                    style={{ color:"rgba(139,92,246,0.5)", fontFamily:"var(--font-label)" }}
                     onMouseEnter={e => (e.currentTarget.style.color = "rgba(139,92,246,0.9)")}
                     onMouseLeave={e => (e.currentTarget.style.color = "rgba(139,92,246,0.5)")}>
                     Paketleri Yönet →
@@ -1460,8 +1325,8 @@ export default function OgrencilerPage() {
                     <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor:"rgba(255,255,255,0.2)", borderTopColor:"transparent" }} />
                   </div>
                 ) : activePackages.length === 0 ? (
-                  <div className="p-4 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8 }}>
-                    <p className="text-xs" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  <div className="p-4 text-center glass rounded-xl">
+                    <p className="text-xs" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-label)" }}>
                       Aktif paket yok. /admin/paketler sayfasından paket ekleyin.
                     </p>
                   </div>
@@ -1479,17 +1344,17 @@ export default function OgrencilerPage() {
                           }}>
                           <div className="flex items-center gap-1.5 w-full">
                             <PackageIcon size={12} style={{ color: isActive ? "#22c55e" : "rgba(255,255,255,0.3)", flexShrink:0 }} />
-                            <span className="text-xs font-semibold truncate" style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.5)", fontFamily:"var(--font-barlow-condensed)" }}>{pkg.name}</span>
+                            <span className="text-xs font-semibold truncate" style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.5)", fontFamily:"var(--font-label)" }}>{pkg.name}</span>
                             {pkg.highlight && (
-                              <span className="ml-auto text-[9px] px-1 py-0.5 rounded" style={{ background:"rgba(217,119,6,0.15)", color:"#d97706", fontFamily:"var(--font-barlow-condensed)", flexShrink:0 }}>
+                              <span className="ml-auto text-[9px] px-1 py-0.5 rounded-full" style={{ background:"rgba(217,119,6,0.15)", color:"var(--color-achievement)", fontFamily:"var(--font-label)", flexShrink:0 }}>
                                 Popüler
                               </span>
                             )}
                           </div>
-                          <span className="text-[11px] font-bold" style={{ color: isActive ? "#22c55e" : "rgba(255,255,255,0.6)", fontFamily:"var(--font-bebas)", letterSpacing:"0.03em" }}>
+                          <span className="text-[11px] font-bold" style={{ color: isActive ? "#22c55e" : "rgba(255,255,255,0.6)", fontFamily:"var(--font-display)", letterSpacing:"0.03em" }}>
                             {pkg.lessonCount} ders
                           </span>
-                          <span className="text-[10px]" style={{ color: isActive ? "rgba(34,197,94,0.7)" : "rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                          <span className="text-[10px]" style={{ color: isActive ? "rgba(34,197,94,0.7)" : "rgba(255,255,255,0.2)", fontFamily:"var(--font-label)" }}>
                             ₺{pkg.price.toLocaleString("tr-TR")} · {pkg.durationDays}g
                           </span>
                         </button>
@@ -1503,17 +1368,17 @@ export default function OgrencilerPage() {
               {selPkg && (
                 <div className="p-3 rounded-xl" style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.15)" }}>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>Mevcut Kalan</span>
-                    <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{renewSt.remainingLessons} ders</span>
+                    <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>Mevcut Kalan</span>
+                    <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>{renewSt.remainingLessons} ders</span>
                   </div>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>+ {selPkg.name}</span>
-                    <span className="text-sm font-semibold" style={{ color:"#22c55e", fontFamily:"var(--font-barlow-condensed)" }}>+ {selPkg.lessonCount} ders</span>
+                    <span className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>+ {selPkg.name}</span>
+                    <span className="text-sm font-semibold" style={{ color:"#22c55e", fontFamily:"var(--font-label)" }}>+ {selPkg.lessonCount} ders</span>
                   </div>
                   <div className="h-px my-2" style={{ background:"rgba(255,255,255,0.06)" }} />
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-barlow-condensed)" }}>Yeni Kalan</span>
-                    <span className="text-lg font-bold" style={{ color:"#22c55e", fontFamily:"var(--font-bebas)", letterSpacing:"0.05em" }}>
+                    <span className="text-xs font-semibold" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-label)" }}>Yeni Kalan</span>
+                    <span className="text-lg font-bold" style={{ color:"#22c55e", fontFamily:"var(--font-display)", letterSpacing:"0.05em" }}>
                       {renewSt.remainingLessons + selPkg.lessonCount} ders
                     </span>
                   </div>
@@ -1521,49 +1386,49 @@ export default function OgrencilerPage() {
               )}
 
               {/* Ödeme Bilgileri */}
-              <div className="p-4 space-y-3" style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8 }}>
-                <p className="text-xs tracking-widest uppercase" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>Ödeme Bilgileri</p>
+              <div className="p-4 space-y-3 glass rounded-xl">
+                <p className="text-xs tracking-widest uppercase" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-label)" }}>Ödeme Bilgileri</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>
                       Paket Fiyatı (₺)
                     </label>
                     <input type="number" value={rListPrice} onChange={e => setRListPrice(e.target.value)}
-                      className="w-full bg-carbon border border-white/10 focus:border-gold/50 text-white px-3 py-2.5 text-sm outline-none"
-                      style={{ fontFamily:"var(--font-inter)" }} />
-                    <p className="text-[10px] text-white/20 mt-1" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Katalog: ₺{selPkg?.price.toLocaleString("tr-TR") ?? "—"}</p>
+                      className="w-full glass rounded-lg text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily:"var(--font-label)" }} />
+                    <p className="text-[10px] text-white/20 mt-1" style={{ fontFamily:"var(--font-label)" }}>Katalog: ₺{selPkg?.price.toLocaleString("tr-TR") ?? "—"}</p>
                   </div>
                   <div>
-                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                    <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>
                       Ödenen (₺)
                     </label>
                     <input type="number" value={rPaidAmount} onChange={e => setRPaidAmount(e.target.value)}
                       placeholder="0"
-                      className="w-full bg-carbon border border-white/10 focus:border-green-500/50 text-white px-3 py-2.5 text-sm outline-none"
-                      style={{ fontFamily:"var(--font-inter)" }} />
+                      className="w-full glass rounded-lg text-white px-3 py-2.5 text-sm outline-none"
+                      style={{ fontFamily:"var(--font-label)" }} />
                     {Number(rPaidAmount) > 0 && Number(rListPrice) > 0 && (
-                      <p className="text-[10px] mt-1" style={{ color: Number(rPaidAmount) >= Number(rListPrice) ? "#22c55e" : "#d97706", fontFamily:"var(--font-barlow-condensed)" }}>
+                      <p className="text-[10px] mt-1" style={{ color: Number(rPaidAmount) >= Number(rListPrice) ? "#22c55e" : "#d97706", fontFamily:"var(--font-label)" }}>
                         Kalan: ₺{Math.max(0, Number(rListPrice) - Number(rPaidAmount)).toLocaleString("tr-TR")}
                       </p>
                     )}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Ödeme Durumu</label>
+                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>Ödeme Durumu</label>
                   <select value={rPayStatus} onChange={e => setRPayStatus(e.target.value)}
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none appearance-none"
-                    style={{ fontFamily:"var(--font-inter)" }}>
+                    className="w-full glass text-white px-3 py-2.5 text-sm outline-none appearance-none rounded-lg"
+                    style={{ fontFamily:"var(--font-label)" }}>
                     <option value="beklemede">Beklemede</option>
                     <option value="kismi">Kısmi Ödeme</option>
                     <option value="odendi">Ödendi</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>Not (opsiyonel)</label>
+                  <label className="block text-xs text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily:"var(--font-label)" }}>Not (opsiyonel)</label>
                   <input type="text" value={rNotes} onChange={e => setRNotes(e.target.value)}
                     placeholder="İndirim nedeni, özel not..."
-                    className="w-full bg-carbon border border-white/10 text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none"
-                    style={{ fontFamily:"var(--font-inter)" }} />
+                    className="w-full glass rounded-lg text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none"
+                    style={{ fontFamily:"var(--font-label)" }} />
                 </div>
               </div>
 
@@ -1572,7 +1437,7 @@ export default function OgrencilerPage() {
                 <button className="flex items-center gap-2 w-full text-left py-2" onClick={() => setHistOpen(o => !o)}>
                   <History size={13} style={{ color:"rgba(255,255,255,0.3)" }} />
                   <span className="text-xs tracking-widest uppercase flex-1"
-                    style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                    style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-label)" }}>
                     Paket Geçmişi {pkgHistory.length > 0 && `(${pkgHistory.length})`}
                   </span>
                   {histOpen ? <ChevronUp size={12} style={{ color:"rgba(255,255,255,0.2)" }}/> : <ChevronDown size={12} style={{ color:"rgba(255,255,255,0.2)"}}/> }
@@ -1584,23 +1449,26 @@ export default function OgrencilerPage() {
                         <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor:"rgba(255,255,255,0.2)", borderTopColor:"transparent" }} />
                       </div>
                     ) : pkgHistory.length === 0 ? (
-                      <p className="text-xs text-center py-4" style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                      <p className="text-xs text-center py-4" style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-label)" }}>
                         Henüz paket geçmişi yok
                       </p>
                     ) : pkgHistory.map(h => (
-                      <div key={h.id} className="flex items-center gap-3 px-3 py-2.5 rounded"
-                        style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)" }}>
+                      <div key={h.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg glass">
                         <PackageIcon size={12} style={{ color:"rgba(139,92,246,0.5)", flexShrink:0 }} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          <div className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>
                             {h.packageName} — {h.lessonCount} ders
                           </div>
-                          <div className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                          <div className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-label)" }}>
                             ₺{h.paidAmount.toLocaleString("tr-TR")} · {h.startDate ? format(new Date(h.startDate), "dd.MM.yyyy") : ""}
                           </div>
                         </div>
-                        <span className={`text-[10px] px-1.5 py-0.5 ${h.paymentStatus === "odendi" ? "text-green-400 border-green-500/20 bg-green-500/8" : h.paymentStatus === "kismi" ? "text-gold border-gold/20 bg-gold/8" : "text-crimson border-crimson/20 bg-crimson/8"}`}
-                          style={{ fontFamily:"var(--font-barlow-condensed)", border:"1px solid" }}>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                          style={{
+                            fontFamily:"var(--font-label)",
+                            background: h.paymentStatus === "odendi" ? "rgba(34,197,94,0.08)" : h.paymentStatus === "kismi" ? "rgba(245,158,11,0.08)" : "rgba(239,68,68,0.08)",
+                            color: h.paymentStatus === "odendi" ? "var(--color-success)" : h.paymentStatus === "kismi" ? "var(--color-achievement)" : "var(--color-error)",
+                          }}>
                           {PAYMENT_LABELS[h.paymentStatus]}
                         </span>
                       </div>
@@ -1616,11 +1484,11 @@ export default function OgrencilerPage() {
             <div className="flex-shrink-0 flex gap-3 px-5 py-4 border-t border-white/6"
               style={{ background:"rgba(24,24,27,0.98)" }}>
               <button onClick={() => setRenewSt(null)}
-                className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
-                style={{ fontFamily:"var(--font-barlow-condensed)" }}>Vazgeç</button>
+                className="flex-1 rounded-lg text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all"
+                style={{ border: "1px solid rgba(255,255,255,0.1)", fontFamily:"var(--font-label)" }}>Vazgeç</button>
               <button onClick={handleRenew} disabled={rSaving || !selPkg}
-                className="flex-1 text-white text-xs font-semibold tracking-widest uppercase py-3 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background:"linear-gradient(135deg,#22c55e,#16a34a)", fontFamily:"var(--font-barlow-condensed)" }}>
+                className="flex-1 text-white text-xs font-semibold tracking-widest uppercase py-3 rounded-lg transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                style={{ background:"linear-gradient(135deg,#22c55e,#16a34a)", fontFamily:"var(--font-label)" }}>
                 {rSaving ? (
                   <><div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" />Yenileniyor...</>
                 ) : !selPkg ? (
@@ -1631,8 +1499,9 @@ export default function OgrencilerPage() {
               </button>
             </div>
           </motion.div>
-        </div>
-      )}
-    </div>
+        </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

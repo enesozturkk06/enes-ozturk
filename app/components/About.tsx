@@ -3,13 +3,6 @@
 import { useRef } from "react";
 import { motion, useInView } from "framer-motion";
 
-const stats = [
-  { n: "20+", label: "Profesyonel Maç", accent: "#8B5CF6" },
-  { n: "16",  label: "Nakavt Galibiyeti", accent: "#A855F7" },
-  { n: "2",   label: "Şampiyonluk Kemeri", accent: "#D946EF" },
-  { n: "10+", label: "Yıllık Deneyim", accent: "#8B5CF6" },
-];
-
 const disciplines = ["Kickboks","Boks","Muay Thai","Karate","Wushu","K-1"];
 
 function FadeIn({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
@@ -43,13 +36,13 @@ export default function About() {
               <div className="flex items-center gap-4 mb-6">
                 <span className="h-px w-10" style={{ background: "linear-gradient(to right, transparent, #8B5CF6)" }} />
                 <span className="text-xs tracking-[0.4em] uppercase"
-                  style={{ color: "#8B5CF6", fontFamily: "var(--font-barlow-condensed)" }}>Hakkımda</span>
+                  style={{ color: "#8B5CF6", fontFamily: "var(--font-label)" }}>Hakkımda</span>
               </div>
             </FadeIn>
 
             <FadeIn delay={0.1}>
               <h2 className="font-display leading-none tracking-wide mb-6"
-                style={{ fontFamily: "var(--font-bebas)", fontSize: "clamp(36px,5.5vw,70px)" }}>
+                style={{ fontFamily: "var(--font-display)", fontSize: "clamp(36px,5.5vw,70px)" }}>
                 <span className="block text-white">RİNGİN HAKİMİ:</span>
                 <span className="block" style={{
                   background: "linear-gradient(90deg,#8B5CF6,#A855F7,#D946EF)",
@@ -88,7 +81,7 @@ export default function About() {
                       background: "rgba(139,92,246,0.06)",
                       border: "1px solid rgba(139,92,246,0.18)",
                       color: "rgba(255,255,255,0.5)",
-                      fontFamily: "var(--font-barlow-condensed)",
+                      fontFamily: "var(--font-label)",
                       borderRadius: "6px",
                       transition: "all 0.2s",
                     }}>
@@ -116,8 +109,8 @@ export default function About() {
                       </svg>
                     </div>
                     <div>
-                      <div className="text-[9px] mb-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>{s.label}</div>
-                      <div className="text-xs" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "var(--font-barlow-condensed)" }}>{s.handle}</div>
+                      <div className="text-[9px] mb-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>{s.label}</div>
+                      <div className="text-xs" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "var(--font-label)" }}>{s.handle}</div>
                     </div>
                   </motion.a>
                 ))}
@@ -125,61 +118,23 @@ export default function About() {
             </FadeIn>
           </div>
 
-          {/* Sağ: Stat kartları + Alıntı */}
-          <div className="space-y-4">
-            {/* Stat grid */}
+          {/* Sağ: Alıntı + WhatsApp — istatistikler zaten Hero şeridinde gösteriliyor, burada tekrar edilmiyor */}
+          <div className="space-y-5">
+            {/* Alıntı kartı — sağ sütunun ana odak noktası */}
             <FadeIn delay={0.2}>
-              <div className="grid grid-cols-2 gap-3">
-                {stats.map((s, i) => (
-                  <motion.div key={s.label}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.2 + i * 0.08 }}
-                    whileHover={{ scale: 1.04, y: -3 }}
-                    className="relative p-5 rounded-xl overflow-hidden cursor-default"
-                    style={{
-                      background: "rgba(15,15,22,0.9)",
-                      border: "1px solid rgba(139,92,246,0.1)",
-                      backdropFilter: "blur(20px)",
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${s.accent}40`; (e.currentTarget as HTMLElement).style.boxShadow = `0 0 30px ${s.accent}12`; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(139,92,246,0.1)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}>
-                    <div className="absolute top-0 left-0 right-0 h-px"
-                      style={{ background: `linear-gradient(90deg, transparent, ${s.accent}, transparent)` }} />
-                    <motion.div className="text-4xl font-display mb-1"
-                      style={{ fontFamily: "var(--font-bebas)", color: s.accent }}
-                      animate={{ textShadow: [`0 0 0px transparent`, `0 0 20px ${s.accent}80`, `0 0 0px transparent`] }}
-                      transition={{ duration: 3, repeat: Infinity, delay: i * 0.8 }}>
-                      {s.n}
-                    </motion.div>
-                    <div className="text-xs" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>{s.label}</div>
-                  </motion.div>
-                ))}
-              </div>
-            </FadeIn>
-
-            {/* Alıntı kartı */}
-            <FadeIn delay={0.35}>
-              <div className="relative p-6 rounded-2xl overflow-hidden"
-                style={{
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.1), rgba(217,70,239,0.06))",
-                  border: "1px solid rgba(139,92,246,0.2)",
-                  backdropFilter: "blur(20px)",
-                }}>
-                <div className="absolute top-0 left-0 right-0 h-px"
-                  style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.5), transparent)" }} />
-                <div className="text-4xl mb-3" style={{ color: "rgba(139,92,246,0.25)", fontFamily: "var(--font-bebas)" }}>&ldquo;</div>
-                <p className="text-sm leading-relaxed mb-3"
-                  style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-inter)" }}>
+              <div className="glass relative p-8 lg:p-10 rounded-2xl overflow-hidden">
+                <div className="gradient-animated gradient-slow gradient-violet-pink absolute top-0 left-0 right-0 h-px" />
+                <div className="text-5xl mb-4" style={{ color: "rgba(139,92,246,0.3)", fontFamily: "var(--font-display)" }}>&ldquo;</div>
+                <p className="text-base lg:text-lg leading-relaxed mb-4"
+                  style={{ color: "rgba(255,255,255,0.55)", fontFamily: "var(--font-inter)" }}>
                   Öğrencimin hem fiziksel olarak gelişmesi hem de dövüş sporlarını bilinçli, güvenli ve profesyonel şekilde öğrenmesi temel hedefimdir.
                 </p>
-                <div className="text-xs" style={{ color: "#8B5CF6", fontFamily: "var(--font-barlow-condensed)" }}>— Antrenör Enes Öztürk</div>
+                <div className="text-xs tracking-widest uppercase" style={{ color: "#A855F7", fontFamily: "var(--font-label)" }}>— Antrenör Enes Öztürk</div>
               </div>
             </FadeIn>
 
             {/* WhatsApp */}
-            <FadeIn delay={0.45}>
+            <FadeIn delay={0.35}>
               <motion.a href="https://wa.me/905389714459" target="_blank" rel="noopener noreferrer"
                 whileHover={{ scale: 1.02, boxShadow: "0 0 30px rgba(34,197,94,0.2)" }}
                 className="flex items-center gap-4 p-4 rounded-xl transition-all"
@@ -191,8 +146,8 @@ export default function About() {
                   </svg>
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-green-400" style={{ fontFamily: "var(--font-barlow-condensed)" }}>0538 971 44 59</div>
-                  <div className="text-xs" style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-barlow-condensed)" }}>WhatsApp ile hızlıca yazın</div>
+                  <div className="text-sm font-semibold text-green-400" style={{ fontFamily: "var(--font-label)" }}>0538 971 44 59</div>
+                  <div className="text-xs" style={{ color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-label)" }}>WhatsApp ile hızlıca yazın</div>
                 </div>
                 <motion.div className="ml-auto text-green-400 text-lg" animate={{ x: [0, 5, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>→</motion.div>
               </motion.a>

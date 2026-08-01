@@ -40,7 +40,7 @@ export default function BildirimlerPage() {
   const read = notifs.filter(n => n.isRead);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 pb-28">
       <PageHeader
         title="Bildirimler"
         subtitle={`${unread.length} okunmamış bildirim`}

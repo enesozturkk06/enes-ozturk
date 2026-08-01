@@ -25,6 +25,12 @@ import { PageHeader } from "@/app/components/ui";
 import { Zap, Crown, Trophy, Gift, Clock, ChevronRight, ChevronDown } from "lucide-react";
 import { triggerConfetti } from "@/app/components/shared/ConfettiEffect";
 
+const stagger = { animate: { transition: { staggerChildren: 0.08 } } };
+const fadeUp = {
+  initial: { opacity: 0, y: 20, scale: 0.96, filter: "blur(6px)" },
+  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
+
 /* ── Seviye kart bileşeni ─────────────────────────────────────────── */
 
 function LevelCard({ level, isCurrent, isEarned, index }: {
@@ -33,30 +39,29 @@ function LevelCard({ level, isCurrent, isEarned, index }: {
   const [hover, setHover] = useState(false);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.07, duration: 0.35, ease: "easeOut" }}
+      initial={{ opacity: 0, y: 20, scale: 0.96, filter: "blur(6px)" }}
+      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+      transition={{ delay: index * 0.06, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className="relative flex flex-col p-5 border transition-all duration-300 select-none"
+      whileHover={{ y: -3 }}
+      className={`relative flex flex-col p-5 rounded-2xl select-none ${isEarned ? "glass-strong" : "glass"}`}
       style={{
-        background: isEarned
-          ? `linear-gradient(135deg, ${level.gradFrom}18, ${level.gradTo}0a)`
-          : "rgba(255,255,255,0.02)",
-        borderColor: isCurrent ? level.colorPrimary + "99" : isEarned ? level.colorPrimary + "44" : "rgba(255,255,255,0.06)",
+        background: isEarned ? `linear-gradient(135deg, ${level.gradFrom}18, ${level.gradTo}0a)` : undefined,
+        borderColor: isCurrent ? level.colorPrimary + "99" : isEarned ? level.colorPrimary + "44" : undefined,
         boxShadow: isCurrent
           ? `0 0 32px ${level.glowColor}, 0 0 12px ${level.glowColor}`
           : isEarned && hover ? `0 0 20px ${level.glowColor}` : "none",
-        borderRadius: 2,
+        transition: "box-shadow 0.25s, transform 0.25s",
       }}
     >
       {(isCurrent || isEarned) && (
-        <div className="absolute top-0 left-0 right-0 h-0.5"
+        <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
           style={{ background: `linear-gradient(90deg, transparent, ${level.colorPrimary}, transparent)` }} />
       )}
       {isCurrent && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 text-[10px] font-bold tracking-widest uppercase"
-          style={{ background: `linear-gradient(90deg, ${level.gradFrom}, ${level.gradTo})`, color: "#fff", borderRadius: 12, fontFamily: "var(--font-bebas)", letterSpacing: "0.18em", boxShadow: `0 0 12px ${level.glowColor}` }}>
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 text-[10px] font-bold tracking-widest uppercase rounded-full"
+          style={{ background: `linear-gradient(90deg, ${level.gradFrom}, ${level.gradTo})`, color: "#fff", fontFamily: "var(--font-display)", letterSpacing: "0.18em", boxShadow: `0 0 12px ${level.glowColor}` }}>
           ŞU AN BURADASIN
         </div>
       )}
@@ -72,25 +77,25 @@ function LevelCard({ level, isCurrent, isEarned, index }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold tracking-wide truncate"
-            style={{ fontFamily: "var(--font-bebas)", letterSpacing: "0.1em", color: isEarned ? level.colorPrimary : "rgba(255,255,255,0.25)" }}>
+            style={{ fontFamily: "var(--font-display)", letterSpacing: "0.1em", color: isEarned ? level.colorPrimary : "rgba(255,255,255,0.25)" }}>
             {level.name}
           </div>
-          <div className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+          <div className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
             {level.threshold.toLocaleString()} XP
           </div>
         </div>
         {isEarned && (
-          <div className="text-[10px] px-2 py-0.5 rounded"
-            style={{ background: `${level.colorPrimary}22`, border: `1px solid ${level.colorPrimary}44`, color: level.colorPrimary, fontFamily: "var(--font-barlow-condensed)" }}>
+          <div className="text-[10px] px-2 py-0.5 rounded-full"
+            style={{ background: `${level.colorPrimary}22`, color: level.colorPrimary, fontFamily: "var(--font-label)" }}>
             ✓ Kazanıldı
           </div>
         )}
       </div>
-      <p className="text-[11px] leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-barlow-condensed)" }}>
+      <p className="text-[11px] leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-label)" }}>
         {level.description}
       </p>
       <div className="flex items-start gap-1.5 text-[11px] pt-2.5"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: isEarned ? level.colorPrimary + "cc" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+        style={{ borderTop: "1px solid rgba(255,255,255,0.08)", color: isEarned ? level.colorPrimary + "cc" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
         <Gift size={12} className="mt-0.5 flex-shrink-0" />
         <span>{level.reward}</span>
       </div>
@@ -112,12 +117,12 @@ function XPBar({ result, label, color, maxThreshold, animated = true }: {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>{label}</span>
-        <span className="text-sm font-black tabular-nums" style={{ color, fontFamily: "var(--font-bebas)" }}>
+        <span className="text-[11px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>{label}</span>
+        <span className="text-sm font-black tabular-nums" style={{ color, fontFamily: "var(--font-display)" }}>
           {total.toLocaleString()} XP
         </span>
       </div>
-      <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
         <motion.div
           className="absolute inset-y-0 left-0 rounded-full"
           initial={{ width: "0%" }}
@@ -126,7 +131,7 @@ function XPBar({ result, label, color, maxThreshold, animated = true }: {
           style={{ background: color, boxShadow: `0 0 12px ${color}88` }}
         />
         {pct > 12 && (
-          <div className="absolute inset-0 flex items-center pl-2.5 text-[9px] font-bold" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "var(--font-bebas)" }}>
+          <div className="absolute inset-0 flex items-center pl-2.5 text-[9px] font-bold" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "var(--font-display)" }}>
             {pct}%
           </div>
         )}
@@ -152,26 +157,27 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
   ];
 
   return (
-    <div className="p-5 border" style={{ background: "rgba(255,255,255,0.025)", borderColor: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+    <div className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+    <div className="glass-strong relative rounded-2xl p-5">
       {/* Sezon başlık */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <Zap size={15} style={{ color: "#FBBF24" }} />
-            <span className="text-sm font-bold tracking-widest uppercase" style={{ color: "#FBBF24", fontFamily: "var(--font-bebas)", letterSpacing: "0.18em" }}>
+            <Zap size={15} style={{ color: "var(--color-achievement)" }} />
+            <span className="text-sm font-bold tracking-widest uppercase" style={{ color: "var(--color-achievement)", fontFamily: "var(--font-display)", letterSpacing: "0.18em" }}>
               Mevcut Sezon
             </span>
           </div>
-          <div className="text-lg font-black mt-0.5" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "var(--font-bebas)", letterSpacing: "0.1em" }}>
+          <div className="text-lg mt-0.5" style={{ color: "rgba(255,255,255,0.9)", fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
             {label}
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>Bitiş</div>
-          <div className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-barlow-condensed)" }}>{seasonEnd}</div>
+          <div className="text-[10px] uppercase tracking-wider text-white/30" style={{ fontFamily: "var(--font-label)" }}>Bitiş</div>
+          <div className="text-xs font-semibold text-white/60" style={{ fontFamily: "var(--font-label)" }}>{seasonEnd}</div>
           <div className="flex items-center gap-1 mt-0.5 justify-end">
-            <Clock size={10} style={{ color: daysLeft <= 14 ? "#F87171" : "#34D399" }} />
-            <span className="text-[10px]" style={{ color: daysLeft <= 14 ? "#F87171" : "#34D399", fontFamily: "var(--font-barlow-condensed)" }}>
+            <Clock size={10} style={{ color: daysLeft <= 14 ? "var(--color-error)" : "var(--color-success)" }} />
+            <span className="text-[10px]" style={{ color: daysLeft <= 14 ? "var(--color-error)" : "var(--color-success)", fontFamily: "var(--font-label)" }}>
               {daysLeft} gün kaldı
             </span>
           </div>
@@ -191,12 +197,12 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
         <div className="flex-1 min-w-0 space-y-3">
           <XPBar result={seasonResult} label={`${currentLevel.icon} ${currentLevel.shortName}`} color={currentLevel.colorPrimary} maxThreshold={Math.max(10000, seasonTotal + 1000)} />
           <div className="flex gap-2 flex-wrap">
-            <span className="text-[10px] px-2 py-0.5 rounded"
-              style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", color: seasonTotal >= 5000 ? "#FCD34D" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+            <span className="glass text-[10px] px-2 py-1 rounded-full"
+              style={{ color: seasonTotal >= 5000 ? "var(--color-achievement)" : "rgba(255,255,255,0.25)", fontFamily: "var(--font-label)" }}>
               🥇 5K {seasonTotal >= 5000 ? "✓" : `${(5000 - seasonTotal).toLocaleString()} kaldı`}
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded"
-              style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", color: seasonTotal >= 10000 ? "#C4B5FD" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+            <span className="glass text-[10px] px-2 py-1 rounded-full"
+              style={{ color: seasonTotal >= 10000 ? "#C4B5FD" : "rgba(255,255,255,0.25)", fontFamily: "var(--font-label)" }}>
               💎 10K {seasonTotal >= 10000 ? "✓" : `${(10000 - seasonTotal).toLocaleString()} kaldı`}
             </span>
           </div>
@@ -207,15 +213,14 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
       {(seasonResult.breakdown.lessonsXP > 0 || seasonResult.breakdown.absenceDeduction < 0) && (
         <div className="grid grid-cols-2 gap-2 mb-4">
           {[
-            { label: "Ders XP", value: seasonResult.breakdown.lessonsXP, color: "#34D399" },
+            { label: "Ders XP", value: seasonResult.breakdown.lessonsXP, color: "var(--color-success)" },
             { label: "Seri Bonusu", value: seasonResult.breakdown.streakXP, color: "#60A5FA" },
             { label: "İyileşme XP", value: seasonResult.breakdown.improvementXP, color: "#A78BFA" },
-            { label: "Devamsızlık", value: seasonResult.breakdown.absenceDeduction, color: "#F87171" },
+            { label: "Devamsızlık", value: seasonResult.breakdown.absenceDeduction, color: "var(--color-error)" },
           ].filter(i => i.value !== 0).map(item => (
-            <div key={item.label} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>{item.label}</span>
-              <span className="text-xs font-bold tabular-nums" style={{ color: item.color, fontFamily: "var(--font-bebas)" }}>
+            <div key={item.label} className="glass flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg">
+              <span className="text-[10px] text-white/40" style={{ fontFamily: "var(--font-label)" }}>{item.label}</span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: item.color, fontFamily: "var(--font-display)" }}>
                 {item.value > 0 ? "+" : ""}{item.value.toLocaleString()}
               </span>
             </div>
@@ -223,48 +228,51 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
         </div>
       )}
 
-      {/* Hediye ders durumu */}
-      <div className="pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-bebas)", letterSpacing: "0.2em" }}>
-          Bu Sezon Hediye Dersler
-        </div>
-        <div className="space-y-2">
-          {gifts.map(g => {
-            const toGo = Math.max(0, g.threshold - seasonTotal);
-            return (
-              <div key={g.threshold} className="flex items-center gap-3 px-3 py-2 rounded"
-                style={{
-                  background: g.reached ? "rgba(251,191,36,0.05)" : "rgba(255,255,255,0.02)",
-                  border: `1px solid ${g.reached ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.06)"}`,
-                }}>
-                <span className="text-base">{g.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-semibold" style={{ color: g.reached ? "#FCD34D" : "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
-                    {g.name} — {g.threshold.toLocaleString()} XP
-                  </div>
-                  {!g.reached && (
-                    <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
-                      {toGo.toLocaleString()} XP daha
+      {/* Hediye ders durumu — bağımsız premium modül */}
+      <div className="mt-4 relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+        <div className="glass-strong relative rounded-2xl p-4">
+          <div className="text-[10px] uppercase tracking-widest mb-2.5" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)", letterSpacing: "0.2em" }}>
+            🎁 Bu Sezon Hediye Dersler
+          </div>
+          <div className="space-y-2">
+            {gifts.map((g, i) => {
+              const toGo = Math.max(0, g.threshold - seasonTotal);
+              return (
+                <motion.div key={g.threshold}
+                  initial={{ opacity: 0, y: 12, scale: 0.96, filter: "blur(4px)" }}
+                  animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+                  transition={{ delay: i * 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                  className="glass flex items-center gap-3 px-3 py-2.5 rounded-xl">
+                  <span className="text-base flex-shrink-0">{g.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-semibold" style={{ color: g.reached ? "var(--color-achievement)" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
+                      {g.name} — {g.threshold.toLocaleString()} XP
                     </div>
-                  )}
-                </div>
-                {g.claimed ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.25)", color: "#34D399", fontFamily: "var(--font-barlow-condensed)" }}>
-                    Talep edildi
-                  </span>
-                ) : g.reached ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FCD34D", fontFamily: "var(--font-barlow-condensed)" }}>
-                    Onay bekleniyor
-                  </span>
-                ) : null}
-              </div>
-            );
-          })}
+                    {!g.reached && (
+                      <div className="text-[10px] text-white/25" style={{ fontFamily: "var(--font-label)" }}>
+                        {toGo.toLocaleString()} XP daha
+                      </div>
+                    )}
+                  </div>
+                  {g.claimed ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "rgba(34,197,94,0.12)", color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
+                      Talep edildi
+                    </span>
+                  ) : g.reached ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "rgba(245,158,11,0.12)", color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>
+                      Onay bekleniyor
+                    </span>
+                  ) : null}
+                </motion.div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-white/20 mt-2.5" style={{ fontFamily: "var(--font-label)" }}>
+            Yeni sezon başladığında hediye ders hakkın tekrar açılır (maks 2/sezon).
+          </p>
         </div>
-        <p className="text-[10px] mt-2" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
-          Yeni sezon başladığında hediye ders hakkın tekrar açılır (maks 2/sezon).
-        </p>
       </div>
+    </div>
     </div>
   );
 }
@@ -275,16 +283,13 @@ function LifetimeXPCard({ xpResult }: { xpResult: XPResult }) {
   const { current, next, progressPct, xpInLevel, xpToNext } = xpResult.level;
 
   return (
-    <div className="p-5 border relative overflow-hidden"
+    <div className="glass-strong relative rounded-2xl p-5 overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${current.gradFrom}22, rgba(0,0,0,0) 60%), rgba(255,255,255,0.025)`,
+        background: `linear-gradient(135deg, ${current.gradFrom}22, rgba(0,0,0,0) 60%), rgba(139,92,246,0.08)`,
         borderColor: current.borderColor,
         boxShadow: `0 0 40px ${current.glowColor}, inset 0 0 40px ${current.glowColor}22`,
-        borderRadius: 2,
       }}>
-      <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full pointer-events-none"
-        style={{ background: current.glowColor, filter: "blur(60px)", opacity: 0.4 }} />
-      <div className="absolute top-0 left-0 right-0 h-0.5"
+      <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
         style={{ background: `linear-gradient(90deg, transparent, ${current.colorPrimary}, ${next?.colorPrimary ?? current.colorPrimary}, transparent)` }} />
 
       <div className="relative">
@@ -296,14 +301,14 @@ function LifetimeXPCard({ xpResult }: { xpResult: XPResult }) {
               {current.icon}
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider mb-0.5" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+              <div className="text-xs uppercase tracking-wider mb-0.5 text-white/30" style={{ fontFamily: "var(--font-label)" }}>
                 Ömür Boyu Seviye
               </div>
-              <div className="text-xl font-black tracking-widest"
-                style={{ fontFamily: "var(--font-bebas)", letterSpacing: "0.15em", background: `linear-gradient(90deg, ${current.colorPrimary}, ${current.gradTo})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              <div className="text-xl tracking-widest"
+                style={{ fontFamily: "var(--font-display)", letterSpacing: "0.15em", background: `linear-gradient(90deg, ${current.colorPrimary}, ${current.gradTo})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                 {current.name}
               </div>
-              <div className="text-xs" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-barlow-condensed)" }}>
+              <div className="text-xs text-white/35" style={{ fontFamily: "var(--font-label)" }}>
                 {xpResult.breakdown.total.toLocaleString()} toplam XP
               </div>
             </div>
@@ -311,23 +316,22 @@ function LifetimeXPCard({ xpResult }: { xpResult: XPResult }) {
           {next ? (
             <div className="flex items-center gap-2 text-right">
               <div>
-                <div className="text-[10px] uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>Sonraki</div>
-                <div className="text-sm font-bold" style={{ color: next.colorPrimary, fontFamily: "var(--font-bebas)" }}>{next.icon} {next.shortName}</div>
-                <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>{xpToNext.toLocaleString()} XP</div>
+                <div className="text-[10px] uppercase tracking-wider text-white/25" style={{ fontFamily: "var(--font-label)" }}>Sonraki</div>
+                <div className="text-sm font-bold" style={{ color: next.colorPrimary, fontFamily: "var(--font-display)" }}>{next.icon} {next.shortName}</div>
+                <div className="text-[10px] text-white/30" style={{ fontFamily: "var(--font-label)" }}>{xpToNext.toLocaleString()} XP</div>
               </div>
-              <ChevronRight size={16} style={{ color: "rgba(255,255,255,0.2)" }} />
+              <ChevronRight size={16} className="text-white/20" />
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <Crown size={20} style={{ color: current.colorPrimary }} />
-              <span className="text-xs font-bold" style={{ color: current.colorPrimary, fontFamily: "var(--font-bebas)" }}>MAKSİMUM</span>
+              <span className="text-xs font-bold" style={{ color: current.colorPrimary, fontFamily: "var(--font-display)" }}>MAKSİMUM</span>
             </div>
           )}
         </div>
 
         {/* Progress bar */}
-        <div className="relative h-4 rounded-full overflow-hidden mb-2"
-          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="relative h-4 rounded-full overflow-hidden mb-2" style={{ background: "rgba(255,255,255,0.08)" }}>
           <motion.div
             className="absolute inset-y-0 left-0 rounded-full"
             initial={{ width: "0%" }}
@@ -336,13 +340,12 @@ function LifetimeXPCard({ xpResult }: { xpResult: XPResult }) {
             style={{ background: `linear-gradient(90deg, ${current.gradFrom}, ${current.colorPrimary}, ${current.gradTo})`, boxShadow: `0 0 16px ${current.glowColor}` }}
           />
           {progressPct > 10 && (
-            <div className="absolute inset-0 flex items-center pl-3 text-[10px] font-bold"
-              style={{ color: "rgba(255,255,255,0.9)", fontFamily: "var(--font-bebas)" }}>
+            <div className="absolute inset-0 flex items-center pl-3 text-[10px] font-bold text-white/90" style={{ fontFamily: "var(--font-display)" }}>
               {progressPct}%
             </div>
           )}
         </div>
-        <div className="flex justify-between text-[11px]" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+        <div className="flex justify-between text-[11px] text-white/30" style={{ fontFamily: "var(--font-label)" }}>
           <span>{xpInLevel.toLocaleString()} XP bu seviyede</span>
           {next && <span>Hedef: {next.threshold.toLocaleString()} XP</span>}
         </div>
@@ -470,51 +473,45 @@ export default function SeviyeMerkeziPage() {
   const currentLevel   = lifetimeXP.level.current;
 
   return (
-    <div className="p-4 sm:p-5 lg:p-7 max-w-3xl mx-auto space-y-5 sm:space-y-6 pb-28 sm:pb-8">
+    <motion.div variants={stagger} initial="initial" animate="animate"
+      className="p-4 sm:p-5 lg:p-7 max-w-3xl mx-auto space-y-5 sm:space-y-6 pb-28 sm:pb-8">
       <PageHeader title="Seviye Merkezi" subtitle="Sezon XP, hediye dersler ve ömür boyu prestij" />
 
       {/* ── 1. Ömür boyu seviye + progress ──────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <motion.div variants={fadeUp}>
         <LifetimeXPCard xpResult={lifetimeXP} />
       </motion.div>
 
       {/* ── 2. Onur Listesi — öğrencinin en çok merak ettiği ────── */}
-      <div>
+      <motion.div variants={fadeUp}>
         <div className="flex items-center gap-2 mb-3">
-          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-          <span className="text-xs uppercase tracking-widest px-3"
-            style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}>
+          <div className="h-px flex-1 bg-white/8" />
+          <span className="text-xs uppercase tracking-widest px-3 text-white/25" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.22em" }}>
             Onur Listesi
           </span>
-          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+          <div className="h-px flex-1 bg-white/8" />
         </div>
 
         {/* Gizlilik tercihi */}
         <button
           onClick={togglePrivacy}
           disabled={savingPref}
-          className="w-full flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 sm:py-3 mb-3 border transition-all duration-200"
-          style={{
-            background: "rgba(255,255,255,0.02)", borderColor: "rgba(139,92,246,0.15)",
-            borderRadius: 4, opacity: savingPref ? 0.6 : 1, cursor: savingPref ? "wait" : "pointer",
-          }}
+          className="glass w-full flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 sm:py-3 mb-3 rounded-xl transition-opacity duration-200"
+          style={{ opacity: savingPref ? 0.6 : 1, cursor: savingPref ? "wait" : "pointer" }}
         >
           <div className="text-left">
-            <div className="text-xs font-semibold"
-              style={{ color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.04em" }}>
+            <div className="text-xs font-semibold text-white/70" style={{ fontFamily: "var(--font-label)", letterSpacing: "0.04em" }}>
               Onur Listesi&apos;nde görünmek istiyorum
             </div>
-            <div className="text-[10px] mt-0.5"
-              style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-barlow-condensed)" }}>
+            <div className="text-[10px] mt-0.5 text-white/30" style={{ fontFamily: "var(--font-label)" }}>
               Kapatırsan adın hiçbir sıralamada görünmez
             </div>
           </div>
           <div
-            className="relative flex-shrink-0 transition-all duration-200"
+            className={`relative flex-shrink-0 rounded-full transition-all duration-200 ${showInHall ? "gradient-animated gradient-violet-pink-orange" : ""}`}
             style={{
-              width: 42, height: 24, borderRadius: 999,
-              background: showInHall ? "linear-gradient(90deg, #7C3AED, #A78BFA)" : "rgba(255,255,255,0.08)",
-              border: `1px solid ${showInHall ? "rgba(167,139,250,0.5)" : "rgba(255,255,255,0.12)"}`,
+              width: 42, height: 24,
+              background: showInHall ? undefined : "rgba(255,255,255,0.08)",
               boxShadow: showInHall ? "0 0 12px rgba(139,92,246,0.4)" : "none",
             }}
           >
@@ -527,24 +524,23 @@ export default function SeviyeMerkeziPage() {
         </button>
 
         {hallEntries.length > 0 && <HallOfFamePremium entries={hallEntries} />}
-      </div>
+      </motion.div>
 
       {/* ── 3. Sezon kartı ──────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+      <motion.div variants={fadeUp}>
         <SeasonCard summary={summary} claimed5k={claimed5k} claimed10k={claimed10k} />
       </motion.div>
 
       {/* ── 4. Ömür boyu seviyeler — mobilde accordion ──────────── */}
-      <div>
+      <motion.div variants={fadeUp}>
         {/* Başlık — mobilde tıklanabilir accordion trigger */}
         <button
           type="button"
           onClick={() => setLevelsOpen(o => !o)}
           className="flex items-center w-full gap-2 mb-4"
         >
-          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
-          <span className="text-xs uppercase tracking-widest px-3 flex items-center gap-2"
-            style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-bebas)", letterSpacing: "0.22em" }}>
+          <div className="h-px flex-1 bg-white/8" />
+          <span className="text-xs uppercase tracking-widest px-3 flex items-center gap-2 text-white/25" style={{ fontFamily: "var(--font-display)", letterSpacing: "0.22em" }}>
             Ömür Boyu Seviyeler
             <ChevronDown
               size={12}
@@ -552,12 +548,13 @@ export default function SeviyeMerkeziPage() {
               style={{ transform: levelsOpen ? "rotate(180deg)" : "rotate(0deg)" }}
             />
           </span>
-          <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
+          <div className="h-px flex-1 bg-white/8" />
         </button>
 
         {/* Kartlar — mobilde accordion, masaüstünde her zaman açık */}
         <div className={levelsOpen ? "block" : "hidden sm:block"}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <motion.div variants={stagger} initial="initial" animate="animate"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {XP_LEVELS.filter(l => l.id !== "starter").map((level, i) => (
               <LevelCard
                 key={level.id}
@@ -567,9 +564,9 @@ export default function SeviyeMerkeziPage() {
                 index={i}
               />
             ))}
-          </div>
+          </motion.div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

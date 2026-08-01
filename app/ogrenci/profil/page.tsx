@@ -365,16 +365,6 @@ export default function ProfilPage() {
           {/* Top accent bar */}
           <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"
             style={{ background: `linear-gradient(90deg, transparent, ${gf} 30%, ${gt} 70%, transparent)` }} />
-          {/* Legend bg effects */}
-          {isLegend && (
-            <>
-              <div className="absolute inset-0 pointer-events-none"
-                style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(192,132,252,0.15), transparent 70%)" }} />
-              <div className="absolute inset-0 pointer-events-none"
-                style={{ background: "radial-gradient(ellipse at 15% 85%, rgba(124,58,237,0.12), transparent 60%)" }} />
-            </>
-          )}
-
           <div className="relative z-10 flex flex-col items-center px-5 pt-7 pb-6">
             {/* Legend crown */}
             {isLegend && (

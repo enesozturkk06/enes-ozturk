@@ -16,8 +16,9 @@ export default function Hero() {
   });
 
   return (
-    <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20 text-center">
+    <section id="hero" className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-24 text-center"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 8rem)" }}>
 
         {/* Üst rozet */}
         <motion.div {...fadeUp(0)} className="inline-flex items-center gap-3 mb-8">
@@ -26,7 +27,7 @@ export default function Hero() {
             initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
             transition={{ duration: lite ? 0.3 : 0.8, delay: lite ? 0.05 : 0.2 }} />
           <span className="text-xs tracking-[0.45em] uppercase"
-            style={{ color: "#A855F7", fontFamily: "var(--font-barlow-condensed)" }}>
+            style={{ color: "#A855F7", fontFamily: "var(--font-label)" }}>
             Ankara · Birebir Özel Ders
           </span>
           <motion.span className="w-10 h-px"
@@ -36,7 +37,7 @@ export default function Hero() {
         </motion.div>
 
         {/* Ana başlık */}
-        <motion.h1 className="font-display leading-none tracking-wide mb-5" style={{ fontFamily: "var(--font-bebas)" }}>
+        <motion.h1 className="font-display leading-none tracking-wide mb-5" style={{ fontFamily: "var(--font-display)" }}>
           <motion.span {...fadeUp(0.1)} className="block text-[clamp(56px,10vw,140px)] text-white"
             style={{ textShadow: lite ? "none" : "0 0 80px rgba(139,92,246,0.18)" }}>
             BİREBİR ÖZEL
@@ -60,7 +61,7 @@ export default function Hero() {
           <span className="h-px flex-1 max-w-20"
             style={{ background: "linear-gradient(to right, transparent, #8B5CF6)" }} />
           <h2 className="text-[clamp(14px,2.2vw,20px)] tracking-[0.45em] uppercase"
-            style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-barlow-condensed)" }}>
+            style={{ color: "rgba(255,255,255,0.45)", fontFamily: "var(--font-label)" }}>
             Antrenör Enes Öztürk
           </h2>
           <span className="h-px flex-1 max-w-20"
@@ -75,7 +76,7 @@ export default function Hero() {
         </motion.p>
 
         {/* CTA butonlar */}
-        <motion.div {...fadeUp(0.5)} className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14">
+        <motion.div {...fadeUp(0.5)} className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-4 mb-14">
 
           {/* ANA CTA */}
           <div className="relative group">
@@ -92,12 +93,10 @@ export default function Hero() {
               href="#contact"
               whileHover={!lite ? { scale: 1.06, boxShadow: "0 0 60px rgba(139,92,246,0.75), 0 0 120px rgba(139,92,246,0.25)" } : undefined}
               whileTap={{ scale: 0.96 }}
-              className="relative inline-flex items-center gap-3 text-white font-bold tracking-widest uppercase px-10 py-4 text-sm"
+              className={`relative inline-flex items-center gap-3 text-white font-bold tracking-widest uppercase px-10 py-4 text-sm rounded-xl ${!lite ? "gradient-animated gradient-violet-blue" : ""}`}
               style={{
-                background: "linear-gradient(135deg,#7C3AED,#8B5CF6,#A855F7,#D946EF)",
-                backgroundSize: "200% 200%",
-                animation: lite ? "none" : "shimmer-violet 3s linear infinite",
-                fontFamily: "var(--font-barlow-condensed)",
+                ...(lite ? { background: "linear-gradient(135deg,#8B5CF6,#3B82F6)" } : {}),
+                fontFamily: "var(--font-label)",
                 fontSize: "0.875rem",
                 letterSpacing: "0.15em",
               }}
@@ -123,11 +122,11 @@ export default function Hero() {
           <motion.a href="#hizmetler"
             whileHover={!lite ? { scale: 1.03, borderColor: "rgba(168,85,247,0.6)", color: "#C084FC" } : undefined}
             whileTap={{ scale: 0.97 }}
-            className="inline-flex items-center gap-2.5 font-semibold tracking-widest uppercase px-9 py-4 text-sm transition-all duration-300"
+            className="inline-flex items-center gap-2.5 font-semibold tracking-widest uppercase px-9 py-4 text-sm rounded-xl transition-all duration-300"
             style={{
               border: "1px solid rgba(139,92,246,0.3)",
               color: "rgba(255,255,255,0.6)",
-              fontFamily: "var(--font-barlow-condensed)",
+              fontFamily: "var(--font-label)",
             }}>
             Hizmetleri Gör
           </motion.a>
@@ -135,9 +134,10 @@ export default function Hero() {
           <PWAInstallButton variant="hero" />
         </motion.div>
 
-        {/* Stat kartları */}
-        <motion.div {...fadeUp(lite ? 0.5 : 0.75)} className="grid grid-cols-2 lg:grid-cols-4 gap-px max-w-3xl mx-auto"
-          style={{ background: "rgba(139,92,246,0.1)", boxShadow: "0 0 0 1px rgba(139,92,246,0.15)" }}>
+        {/* Stat şeridi — tek cam kart, iç bölücülerle (önceden 4 ayrı blur katmanıydı) */}
+        <motion.div {...fadeUp(lite ? 0.5 : 0.75)}
+          className="glass grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 max-w-3xl mx-auto rounded-2xl overflow-hidden"
+          style={{ borderColor: "rgba(139,92,246,0.12)" }}>
           {[
             { n: "20+", l: "Profesyonel Maç" },
             { n: "16",  l: "Nakavt Galibiyeti" },
@@ -145,22 +145,17 @@ export default function Hero() {
             { n: "4",   l: "Disiplin" },
           ].map((s, i) => (
             <motion.div key={s.l}
-              className="px-5 py-5 text-center cursor-default"
-              style={{
-                background: "rgba(9,9,11,0.85)",
-                // Mobilde backdrop-filter kaldırıldı (pahalı)
-                backdropFilter: lite ? "none" : "blur(12px)",
-              }}
-              whileHover={!lite ? { background: "rgba(139,92,246,0.09)" } : undefined}
+              className="px-5 py-5 text-center cursor-default transition-colors duration-300"
+              style={{ borderColor: "rgba(139,92,246,0.1)" }}
+              whileHover={!lite ? { background: "rgba(139,92,246,0.06)" } : undefined}
               initial={{ opacity: 0, y: lite ? 8 : 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: lite ? 0.5 + i * 0.04 : 0.85 + i * 0.08, duration: lite ? 0.22 : 0.4 }}>
-              {/* textShadow animate kaldırıldı — her frame repaint yapıyordu */}
-              <div className="text-3xl lg:text-4xl font-display" style={{ fontFamily: "var(--font-bebas)", color: "#8B5CF6" }}>
+              <div className="text-3xl lg:text-4xl font-display" style={{ fontFamily: "var(--font-display)", color: "#8B5CF6" }}>
                 {s.n}
               </div>
               <div className="text-xs tracking-widest uppercase mt-0.5"
-                style={{ color: "rgba(255,255,255,0.32)", fontFamily: "var(--font-barlow-condensed)" }}>
+                style={{ color: "rgba(255,255,255,0.32)", fontFamily: "var(--font-label)" }}>
                 {s.l}
               </div>
             </motion.div>
@@ -171,7 +166,7 @@ export default function Hero() {
       {/* Kaydır göstergesi */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
         <span className="text-xs tracking-widest uppercase"
-          style={{ color: "rgba(255,255,255,0.18)", fontFamily: "var(--font-barlow-condensed)" }}>
+          style={{ color: "rgba(255,255,255,0.18)", fontFamily: "var(--font-label)" }}>
           Kaydır
         </span>
         <div className="w-5 h-9 rounded-full flex items-start justify-center pt-1.5"

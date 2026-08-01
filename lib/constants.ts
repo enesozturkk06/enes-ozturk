@@ -78,6 +78,8 @@ export const PACKAGES = [
 
 export const TRAINER_WHATSAPP = "905389714459";
 export const TRAINER_NAME = "Antrenör Enes Öztürk";
+/** Sadece görsel etiket amaçlı — randevu özet kartındaki "Salon" alanı için */
+export const TRAINER_LOCATION = "Ankara";
 export const CANCEL_LIMIT_HOURS = 18;
 
 /** Tüm özel derslerin süresi (dakika) */

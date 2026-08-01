@@ -38,7 +38,7 @@ export default function GelisimPage() {
   }));
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-28">
       <PageHeader title="Gelişim Takibi" subtitle="Ders notlarınız ve beceri gelişiminiz" accent="Performans" />
 
       {records.length === 0 ? (

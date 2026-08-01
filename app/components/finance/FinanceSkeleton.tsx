@@ -2,8 +2,7 @@
 
 function Block({ className = "", style = {} }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={`animate-pulse rounded-2xl ${className}`}
-      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--color-iron)", ...style }} />
+    <div className={`glass animate-pulse rounded-2xl ${className}`} style={style} />
   );
 }
 

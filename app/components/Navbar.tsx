@@ -30,17 +30,18 @@ export default function Navbar() {
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         scrolled
-          ? "backdrop-blur-xl border-b"
+          ? "glass-dark border-b"
           : "bg-transparent"
       }`}
-      style={scrolled ? {
-        background: "rgba(9,9,11,0.85)",
-        borderColor: "rgba(139,92,246,0.15)",
-        boxShadow: "0 4px 30px rgba(139,92,246,0.08)",
-      } : {}}
+      style={{
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        ...(scrolled ? {
+          borderColor: "rgba(139,92,246,0.15)",
+          boxShadow: "0 4px 30px rgba(139,92,246,0.08)",
+        } : {}),
+      }}
     >
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 lg:h-[72px]"
-        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16 lg:h-[72px]">
 
         {/* Logo + isim */}
         <a href="#hero" onClick={() => setMenuOpen(false)}
@@ -53,11 +54,11 @@ export default function Navbar() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-white text-[15px] lg:text-base tracking-[0.15em] group-hover:text-violet-bright transition-colors duration-300"
-              style={{ fontFamily:"var(--font-bebas)" }}>
+              style={{ fontFamily:"var(--font-display)" }}>
               ENES ÖZTÜRK
             </span>
             <span className="text-[10px] lg:text-xs tracking-[0.3em]"
-              style={{ fontFamily:"var(--font-bebas)", color:"#8B5CF6" }}>
+              style={{ fontFamily:"var(--font-display)", color:"#8B5CF6" }}>
               KİŞİSEL ANTRENÖR
             </span>
           </div>
@@ -67,7 +68,7 @@ export default function Navbar() {
         <ul className="hidden lg:flex items-center gap-7">
           {navLinks.map(l => {
             const cls = "text-xs tracking-widest uppercase relative group transition-colors duration-300";
-            const style = { fontFamily:"var(--font-barlow-condensed)" };
+            const style = { fontFamily:"var(--font-label)" };
             const badge = l.external ? (
               <span className="ml-1.5 text-[8px] px-1 py-0.5 rounded align-middle"
                 style={{ background:"rgba(139,92,246,0.2)", color:"#A855F7", verticalAlign:"middle" }}>
@@ -75,8 +76,7 @@ export default function Navbar() {
               </span>
             ) : null;
             const underline = (
-              <span className="absolute -bottom-1 left-0 w-0 h-px transition-all duration-300 group-hover:w-full"
-                style={{ background:"linear-gradient(to right,#8B5CF6,#D946EF)" }} />
+              <span className="gradient-animated gradient-violet-pink absolute -bottom-1 left-0 w-0 h-px transition-all duration-300 group-hover:w-full" />
             );
             return (
               <li key={l.href}>
@@ -102,24 +102,24 @@ export default function Navbar() {
         <div className="hidden lg:flex items-center gap-3">
           {student ? (
             <Link href="/ogrenci" className="text-xs tracking-widest uppercase transition-colors"
-              style={{ color:"rgba(168,85,247,0.7)", fontFamily:"var(--font-barlow-condensed)" }}
+              style={{ color:"rgba(168,85,247,0.7)", fontFamily:"var(--font-label)" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#A855F7")}
               onMouseLeave={e => (e.currentTarget.style.color = "rgba(168,85,247,0.7)")}>
               Panelim →
             </Link>
           ) : isAdmin ? (
             <Link href="/admin" className="text-xs tracking-widest uppercase transition-colors"
-              style={{ color:"rgba(168,85,247,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
+              style={{ color:"rgba(168,85,247,0.7)", fontFamily:"var(--font-label)" }}>
               Admin →
             </Link>
           ) : (
             <>
               <Link href="/giris" className="text-xs text-white/40 hover:text-white/70 tracking-widest uppercase transition-colors"
-                style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                style={{ fontFamily:"var(--font-label)" }}>
                 Öğrenci Girişi
               </Link>
               <Link href="/admin/login" className="text-xs tracking-widest uppercase transition-colors"
-                style={{ color:"rgba(139,92,246,0.5)", fontFamily:"var(--font-barlow-condensed)" }}
+                style={{ color:"rgba(139,92,246,0.5)", fontFamily:"var(--font-label)" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "rgba(139,92,246,0.8)")}
                 onMouseLeave={e => (e.currentTarget.style.color = "rgba(139,92,246,0.5)")}>
                 Antrenör
@@ -127,10 +127,9 @@ export default function Navbar() {
             </>
           )}
           <a href="#contact"
-            className="text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all duration-300"
+            className="gradient-animated gradient-violet-blue text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 rounded-lg transition-all duration-300"
             style={{
-              fontFamily:"var(--font-barlow-condensed)",
-              background:"linear-gradient(135deg,#8B5CF6,#A855F7)",
+              fontFamily:"var(--font-label)",
               boxShadow:"0 0 0 0 rgba(139,92,246,0)",
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 0 20px rgba(139,92,246,0.55)"; }}
@@ -148,36 +147,36 @@ export default function Navbar() {
 
       {/* Mobil menü */}
       <div className={`lg:hidden transition-all duration-500 overflow-hidden ${menuOpen ? "max-h-screen opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="px-6 py-5 space-y-3"
-          style={{ background:"rgba(9,9,11,0.98)", backdropFilter:"blur(20px)", borderTop:"1px solid rgba(139,92,246,0.12)" }}>
+        <div className="glass-dark px-6 py-5 space-y-3"
+          style={{ borderTop:"1px solid rgba(139,92,246,0.12)" }}>
           {navLinks.map(l => l.external ? (
             <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
               className="flex items-center gap-2 text-sm tracking-widest text-white/70 uppercase py-2 border-b transition-colors hover:text-violet-bright"
-              style={{ fontFamily:"var(--font-barlow-condensed)", borderColor:"rgba(139,92,246,0.08)" }}>
+              style={{ fontFamily:"var(--font-label)", borderColor:"rgba(139,92,246,0.08)" }}>
               {l.label}
               <span className="text-[8px] px-1.5 py-0.5 rounded" style={{ background:"rgba(139,92,246,0.2)", color:"#A855F7" }}>YENİ</span>
             </Link>
           ) : (
             <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
               className="block text-sm tracking-widest text-white/70 uppercase py-2 border-b transition-colors hover:text-violet-bright"
-              style={{ fontFamily:"var(--font-barlow-condensed)", borderColor:"rgba(139,92,246,0.08)" }}>
+              style={{ fontFamily:"var(--font-label)", borderColor:"rgba(139,92,246,0.08)" }}>
               {l.label}
             </a>
           ))}
           <div className="pt-2 flex flex-col gap-2">
             <Link href="/giris" onClick={() => setMenuOpen(false)}
-              className="block text-center text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all"
-              style={{ fontFamily:"var(--font-barlow-condensed)", border:"1px solid rgba(139,92,246,0.3)", color:"rgba(139,92,246,0.8)" }}>
+              className="block text-center text-xs font-semibold tracking-widest uppercase px-5 py-2.5 rounded-lg transition-all"
+              style={{ fontFamily:"var(--font-label)", border:"1px solid rgba(139,92,246,0.3)", color:"rgba(139,92,246,0.8)" }}>
               Öğrenci Girişi
             </Link>
             <Link href="/admin/login" onClick={() => setMenuOpen(false)}
-              className="block text-center text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all"
-              style={{ fontFamily:"var(--font-barlow-condensed)", border:"1px solid rgba(139,92,246,0.15)", color:"rgba(139,92,246,0.5)" }}>
+              className="block text-center text-xs font-semibold tracking-widest uppercase px-5 py-2.5 rounded-lg transition-all"
+              style={{ fontFamily:"var(--font-label)", border:"1px solid rgba(139,92,246,0.15)", color:"rgba(139,92,246,0.5)" }}>
               Antrenör Girişi
             </Link>
             <a href="#contact" onClick={() => setMenuOpen(false)}
-              className="block text-center text-white text-xs font-semibold tracking-widest uppercase px-5 py-3 transition-all"
-              style={{ fontFamily:"var(--font-barlow-condensed)", background:"linear-gradient(135deg,#8B5CF6,#A855F7)" }}>
+              className="gradient-animated gradient-violet-blue block text-center text-white text-xs font-semibold tracking-widest uppercase px-5 py-3 rounded-lg transition-all"
+              style={{ fontFamily:"var(--font-label)" }}>
               Randevu Al
             </a>
           </div>

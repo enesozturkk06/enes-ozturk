@@ -64,69 +64,70 @@ export default function GroupLessonForm({
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           onClick={() => !saving && onClose()}>
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <motion.div initial={{ scale: 0.96, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96 }}
-            className="relative z-10 w-full max-w-lg rounded-2xl overflow-hidden max-h-[85dvh] flex flex-col"
-            style={{ background: "rgba(15,15,22,0.99)", border: "1px solid rgba(74,222,128,0.3)" }}
+          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }} />
+          <motion.div initial={{ scale: 0.94, y: 16, filter: "blur(6px)" }} animate={{ scale: 1, y: 0, filter: "blur(0px)" }} exit={{ scale: 0.96, filter: "blur(4px)" }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="glass-strong relative z-10 w-full max-w-md sm:max-w-lg mx-auto rounded-2xl overflow-hidden max-h-[85dvh] flex flex-col"
+            style={{ borderColor: "rgba(74,222,128,0.3)" }}
             onClick={e => e.stopPropagation()}>
-            <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg,transparent,#4ADE80,transparent)" }} />
+            <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-green-teal" />
 
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
-              <h3 className="text-lg font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>
+            <div className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5 pb-2.5 sm:pb-3 flex-shrink-0">
+              <h3 className="text-base sm:text-lg font-display text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>
                 {editing ? "GRUBU DÜZENLE" : "YENİ GRUP DERSİ"}
               </h3>
-              <button onClick={onClose} className="text-white/25 hover:text-white"><X size={18} /></button>
+              <button onClick={onClose} className="text-white/25 hover:text-white flex-shrink-0"><X size={18} /></button>
             </div>
 
-            <div className="px-5 pb-4 overflow-y-auto space-y-3" style={{ flex: "1 1 auto", minHeight: 0 }}>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Grup Adı *</label>
+            <div className="px-4 sm:px-5 pb-4 overflow-y-auto overflow-x-hidden space-y-2.5 sm:space-y-3" style={{ flex: "1 1 auto", minHeight: 0 }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+                <div className="min-w-0">
+                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Grup Adı *</label>
                   <input value={form.name} onChange={e => set("name", e.target.value)}
-                    className="w-full bg-carbon border border-white/10 focus:border-green-500/50 text-white px-3 py-2.5 text-sm outline-none rounded-lg"
-                    style={{ fontFamily: "var(--font-inter)" }} />
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }} />
                 </div>
-                <div>
-                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Salon</label>
+                <div className="min-w-0">
+                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Salon</label>
                   <select value={form.gymId} onChange={e => set("gymId", e.target.value)}
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none appearance-none rounded-lg"
-                    style={{ fontFamily: "var(--font-inter)" }}>
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none appearance-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }}>
                     <option value="" className="bg-carbon">Salon seç (ops.)</option>
                     {gyms.filter(g => g.isActive).map(g => <option key={g.id} value={g.id} className="bg-carbon">{g.name}</option>)}
                   </select>
                 </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Eğitmen</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+                <div className="min-w-0">
+                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Eğitmen</label>
                   <input value={form.trainerName} onChange={e => set("trainerName", e.target.value)}
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none rounded-lg"
-                    style={{ fontFamily: "var(--font-inter)" }} />
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }} />
                 </div>
-                <div>
-                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Aidat — Kişi Başı (₺) *</label>
+                <div className="min-w-0">
+                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Aidat — Kişi Başı (₺) *</label>
                   <input type="number" min="0" value={form.feePerStudent || ""} onChange={e => set("feePerStudent", Number(e.target.value))}
-                    className="w-full bg-steel/60 border-2 border-green-500/30 focus:border-green-500/60 text-green-400 px-3 py-2.5 text-lg outline-none rounded-lg"
-                    style={{ fontFamily: "var(--font-bebas)" }} />
+                    className="glass w-full px-3 py-2 sm:py-2.5 text-base sm:text-lg outline-none rounded-lg"
+                    style={{ fontFamily: "var(--font-display)", color: "var(--color-success)", borderColor: "rgba(34,197,94,0.35)" }} />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Paylaşım Modeli</label>
-                <div className="grid grid-cols-3 gap-2 mb-2">
+              <div className="min-w-0">
+                <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Paylaşım Modeli</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
                   {([
                     { v: "percentage", l: "Yüzdelik" },
                     { v: "fixed_per_lesson", l: "Ders Başı Sabit" },
                     { v: "fixed_monthly_rent", l: "Aylık Sabit Kira" },
                   ] as const).map(opt => (
                     <button key={opt.v} onClick={() => set("shareType", opt.v)}
-                      className="py-2 text-[11px] font-semibold rounded-lg transition-all"
+                      className="py-2.5 sm:py-2 text-[11px] font-semibold rounded-lg transition-transform hover:scale-[1.02] active:scale-95"
                       style={{
                         background: form.shareType === opt.v ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.03)",
                         border: `1px solid ${form.shareType === opt.v ? "rgba(74,222,128,0.4)" : "rgba(255,255,255,0.08)"}`,
-                        color: form.shareType === opt.v ? "#4ADE80" : "rgba(255,255,255,0.4)",
-                        fontFamily: "var(--font-barlow-condensed)",
+                        color: form.shareType === opt.v ? "var(--color-success)" : "rgba(255,255,255,0.4)",
+                        fontFamily: "var(--font-label)",
                       }}>
                       {opt.l}
                     </button>
@@ -134,10 +135,10 @@ export default function GroupLessonForm({
                 </div>
 
                 {form.shareType === "percentage" && (
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                     <input type="range" min={0} max={100} step={5} value={form.gymPercentage ?? 50}
-                      onChange={e => set("gymPercentage", Number(e.target.value))} className="flex-1" />
-                    <span className="text-sm font-bold text-white w-32 text-right" style={{ fontFamily: "var(--font-bebas)" }}>
+                      onChange={e => set("gymPercentage", Number(e.target.value))} className="w-full sm:flex-1" />
+                    <span className="text-sm font-bold text-white w-full sm:w-32 text-center sm:text-right flex-shrink-0" style={{ fontFamily: "var(--font-display)" }}>
                       Salon %{form.gymPercentage ?? 50} / Ben %{100 - (form.gymPercentage ?? 50)}
                     </span>
                   </div>
@@ -145,51 +146,52 @@ export default function GroupLessonForm({
                 {form.shareType === "fixed_per_lesson" && (
                   <input type="number" min="0" value={form.fixedFeePerLesson || ""} onChange={e => set("fixedFeePerLesson", Number(e.target.value))}
                     placeholder="Ders başı salona ödenecek tutar (₺)"
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none rounded-lg"
-                    style={{ fontFamily: "var(--font-inter)" }} />
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }} />
                 )}
                 {form.shareType === "fixed_monthly_rent" && (
                   <input type="number" min="0" value={form.fixedMonthlyRent || ""} onChange={e => set("fixedMonthlyRent", Number(e.target.value))}
                     placeholder="Aylık sabit salon kirası (₺)"
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none rounded-lg"
-                    style={{ fontFamily: "var(--font-inter)" }} />
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }} />
                 )}
               </div>
 
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Kapasite (ops.)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                <div className="min-w-0">
+                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Kapasite (ops.)</label>
                   <input type="number" min="0" value={form.maxCapacity ?? ""} onChange={e => set("maxCapacity", e.target.value ? Number(e.target.value) : undefined)}
                     placeholder="Doluluk için"
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none rounded-lg"
-                    style={{ fontFamily: "var(--font-inter)" }} />
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg"
+                    style={{ fontFamily: "var(--font-label)" }} />
                 </div>
-                <div>
-                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Başlangıç *</label>
+                <div className="min-w-0">
+                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Başlangıç *</label>
                   <input type="date" value={form.startDate} onChange={e => set("startDate", e.target.value)}
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none rounded-lg" />
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg" />
                 </div>
-                <div>
-                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Bitiş (ops.)</label>
+                <div className="min-w-0">
+                  <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Bitiş (ops.)</label>
                   <input type="date" value={form.endDate} onChange={e => set("endDate", e.target.value)}
-                    className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none rounded-lg" />
+                    className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg" />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Açıklama</label>
+              <div className="min-w-0">
+                <label className="block text-[10px] text-white/40 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Açıklama</label>
                 <textarea value={form.description} onChange={e => set("description", e.target.value)} rows={2}
-                  className="w-full bg-carbon border border-white/10 text-white px-3 py-2.5 text-sm outline-none rounded-lg resize-none"
-                  style={{ fontFamily: "var(--font-inter)" }} />
+                  className="glass w-full text-white px-3 py-2 sm:py-2.5 text-sm outline-none rounded-lg resize-none"
+                  style={{ fontFamily: "var(--font-label)" }} />
               </div>
             </div>
 
-            <div className="flex gap-3 px-5 py-4 flex-shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex gap-3 px-4 sm:px-5 pt-4 flex-shrink-0"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}>
               <button onClick={onClose} className="flex-1 border border-white/10 text-white/40 hover:text-white text-xs font-semibold tracking-widest uppercase py-2.5 rounded-lg transition-all"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}>Vazgeç</button>
+                style={{ fontFamily: "var(--font-label)" }}>Vazgeç</button>
               <button onClick={handleSave} disabled={saving || !form.name.trim() || form.feePerStudent <= 0}
-                className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-2.5 rounded-lg transition-all"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                className="gradient-animated gradient-slow gradient-green-teal flex-1 disabled:opacity-40 text-white text-xs font-semibold tracking-widest uppercase py-2.5 rounded-lg transition-transform hover:scale-[1.02] active:scale-95"
+                style={{ fontFamily: "var(--font-label)" }}>
                 {saving ? "Kaydediliyor..." : "Kaydet"}
               </button>
             </div>

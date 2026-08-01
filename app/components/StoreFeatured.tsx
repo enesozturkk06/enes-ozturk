@@ -20,8 +20,8 @@ function ProductCard({ p, i }: { p: Product; i: number }) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay: i * 0.07, duration: 0.4 }}
-      className="flex flex-col overflow-hidden group"
-      style={{ background: "rgba(15,15,22,0.9)", border: "1px solid rgba(139,92,246,0.12)" }}
+      className="glass flex flex-col overflow-hidden group rounded-2xl"
+      style={{ borderColor: "rgba(139,92,246,0.12)" }}
     >
       {/* Görsel / ikon */}
       <div className="relative h-40 flex items-center justify-center overflow-hidden"
@@ -36,10 +36,9 @@ function ProductCard({ p, i }: { p: Product; i: number }) {
           </span>
         )}
         {p.status === "coming_soon" && (
-          <div className="absolute inset-0 flex items-center justify-center"
-            style={{ background: "rgba(9,9,11,0.55)" }}>
-            <span className="text-xs font-semibold tracking-widest uppercase px-3 py-1"
-              style={{ background: "rgba(217,119,6,0.8)", color: "#fff", fontFamily: "var(--font-barlow-condensed)" }}>
+          <div className="glass-dark absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-semibold tracking-widest uppercase px-3 py-1 rounded"
+              style={{ background: "var(--color-warning)", color: "#fff", fontFamily: "var(--font-label)" }}>
               Yakında
             </span>
           </div>
@@ -49,25 +48,25 @@ function ProductCard({ p, i }: { p: Product; i: number }) {
       {/* Bilgi */}
       <div className="p-4 flex-1 flex flex-col gap-1.5">
         <span className="text-[10px] tracking-widest uppercase"
-          style={{ color: "rgba(139,92,246,0.6)", fontFamily: "var(--font-barlow-condensed)" }}>
+          style={{ color: "rgba(139,92,246,0.6)", fontFamily: "var(--font-label)" }}>
           {cat.icon} {cat.label}
         </span>
         <h3 className="text-sm font-semibold text-white leading-snug"
-          style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          style={{ fontFamily: "var(--font-label)" }}>
           {p.name}
         </h3>
         {p.description && (
-          <p className="text-xs line-clamp-2" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}>
+          <p className="text-xs line-clamp-2" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
             {p.description}
           </p>
         )}
         <div className="mt-auto pt-1">
           {p.price ? (
-            <span className="text-lg font-bold" style={{ color: "#D946EF", fontFamily: "var(--font-bebas)", letterSpacing: "0.05em" }}>
+            <span className="text-lg font-bold" style={{ color: "#D946EF", fontFamily: "var(--font-display)", letterSpacing: "0.05em" }}>
               ₺{p.price.toLocaleString("tr-TR")}
             </span>
           ) : (
-            <span className="text-xs italic" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+            <span className="text-xs italic" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
               Fiyat için iletişime geçiniz
             </span>
           )}
@@ -83,7 +82,7 @@ function ProductCard({ p, i }: { p: Product; i: number }) {
           borderColor: "rgba(139,92,246,0.1)",
           color: p.status === "coming_soon" ? "rgba(255,255,255,0.2)" : "#22c55e",
           background: p.status === "coming_soon" ? "transparent" : "rgba(34,197,94,0.06)",
-          fontFamily: "var(--font-barlow-condensed)",
+          fontFamily: "var(--font-label)",
           pointerEvents: p.status === "coming_soon" ? "none" : "auto",
         }}
         onMouseEnter={e => { if (p.status === "active") (e.currentTarget as HTMLElement).style.background = "rgba(34,197,94,0.14)"; }}
@@ -129,7 +128,7 @@ export default function StoreFeatured() {
           <div className="flex items-center justify-center gap-3 mb-4">
             <span className="h-px w-12" style={{ background: "linear-gradient(to right,transparent,#8B5CF6)" }} />
             <ShoppingBag size={14} style={{ color: "#8B5CF6" }} />
-            <span className="text-xs tracking-[0.4em] uppercase" style={{ color: "#8B5CF6", fontFamily: "var(--font-barlow-condensed)" }}>
+            <span className="text-xs tracking-[0.4em] uppercase" style={{ color: "#8B5CF6", fontFamily: "var(--font-label)" }}>
               Online Mağaza
             </span>
             <ShoppingBag size={14} style={{ color: "#8B5CF6" }} />
@@ -137,7 +136,7 @@ export default function StoreFeatured() {
           </div>
 
           <h2 className="text-4xl sm:text-5xl text-white mb-4"
-            style={{ fontFamily: "var(--font-bebas)", letterSpacing: "0.08em" }}>
+            style={{ fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
             SPOR MALZEMELERİ<br/>
             <span style={{ background: "linear-gradient(90deg,#8B5CF6,#D946EF)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
               MAĞAZASI
@@ -145,7 +144,7 @@ export default function StoreFeatured() {
           </h2>
 
           <p className="max-w-xl mx-auto text-sm leading-relaxed"
-            style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+            style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
             Kickboks ve boks antrenmanlarınız için profesyonel ekipmanlar.
             WhatsApp üzerinden sipariş verin.
           </p>
@@ -172,10 +171,9 @@ export default function StoreFeatured() {
           className="text-center"
         >
           <Link href="/magaza"
-            className="inline-flex items-center gap-2.5 px-8 py-4 text-white text-sm font-semibold tracking-widest uppercase transition-all"
+            className="gradient-animated gradient-violet-blue inline-flex items-center gap-2.5 px-8 py-4 text-white text-sm font-semibold tracking-widest uppercase rounded-xl transition-all"
             style={{
-              background: "linear-gradient(135deg,#8B5CF6,#A855F7)",
-              fontFamily: "var(--font-barlow-condensed)",
+              fontFamily: "var(--font-label)",
               boxShadow: "0 0 24px rgba(139,92,246,0.3)",
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px rgba(139,92,246,0.5)"; }}
@@ -184,7 +182,7 @@ export default function StoreFeatured() {
             Tüm Ürünleri Gör
             <ArrowRight size={15} />
           </Link>
-          <p className="mt-3 text-xs" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
+          <p className="mt-3 text-xs" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-label)" }}>
             Toplu sipariş ve özel fiyat için WhatsApp&apos;tan iletişime geçin
           </p>
         </motion.div>

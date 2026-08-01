@@ -1074,19 +1074,18 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
   if (msg.role === "ai") {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 8, x: -8 }}
-        animate={{ opacity: 1, y: 0, x: 0 }}
-        transition={{ duration: 0.25 }}
+        initial={{ opacity: 0, y: 8, x: -8, scale: 0.96, filter: "blur(4px)" }}
+        animate={{ opacity: 1, y: 0, x: 0, scale: 1, filter: "blur(0px)" }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         className="flex gap-2.5 items-end"
       >
         <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5"
-          style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)" }}>
+          style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)" }}>
           <CatIcon size={20} />
         </div>
         <div className="max-w-[85%] flex flex-col gap-2 items-start">
-          <div className="px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-            style={{ background:"rgba(139,92,246,0.1)", border:"1px solid rgba(139,92,246,0.2)",
-              color:"rgba(255,255,255,0.85)", fontFamily:"var(--font-inter)", borderRadius:"0 12px 12px 12px" }}>
+          <div className="glass px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
+            style={{ color: "rgba(255,255,255,0.88)", fontFamily: "var(--font-label)", borderRadius: "0 14px 14px 14px" }}>
             {parsed}
           </div>
 
@@ -1096,20 +1095,15 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
               {msg.missions.map(m => {
                 const pct = Math.min(100, Math.round((m.progress / m.target) * 100));
                 return (
-                  <div key={m.key}
-                    style={{
-                      background: m.completed ? "rgba(74,222,128,0.08)" : "rgba(139,92,246,0.08)",
-                      border: `1px solid ${m.completed ? "rgba(74,222,128,0.25)" : "rgba(139,92,246,0.2)"}`,
-                      borderRadius: 10,
-                      padding: "10px 12px",
-                    }}
+                  <div key={m.key} className="glass rounded-xl px-3 py-2.5"
+                    style={{ borderColor: m.completed ? "rgba(34,197,94,0.3)" : undefined }}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="text-base flex-shrink-0">{m.icon}</span>
                         <div className="min-w-0">
                           <div className="text-[12px] font-semibold truncate"
-                            style={{ color: m.completed ? "#4ADE80" : "#C4B5FD", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.04em" }}>
+                            style={{ color: m.completed ? "var(--color-success)" : "#C4B5FD", fontFamily: "var(--font-label)", letterSpacing: "0.04em" }}>
                             {m.title}
                           </div>
                           <div className="text-[10px] opacity-60 truncate" style={{ color: "rgba(255,255,255,0.7)" }}>
@@ -1119,7 +1113,7 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
                       </div>
                       <div className="flex-shrink-0 text-right">
                         <div className="text-[11px] font-bold"
-                          style={{ color: m.xpAwarded ? "#4ADE80" : "#FBBF24", fontFamily: "var(--font-barlow-condensed)" }}>
+                          style={{ color: m.xpAwarded ? "var(--color-success)" : "var(--color-achievement)", fontFamily: "var(--font-label)" }}>
                           {m.xpAwarded ? "✅" : `+${m.xpReward} XP`}
                         </div>
                         <div className="text-[10px] opacity-50" style={{ color: "rgba(255,255,255,0.7)" }}>
@@ -1131,10 +1125,10 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
                     {!m.completed && (
                       <div className="mt-2 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
                         <div
+                          className="gradient-animated gradient-fast gradient-violet-pink-orange"
                           style={{
                             width: `${pct}%`,
                             height: "100%",
-                            background: "linear-gradient(90deg, #7C3AED, #A78BFA)",
                             borderRadius: "99px",
                             transition: "width 0.4s ease",
                           }}
@@ -1154,12 +1148,10 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
                   key={link.href}
                   href={link.href}
                   onClick={onNavigate}
-                  className="inline-flex items-center text-[12px] px-4 rounded-lg transition-all duration-150 active:scale-95"
+                  className="glass inline-flex items-center text-[12px] px-4 rounded-lg transition-transform duration-150 hover:scale-[1.03] active:scale-95"
                   style={{
-                    fontFamily:   "var(--font-barlow-condensed)",
+                    fontFamily:   "var(--font-label)",
                     letterSpacing: "0.06em",
-                    background:   "rgba(139,92,246,0.18)",
-                    border:       "1px solid rgba(139,92,246,0.45)",
                     color:        "#C4B5FD",
                     minHeight:    "36px",
                     touchAction:  "manipulation",
@@ -1179,14 +1171,13 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8, x: 8 }}
-      animate={{ opacity: 1, y: 0, x: 0 }}
-      transition={{ duration: 0.2 }}
+      initial={{ opacity: 0, y: 8, x: 8, scale: 0.96, filter: "blur(4px)" }}
+      animate={{ opacity: 1, y: 0, x: 0, scale: 1, filter: "blur(0px)" }}
+      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       className="flex justify-end"
     >
-      <div className="max-w-[80%] px-3.5 py-2.5 text-sm leading-relaxed"
-        style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.1)",
-          color:"rgba(255,255,255,0.9)", fontFamily:"var(--font-inter)", borderRadius:"12px 0 12px 12px" }}>
+      <div className="glass px-3.5 py-2.5 text-sm leading-relaxed"
+        style={{ color: "rgba(255,255,255,0.9)", fontFamily: "var(--font-label)", borderRadius: "14px 0 14px 14px" }}>
         {msg.text}
       </div>
     </motion.div>
@@ -1200,13 +1191,12 @@ function TypingIndicator() {
     <motion.div initial={{ opacity:0, y:4 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:4 }}
       className="flex items-end gap-2.5">
       <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-        style={{ background:"rgba(139,92,246,0.15)", border:"1px solid rgba(139,92,246,0.3)" }}>
+        style={{ background:"rgba(139,92,246,0.15)", border:"1px solid rgba(139,92,246,0.35)" }}>
         <CatIcon size={20} />
       </div>
-      <div className="px-4 py-3 flex items-center gap-1"
-        style={{ background:"rgba(139,92,246,0.1)", border:"1px solid rgba(139,92,246,0.2)", borderRadius:"0 12px 12px 12px" }}>
+      <div className="glass px-4 py-3 flex items-center gap-1" style={{ borderRadius:"0 14px 14px 14px" }}>
         {[0,1,2].map(i => (
-          <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background:"#8B5CF6" }}
+          <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background:"var(--color-violet)" }}
             animate={{ y:[0,-4,0] }} transition={{ duration:0.7, repeat:Infinity, delay:i*0.15 }} />
         ))}
       </div>
@@ -1562,17 +1552,27 @@ export default function BlackCatAI() {
           width:        56,
           height:       56,
           borderRadius: "50%",
-          background:   "radial-gradient(circle at 38% 38%, #1e1040, #0a0718)",
-          border:       open ? "2px solid rgba(139,92,246,0.9)" : "2px solid rgba(139,92,246,0.5)",
+          border:       "none",
           boxShadow:    open
-            ? "0 0 0 3px rgba(139,92,246,0.22), 0 0 28px rgba(139,92,246,0.75), 0 0 56px rgba(139,92,246,0.22)"
-            : "0 0 18px rgba(139,92,246,0.45), 0 4px 14px rgba(0,0,0,0.5)",
+            ? "0 0 0 3px rgba(139,92,246,0.22), 0 0 28px rgba(139,92,246,0.6), 0 0 56px rgba(236,72,153,0.2)"
+            : "0 0 18px rgba(139,92,246,0.4), 0 4px 14px rgba(0,0,0,0.5)",
           cursor:       "grab",
           touchAction:  "none",
           alignItems:   "center",
           justifyContent: "center",
         }}
       >
+        {/* Akan gradient halka */}
+        <div className="gradient-animated gradient-slow gradient-violet-pink-orange"
+          style={{ position: "absolute", inset: -2, borderRadius: "50%" }} />
+        {/* Koyu dolgu */}
+        <div style={{
+          position:     "absolute",
+          inset:        0,
+          borderRadius: "50%",
+          background:   "radial-gradient(circle at 38% 38%, #1e1040, #0a0718)",
+        }} />
+
         {/* Beyaz daire arka plan — kedi kontrast için */}
         <div style={{
           position:     "absolute",
@@ -1617,25 +1617,19 @@ export default function BlackCatAI() {
             />
 
             <motion.div
-              initial={{ opacity:0, y:24, scale:0.96 }}
-              animate={{ opacity:1, y:0, scale:1 }}
-              exit={{ opacity:0, y:24, scale:0.96 }}
+              initial={{ opacity:0, y:24, scale:0.96, filter:"blur(6px)" }}
+              animate={{ opacity:1, y:0, scale:1, filter:"blur(0px)" }}
+              exit={{ opacity:0, y:24, scale:0.96, filter:"blur(4px)" }}
               transition={{ type:"spring", stiffness:320, damping:28 }}
-              className="fixed flex flex-col kara-panel"
-              style={{
-                zIndex:     55,
-                background: "rgba(10,7,20,0.98)",
-                border:     "1px solid rgba(139,92,246,0.28)",
-                boxShadow:  "0 0 0 1px rgba(139,92,246,0.1), 0 24px 80px rgba(0,0,0,0.85), 0 0 60px rgba(139,92,246,0.14)",
-              }}
+              className="fixed flex flex-col kara-panel glass-strong"
+              style={{ zIndex: 55 }}
             >
-              {/* Üst neon şerit */}
-              <div className="absolute top-0 left-0 right-0 h-0.5 flex-shrink-0"
-                style={{ background:"linear-gradient(90deg,transparent,#7C3AED,#A78BFA,#7C3AED,transparent)" }} />
+              {/* Üst akan neon şerit */}
+              <div className="absolute top-0 left-0 right-0 h-[3px] flex-shrink-0 gradient-animated gradient-violet-pink-orange rounded-t-2xl" />
 
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-                style={{ borderBottom:"1px solid rgba(139,92,246,0.12)" }}>
+                style={{ borderBottom:"1px solid rgba(139,92,246,0.15)" }}>
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
                     style={{ background:"rgba(255,255,255,0.9)", border:"1px solid rgba(139,92,246,0.3)" }}>
@@ -1643,12 +1637,12 @@ export default function BlackCatAI() {
                   </div>
                   <div>
                     <div className="text-sm font-semibold tracking-wider"
-                      style={{ color:"#C4B5FD", fontFamily:"var(--font-bebas)", letterSpacing:"0.12em" }}>
+                      style={{ color:"#C4B5FD", fontFamily:"var(--font-display)", letterSpacing:"0.12em" }}>
                       KEDİ AI
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                      <span className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+                      <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--color-success)" }} />
+                      <span className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-label)" }}>
                         Kişisel Antrenör Koçun
                       </span>
                     </div>
@@ -1658,7 +1652,7 @@ export default function BlackCatAI() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={toggleVoiceOut}
-                    className="w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                    className="w-7 h-7 flex items-center justify-center rounded-full transition-colors hover:bg-white/5"
                     style={{ color: voiceOut ? "#A78BFA" : "rgba(255,255,255,0.3)" }}
                     title={voiceOut ? "Sesli oku: Açık" : "Sesli oku: Kapalı"}
                     aria-label="Sesli oku aç/kapat"
@@ -1667,7 +1661,7 @@ export default function BlackCatAI() {
                   </button>
                   <button
                     onClick={() => setMin(m => !m)}
-                    className="w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                    className="w-7 h-7 flex items-center justify-center rounded-full transition-colors hover:bg-white/5"
                     style={{ color:"rgba(255,255,255,0.3)" }}
                     aria-label="Küçült"
                   >
@@ -1675,7 +1669,7 @@ export default function BlackCatAI() {
                   </button>
                   <button
                     onClick={() => setOpen(false)}
-                    className="w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                    className="w-7 h-7 flex items-center justify-center rounded-full transition-colors hover:bg-white/5"
                     style={{ color:"rgba(255,255,255,0.3)" }}
                     aria-label="Kapat"
                   >
@@ -1717,14 +1711,8 @@ export default function BlackCatAI() {
                               if (voiceOut) speakText(reply);
                             }, 700 + Math.random() * 600);
                           }}
-                          className="text-[10px] px-2.5 py-1 transition-all duration-200"
-                          style={{
-                            fontFamily:  "var(--font-barlow-condensed)",
-                            background:  "rgba(139,92,246,0.08)",
-                            border:      "1px solid rgba(139,92,246,0.22)",
-                            color:       "#A78BFA",
-                            borderRadius: 6,
-                          }}
+                          className="glass text-[10px] px-2.5 py-1.5 rounded-lg transition-transform duration-200 hover:scale-[1.04] active:scale-95"
+                          style={{ fontFamily: "var(--font-label)", color: "#A78BFA" }}
                         >
                           {q}
                         </button>
@@ -1734,25 +1722,25 @@ export default function BlackCatAI() {
 
                   {/* Sesli komut hata mesajı */}
                   {voiceError && (
-                    <div className="flex-shrink-0 px-4 pb-1.5 text-[11px]" style={{ color:"#FCA5A5", fontFamily:"var(--font-barlow-condensed)" }}>
+                    <div className="flex-shrink-0 px-4 pb-1.5 text-[11px]" style={{ color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
                       ⚠️ {voiceError}
                     </div>
                   )}
 
                   {/* Input */}
                   <div className="flex-shrink-0 flex items-center gap-2 px-3 py-3"
-                    style={{ borderTop:"1px solid rgba(139,92,246,0.1)" }}>
+                    style={{ borderTop:"1px solid rgba(139,92,246,0.15)" }}>
 
                     {/* Mikrofon butonu */}
                     {speechSupported && (
                       <button
                         onClick={toggleVoice}
-                        className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 flex-shrink-0"
+                        className="glass w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 flex-shrink-0"
                         title={listening ? "Dinleniyor — durdurmak için tıkla" : "Sesli komut"}
                         style={{
-                          background: listening ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.05)",
-                          border: `1px solid ${listening ? "rgba(239,68,68,0.6)" : "rgba(255,255,255,0.08)"}`,
-                          color: listening ? "#FCA5A5" : "rgba(255,255,255,0.25)",
+                          background: listening ? "rgba(239,68,68,0.2)" : undefined,
+                          borderColor: listening ? "rgba(239,68,68,0.5)" : undefined,
+                          color: listening ? "var(--color-error)" : "rgba(255,255,255,0.3)",
                           animation: listening ? "glowPulse 1s ease-in-out infinite" : "none",
                         }}
                         aria-label={listening ? "Dinlemeyi durdur" : "Sesli komut başlat"}
@@ -1767,18 +1755,14 @@ export default function BlackCatAI() {
                       onChange={e => setInput(e.target.value)}
                       onKeyDown={handleKey}
                       placeholder={listening ? "Dinleniyor…" : "Bir şey sor…"}
-                      className="flex-1 bg-transparent outline-none text-sm text-white placeholder-white/20"
-                      style={{ fontFamily:"var(--font-inter)" }}
+                      className="glass flex-1 outline-none text-sm text-white placeholder-white/20 px-3.5 py-2 rounded-full"
+                      style={{ fontFamily:"var(--font-label)" }}
                     />
                     <button
                       onClick={() => sendMessage()}
                       disabled={!input.trim() || typing}
-                      className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 flex-shrink-0"
-                      style={{
-                        background: input.trim() && !typing ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.05)",
-                        border: `1px solid ${input.trim() && !typing ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
-                        color: input.trim() && !typing ? "#C4B5FD" : "rgba(255,255,255,0.2)",
-                      }}
+                      className={`w-8 h-8 flex items-center justify-center rounded-full transition-transform duration-200 flex-shrink-0 hover:scale-105 active:scale-95 ${input.trim() && !typing ? "gradient-animated gradient-fast gradient-violet-pink-orange" : "glass"}`}
+                      style={{ color: input.trim() && !typing ? "#fff" : "rgba(255,255,255,0.2)" }}
                       aria-label="Gönder"
                     >
                       <Send size={14} />

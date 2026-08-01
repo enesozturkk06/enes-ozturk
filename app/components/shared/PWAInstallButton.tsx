@@ -96,7 +96,7 @@ export default function PWAInstallButton({ variant = "compact" }: Props) {
   if (state === "installed") {
     if (variant === "login") return null; // login sayfasında kuruluysa tamamen gizle
     return (
-      <div className="inline-flex items-center gap-2 text-xs text-green-400/70" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+      <div className="inline-flex items-center gap-2 text-xs" style={{ color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
         <CheckCircle size={14} />
         Uygulama Yüklü
       </div>
@@ -112,13 +112,13 @@ export default function PWAInstallButton({ variant = "compact" }: Props) {
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           disabled={installing}
-          className="group inline-flex items-center gap-2.5 border border-crimson/40 hover:border-crimson text-white/70 hover:text-white font-semibold tracking-widest uppercase px-8 py-4 text-sm transition-all duration-300 hover:bg-crimson/8 disabled:opacity-50"
-          style={{ fontFamily: "var(--font-barlow-condensed)" }}
+          className="gradient-animated gradient-slow gradient-violet-pink-orange group inline-flex items-center gap-2.5 text-white font-semibold tracking-widest uppercase px-8 py-4 text-sm rounded-xl transition-transform duration-300 disabled:opacity-50"
+          style={{ fontFamily: "var(--font-label)" }}
         >
           {installing ? (
-            <div className="w-4 h-4 border-2 border-crimson border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : (
-            <Download size={16} className="text-crimson" />
+            <Download size={16} />
           )}
           {installing ? "Yükleniyor..." : "Uygulamayı Yükle"}
         </motion.button>
@@ -133,30 +133,31 @@ export default function PWAInstallButton({ variant = "compact" }: Props) {
     <>
       <motion.button
         onClick={handleInstall}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
+        initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
+        animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, delay: 0.4, ease: [0.22, 1, 0.36, 1] } }}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.97 }}
         disabled={installing}
-        className="w-full flex items-center gap-3 p-3 bg-crimson/6 border border-crimson/20 hover:border-crimson/40 hover:bg-crimson/10 transition-all duration-300 group disabled:opacity-50"
+        className="glass-strong relative w-full flex items-center gap-3 p-3 rounded-xl overflow-hidden group disabled:opacity-50 transition-shadow duration-300"
       >
-        <div className="w-8 h-8 bg-crimson/15 border border-crimson/30 flex items-center justify-center flex-shrink-0 group-hover:bg-crimson/25 transition-colors">
+        <div className="absolute top-0 left-0 right-0 h-0.5 gradient-animated gradient-slow gradient-violet-pink-orange" />
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+          style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)" }}>
           {installing ? (
-            <div className="w-4 h-4 border-2 border-crimson border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "#A78BFA", borderTopColor: "transparent" }} />
           ) : (
-            <Smartphone size={15} className="text-crimson" />
+            <Smartphone size={15} style={{ color: "#A78BFA" }} />
           )}
         </div>
         <div className="text-left min-w-0">
-          <div className="text-xs font-semibold text-white/80 tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <div className="text-xs font-semibold text-white/80 tracking-wider" style={{ fontFamily: "var(--font-label)" }}>
             {installing ? "Yükleniyor..." : "Uygulamayı Yükle"}
           </div>
-          <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-label)" }}>
             {platform === "ios" ? "Ana ekrana ekle — ücretsiz" : "Android uygulaması — ücretsiz"}
           </div>
         </div>
-        <Download size={13} className="text-crimson/50 ml-auto flex-shrink-0" />
+        <Download size={13} className="ml-auto flex-shrink-0" style={{ color: "rgba(167,139,250,0.5)" }} />
       </motion.button>
 
       <IOSModal open={iosModal} onClose={() => setIosModal(false)} />
@@ -165,6 +166,12 @@ export default function PWAInstallButton({ variant = "compact" }: Props) {
 }
 
 /* ── iOS Talimat Modali ──────────────────────────────────────── */
+const IOS_STEPS = [
+  { icon: Share, iconColor: "#60A5FA", numColor: "#A78BFA", title: "Paylaş butonuna bas", desc: "Safari'nin alt kısmındaki kare + ok ikonuna dokun" },
+  { icon: null, symbol: "⊞", iconColor: "#60A5FA", numColor: "#A78BFA", title: "“Ana Ekrana Ekle” seç", desc: "Açılan menüde aşağı kaydırarak “Ana Ekrana Ekle” seçeneğini bul" },
+  { icon: CheckCircle, iconColor: "var(--color-success)", numColor: "var(--color-success)", title: "“Ekle” butonuna bas", desc: "Uygulama ana ekranınıza eklendi!" },
+] as const;
+
 function IOSModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <AnimatePresence>
@@ -172,99 +179,68 @@ function IOSModal({ open, onClose }: { open: boolean; onClose: () => void }) {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          exit={{ opacity: 0, transition: { duration: 0.2, ease: "easeIn" } }}
           className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4"
           onClick={e => e.target === e.currentTarget && onClose()}
         >
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
 
           <motion.div
-            initial={{ y: 60, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 60, opacity: 0 }}
-            transition={{ type: "spring", damping: 25 }}
-            className="relative z-10 w-full max-w-sm bg-carbon border border-white/10 shadow-[0_-10px_60px_rgba(0,0,0,0.5)]"
+            initial={{ y: 60, opacity: 0, scale: 0.94, filter: "blur(6px)" }}
+            animate={{ y: 0, opacity: 1, scale: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 300, damping: 28 } }}
+            exit={{ y: 30, opacity: 0, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.2, ease: "easeIn" } }}
+            className="relative z-10 w-full max-w-sm gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet rounded-t-2xl sm:rounded-2xl p-[1px] overflow-hidden"
           >
-            {/* Üst çizgi */}
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-crimson to-transparent" />
-
-            {/* Başlık */}
-            <div className="flex items-center justify-between p-5 border-b border-white/6">
-              <div className="flex items-center gap-3">
-                <Logo size={36} />
-                <div>
-                  <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Uygulamayı Yükle</div>
-                  <div className="text-xs text-white/35" style={{ fontFamily: "var(--font-barlow-condensed)" }}>iPhone / iPad</div>
-                </div>
-              </div>
-              <button onClick={onClose} className="text-white/30 hover:text-white transition-colors p-1">
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Talimatlar */}
-            <div className="p-5 space-y-4">
-              <p className="text-xs text-white/45 text-center" style={{ fontFamily: "var(--font-inter)" }}>
-                Bu siteyi ana ekranınıza uygulama olarak ekleyebilirsiniz. Safari&apos;yi kullanın:
-              </p>
-
-              {/* Adım 1 */}
-              <div className="flex items-start gap-4 p-3 bg-steel/30 border border-white/5">
-                <div className="w-8 h-8 bg-crimson/10 border border-crimson/20 flex items-center justify-center flex-shrink-0 text-crimson font-display text-sm" style={{ fontFamily: "var(--font-bebas)" }}>1</div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <Share size={14} className="text-blue-400 flex-shrink-0" />
-                    <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                      Paylaş butonuna bas
-                    </span>
+            <div className="glass-strong relative rounded-t-2xl sm:rounded-2xl">
+              {/* Başlık */}
+              <div className="flex items-center justify-between p-5" style={{ borderBottom: "1px solid rgba(139,92,246,0.12)" }}>
+                <div className="flex items-center gap-3">
+                  <Logo size={36} />
+                  <div>
+                    <div className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-label)" }}>Uygulamayı Yükle</div>
+                    <div className="text-xs text-white/35" style={{ fontFamily: "var(--font-label)" }}>iPhone / iPad</div>
                   </div>
-                  <p className="text-xs text-white/40" style={{ fontFamily: "var(--font-inter)" }}>
-                    Safari&apos;nin alt kısmındaki kare + ok ikonuna dokun
-                  </p>
                 </div>
+                <button onClick={onClose} className="text-white/30 hover:text-white transition-colors p-1 rounded-full hover:bg-white/5">
+                  <X size={18} />
+                </button>
               </div>
 
-              {/* Adım 2 */}
-              <div className="flex items-start gap-4 p-3 bg-steel/30 border border-white/5">
-                <div className="w-8 h-8 bg-crimson/10 border border-crimson/20 flex items-center justify-center flex-shrink-0 text-crimson font-display text-sm" style={{ fontFamily: "var(--font-bebas)" }}>2</div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-blue-400 text-sm">⊞</span>
-                    <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                      &quot;Ana Ekrana Ekle&quot; seç
-                    </span>
-                  </div>
-                  <p className="text-xs text-white/40" style={{ fontFamily: "var(--font-inter)" }}>
-                    Açılan menüde aşağı kaydırarak &ldquo;Ana Ekrana Ekle&rdquo; seçeneğini bul
-                  </p>
-                </div>
+              {/* Talimatlar */}
+              <div className="p-5 space-y-3">
+                <p className="text-xs text-white/45 text-center" style={{ fontFamily: "var(--font-label)" }}>
+                  Bu siteyi ana ekranınıza uygulama olarak ekleyebilirsiniz. Safari&apos;yi kullanın:
+                </p>
+
+                {IOS_STEPS.map((step, i) => {
+                  const Icon = step.icon;
+                  return (
+                    <div key={i} className="glass flex items-start gap-4 p-3 rounded-xl">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm"
+                        style={{ background: `${step.numColor}1f`, border: `1px solid ${step.numColor}40`, color: step.numColor, fontFamily: "var(--font-display)" }}>
+                        {i + 1}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          {Icon ? <Icon size={14} style={{ color: step.iconColor }} className="flex-shrink-0" /> : <span className="text-sm" style={{ color: step.iconColor }}>{step.symbol}</span>}
+                          <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-label)" }}>{step.title}</span>
+                        </div>
+                        <p className="text-xs text-white/40" style={{ fontFamily: "var(--font-label)" }}>{step.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Adım 3 */}
-              <div className="flex items-start gap-4 p-3 bg-steel/30 border border-white/5">
-                <div className="w-8 h-8 bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0 text-green-400 font-display text-sm" style={{ fontFamily: "var(--font-bebas)" }}>3</div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
-                    <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-                      &quot;Ekle&quot; butonuna bas
-                    </span>
-                  </div>
-                  <p className="text-xs text-white/40" style={{ fontFamily: "var(--font-inter)" }}>
-                    Uygulama ana ekranınıza eklendi!
-                  </p>
-                </div>
+              <div className="px-5 pb-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
+                <button
+                  onClick={onClose}
+                  className="gradient-animated gradient-slow gradient-violet-pink-orange w-full py-3 text-white text-xs font-semibold tracking-widest uppercase rounded-xl transition-transform hover:scale-[1.02]"
+                  style={{ fontFamily: "var(--font-label)" }}
+                >
+                  Anladım
+                </button>
               </div>
-            </div>
-
-            <div className="px-5 pb-5">
-              <button
-                onClick={onClose}
-                className="w-full py-3 bg-crimson hover:bg-crimson-bright text-white text-xs font-semibold tracking-widest uppercase transition-all"
-                style={{ fontFamily: "var(--font-barlow-condensed)" }}
-              >
-                Anladım
-              </button>
             </div>
           </motion.div>
         </motion.div>

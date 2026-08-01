@@ -168,7 +168,7 @@ function PodiumCard({ entry, rank, value, index }: {
         background:   ps.background,
         borderColor:  rs.border,
         boxShadow:    isFirst ? rs.glow : `0 0 16px ${rs.ring}22`,
-        borderRadius: 4,
+        borderRadius: 12,
       }}
     >
       {/* Taç — 1. sıra */}
@@ -332,7 +332,7 @@ export function HallOfFamePremium({ entries }: { entries: HallEntry[] }) {
       style={{
         background: "linear-gradient(180deg, rgba(139,92,246,0.05), rgba(0,0,0,0.3))",
         borderColor: "rgba(139,92,246,0.16)",
-        borderRadius: 4,
+        borderRadius: 20,
         boxShadow: "0 0 40px rgba(139,92,246,0.06), inset 0 0 60px rgba(0,0,0,0.3)",
       }}
     >

@@ -1,7 +1,8 @@
 "use client";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from "react";
 import Link from "next/link";
+import { X as XIcon } from "lucide-react";
 
 // ── Button ────────────────────────────────────────────────────────────────────
 interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -26,6 +27,7 @@ export function Button({ variant = "primary", size = "md", loading, children, cl
     <motion.button
       whileTap={!reduced ? { scale: 0.97 } : undefined}
       className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
+      style={{ fontFamily: "var(--font-label)" }}
       disabled={loading || props.disabled}
       {...(props as Parameters<typeof motion.button>[0])}
     >
@@ -49,7 +51,7 @@ export function Card({ children, className = "", hover, glow, id }: CardProps) {
     <motion.div
       id={id}
       whileHover={hover ? { y: -2 } : undefined}
-      className={`bg-carbon border border-white/8 ${glowClass} transition-all duration-300 ${className}`}
+      className={`bg-carbon border border-white/8 rounded-2xl ${glowClass} transition-all duration-300 ${className}`}
     >
       {children}
     </motion.div>
@@ -82,7 +84,7 @@ export function StatCard({ label, value, sub, color = "white", icon, href, onCli
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="relative overflow-hidden stat-card-glass"
+      className="relative overflow-hidden rounded-2xl stat-card-glass"
       style={{
         background: "rgba(15,15,22,0.95)",
         border: `1px solid ${isClickable ? c.border : "rgba(255,255,255,0.08)"}`,
@@ -191,7 +193,7 @@ export function Badge({ children, color = "gray" }: BadgeProps) {
     purple: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 text-xs tracking-widest uppercase ${styles[color]}`} style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] tracking-widest uppercase rounded-md ${styles[color]}`} style={{ fontFamily: "var(--font-barlow-condensed)" }}>
       {children}
     </span>
   );
@@ -214,7 +216,7 @@ export function ProgressBar({ value, max = 100, color = "red", label, showValue 
           {showValue && <span>{value}/{max}</span>}
         </div>
       )}
-      <div className="h-2 bg-iron rounded-full overflow-hidden">
+      <div className="h-1.5 bg-iron rounded-full overflow-hidden">
         <motion.div
           className={`h-full rounded-full bg-gradient-to-r ${gradients[color]}`}
           initial={{ width: 0 }}
@@ -229,69 +231,95 @@ export function ProgressBar({ value, max = 100, color = "red", label, showValue 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 interface ModalProps { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; maxWidth?: string }
 export function Modal({ open, onClose, title, children, footer, maxWidth = "max-w-lg" }: ModalProps) {
-  if (!open) return null;
+  // AnimatePresence burada, component içinde tutuluyor — açık/kapalı mantığı
+  // (caller'ın `open` prop'unu ne zaman true/false yaptığı) hiç değişmiyor,
+  // sadece kapanış artık anında unmount yerine yumuşak bir fade ile çıkıyor.
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4"
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-        className={`relative z-10 w-full sm:${maxWidth} bg-carbon border border-white/10 shadow-[0_20px_80px_rgba(0,0,0,0.6)] flex flex-col rounded-t-2xl sm:rounded-2xl`}
-        style={{ maxHeight: "90svh" }}
-      >
-        {/* Sabit başlık */}
-        <div className="flex-shrink-0 flex items-center justify-between p-5 border-b border-white/8">
-          <h3 className="text-xl font-display text-white tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>{title}</h3>
-          <button onClick={onClose} className="text-white/30 hover:text-white transition-colors duration-200">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        {/* Kaydırılabilir içerik */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-5" style={{ WebkitOverflowScrolling: "touch" }}>
-          {children}
-        </div>
-        {/* Sabit alt buton alanı — safe-area altında hiçbir zaman kırpılmaz */}
-        {footer && (
-          <div className="flex-shrink-0 border-t border-white/8 px-5 pt-4"
-            style={{ background: "rgba(24,24,27,0.98)", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}>
-            {footer}
-          </div>
-        )}
-      </motion.div>
-    </motion.div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.2, ease: "easeIn" } }}
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4"
+          onClick={e => e.target === e.currentTarget && onClose()}
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
+          <motion.div
+            initial={{ y: 40, opacity: 0, scale: 0.94, filter: "blur(6px)" }}
+            animate={{ y: 0, opacity: 1, scale: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 300, damping: 28 } }}
+            exit={{ y: 20, opacity: 0, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.2, ease: "easeIn" } }}
+            className={`relative z-10 w-full sm:${maxWidth} gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet rounded-t-2xl sm:rounded-2xl p-[1px] overflow-hidden`}
+            style={{ maxHeight: "90svh" }}
+          >
+            <div className="glass-strong relative flex flex-col rounded-t-2xl sm:rounded-2xl h-full" style={{ maxHeight: "90svh" }}>
+              {/* Sabit başlık */}
+              <div className="flex-shrink-0 flex items-center justify-between p-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <h3 className="text-xl text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>{title}</h3>
+                <button onClick={onClose} className="text-white/30 hover:text-white transition-colors duration-200 rounded-full p-1 hover:bg-white/5">
+                  <XIcon size={18} />
+                </button>
+              </div>
+              {/* Kaydırılabilir içerik */}
+              <div className="flex-1 overflow-y-auto overscroll-contain p-5" style={{ WebkitOverflowScrolling: "touch" }}>
+                {children}
+              </div>
+              {/* Sabit alt buton alanı — safe-area altında hiçbir zaman kırpılmaz */}
+              {footer && (
+                <div className="flex-shrink-0 px-5 pt-4 rounded-b-2xl"
+                  style={{
+                    borderTop: "1px solid rgba(139,92,246,0.12)",
+                    background: "rgba(139,92,246,0.04)",
+                    paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
+                  }}>
+                  {footer}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
 // ── PageHeader ────────────────────────────────────────────────────────────────
 interface PageHeaderProps { title: string; subtitle?: string; accent?: string; actions?: ReactNode }
 export function PageHeader({ title, subtitle, accent, actions }: PageHeaderProps) {
+  // Sayfa kaydırıldıkça glass arkaplan hafifçe koyulaşır/bulanıklaşır — sticky/position
+  // değişikliği yok, salt kozmetik bir geçiş (motion value, re-render tetiklemez).
+  const { scrollY } = useScroll();
+  const blur = useTransform(scrollY, [0, 120], [20, 32]);
+  const backdropFilter = useTransform(blur, v => `blur(${v}px)`);
+  const bgAlpha = useTransform(scrollY, [0, 120], [0.05, 0.1]);
+  const background = useTransform(bgAlpha, v => `rgba(139,92,246,${v})`);
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6 sm:mb-8"
+      initial={{ opacity: 0, y: 16, scale: 0.98, filter: "blur(6px)" }}
+      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px] mb-6 sm:mb-8"
     >
-      <div>
-        {accent && (
-          <div className="flex items-center gap-2.5 mb-2">
-            <span className="w-8 h-px bg-crimson" />
-            <span className="text-[10px] sm:text-xs text-crimson tracking-[0.4em] uppercase"
-              style={{ fontFamily:"var(--font-barlow-condensed)" }}>{accent}</span>
-          </div>
-        )}
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display text-white tracking-wide"
-          style={{ fontFamily:"var(--font-bebas)" }}>{title}</h1>
-        {subtitle && (
-          <p className="text-white/40 text-xs sm:text-sm mt-1"
-            style={{ fontFamily:"var(--font-inter)" }}>{subtitle}</p>
-        )}
-      </div>
-      {actions && <div className="flex items-center gap-2 sm:gap-3 flex-wrap">{actions}</div>}
+      <motion.div
+        style={{ backdropFilter, WebkitBackdropFilter: backdropFilter, background }}
+        className="relative rounded-2xl border border-[rgba(255,255,255,0.08)] flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5"
+      >
+        <div className="min-w-0">
+          {accent && (
+            <div className="flex items-center gap-2.5 mb-2">
+              <span className="w-8 h-px gradient-animated gradient-slow gradient-violet-pink-orange" />
+              <span className="text-[10px] sm:text-xs tracking-[0.4em] uppercase"
+                style={{ fontFamily: "var(--font-label)", color: "#A78BFA" }}>{accent}</span>
+            </div>
+          )}
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl text-white tracking-wide leading-tight break-words"
+            style={{ fontFamily: "var(--font-display)" }}>{title}</h1>
+          {subtitle && (
+            <p className="text-white/40 text-xs sm:text-sm mt-1"
+              style={{ fontFamily: "var(--font-label)" }}>{subtitle}</p>
+          )}
+        </div>
+        {actions && <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-shrink-0">{actions}</div>}
+      </motion.div>
     </motion.div>
   );
 }

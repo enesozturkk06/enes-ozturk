@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Swords, Layers, Briefcase, Wallet, ChevronDown } from "lucide-react";
 import type { CategoryTotals } from "@/lib/groupLessonFinance";
+import CountUpNumber from "./CountUpNumber";
 
 function CategoryCard({
   label, value, color, icon, index, detail,
@@ -13,41 +14,43 @@ function CategoryCard({
   const [open, setOpen] = useState(false);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: "easeOut", delay: index * 0.05 }}
-      className="stat-card-glass rounded-2xl overflow-hidden"
-      style={{ background: "rgba(15,15,22,0.95)", border: "1px solid var(--color-iron)" }}>
-      <button onClick={() => setOpen(o => !o)} className="w-full text-left p-4 sm:p-5">
-        <div className="flex items-start justify-between mb-2">
-          <span className="text-[10px] sm:text-xs text-white/35 tracking-widest uppercase leading-tight" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            {label}
-          </span>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span style={{ color }}>{icon}</span>
-            <ChevronDown size={13} className="text-white/25 transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }} />
-          </div>
-        </div>
-        <div className="text-2xl sm:text-3xl font-display" style={{ fontFamily: "var(--font-bebas)", color }}>
-          ₺{value.toLocaleString("tr-TR")}
-        </div>
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }} className="overflow-hidden">
-            <div className="px-4 sm:px-5 pb-4 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              {detail}
+      initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
+      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: index * 0.05 }}
+      className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet">
+      <div className="glass rounded-2xl overflow-hidden">
+        <button onClick={() => setOpen(o => !o)} className="w-full text-left p-4 sm:p-5">
+          <div className="flex items-start justify-between mb-2">
+            <span className="text-[10px] sm:text-xs text-white/35 tracking-widest uppercase leading-tight" style={{ fontFamily: "var(--font-label)" }}>
+              {label}
+            </span>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span style={{ color }}>{icon}</span>
+              <ChevronDown size={13} className="text-white/25 transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }} />
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+          <div className="text-2xl sm:text-3xl" style={{ fontFamily: "var(--font-display)", color }}>
+            <CountUpNumber value={value} prefix="₺" />
+          </div>
+        </button>
+        <AnimatePresence>
+          {open && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }} className="overflow-hidden">
+              <div className="px-4 sm:px-5 pb-4 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                {detail}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 }
 
 function DetailRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex justify-between text-xs py-1" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+    <div className="flex justify-between text-xs py-1" style={{ fontFamily: "var(--font-label)" }}>
       <span className="text-white/40">{label}</span>
       <span className="font-semibold" style={{ color: color ?? "#fff" }}>{value}</span>
     </div>

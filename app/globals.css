@@ -27,9 +27,25 @@
   --color-iron:     #27272A;
   --color-ash:      #3F3F46;
 
+  /* ── EO OS V3 Design System — semantic renkler ───────────────
+     Pozitif=Yeşil, Uyarı=Turuncu, Hata=Kırmızı, Başarı=Altın.
+     DİKKAT: yukarıdaki --color-gold (magenta) ve --color-crimson
+     (violet) isimleri artık gerçek anlamlarını taşımıyor — yeni kod
+     bunları "gold"/"crimson" sanıp kullanmasın, kafa karıştırır.
+     Gerçek altın/amber için --color-achievement kullanılır. */
+  --color-success:            #22C55E;
+  --color-success-bright:     #4ADE80;
+  --color-warning:            #FB923C;
+  --color-warning-bright:     #FDBA74;
+  --color-error:               #EF4444;
+  --color-error-bright:        #F87171;
+  --color-achievement:         #F59E0B;
+  --color-achievement-bright:  #FBBF24;
+
   /* Fontlar */
   --font-display: var(--font-bebas);
   --font-body:    var(--font-inter);
+  --font-label:   var(--font-barlow-condensed);
 }
 
 /* ── KARA AI Panel — responsive konumlama ──────────────────── */
@@ -81,6 +97,8 @@
 }
 @keyframes scroll-dot   { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(12px)} }
 @keyframes marquee      { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+@keyframes gradient-flow { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+@keyframes shimmer-sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(220%); } }
 
 /* ── Utilities ─────────────────────────────────────────────── */
 @layer utilities {
@@ -112,26 +130,30 @@
     animation: shimmer-violet 3s linear infinite;
   }
 
-  /* Glassmorphism kartlar */
+  /* Glassmorphism kartlar — nötr koyu antrasit cam (renk sistemi geri alma:
+     eskiden rgba(139,92,246,...) mor tonluydu, her kart mor hissediyordu.
+     Artık gerçek karanlık/antrasit + düz siyah elevation gölgesi; renkli
+     glow sadece glow ve gradient-border teknikleriyle, tek odak noktalarında
+     ayrıca ekleniyor — taban artık nötr. */
   .glass {
-    background: rgba(139,92,246,0.04);
+    background: rgba(255,255,255,0.035);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(139,92,246,0.18);
-    box-shadow: 0 0 40px rgba(139,92,246,0.06), inset 0 1px 0 rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
   }
   .glass-strong {
-    background: rgba(139,92,246,0.08);
+    background: rgba(255,255,255,0.05);
     backdrop-filter: blur(28px);
     -webkit-backdrop-filter: blur(28px);
-    border: 1px solid rgba(139,92,246,0.25);
-    box-shadow: 0 0 60px rgba(139,92,246,0.12), inset 0 1px 0 rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
   }
   .glass-dark {
     background: rgba(9,9,11,0.75);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(139,92,246,0.12);
+    border: 1px solid rgba(255,255,255,0.08);
   }
 
   /* Neon glow efektleri */
@@ -145,6 +167,49 @@
 
   /* StatCard (admin + öğrenci panelinde her sayfanın üstünde 4'lü grid) */
   .stat-card-glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+
+  /* ── EO OS V3 — Dynamic Gradient System ──────────────────────
+     Çok yavaş (8-15sn), GPU-dostu (background-position, compositor
+     katmanında), asla dikkat dağıtmayan hareketli gradient'lar.
+     Kullanım: hero başlıkları, CTA butonları, progress bar, AI
+     ekranları, grafikler, seçili kartlar, splash/loading ekranları.
+     prefers-reduced-motion bloğu (aşağıda) bunları otomatik durdurur. */
+  .gradient-animated {
+    background-size: 200% 200%;
+    animation: gradient-flow 12s ease-in-out infinite;
+    will-change: background-position;
+  }
+  .gradient-violet-blue { background-image: linear-gradient(120deg, #8B5CF6, #3B82F6); }
+  .gradient-blue-cyan   { background-image: linear-gradient(120deg, #3B82F6, #22D3EE); }
+  .gradient-violet-gold { background-image: linear-gradient(120deg, #8B5CF6, #F59E0B); }
+  .gradient-violet-pink { background-image: linear-gradient(120deg, #8B5CF6, #EC4899); }
+  .gradient-green-teal  { background-image: linear-gradient(120deg, #22C55E, #14B8A6); }
+  /* Kırmızı→turuncu: sadece kritik uyarılar için, dekoratif kullanılmaz */
+  .gradient-red-orange  { background-image: linear-gradient(120deg, #EF4444, #FB923C); }
+  /* Mor → Mavi → Kırmızı → Mor — randevu ekranındaki tek sürekli akan CTA için */
+  .gradient-violet-blue-red { background-image: linear-gradient(120deg, #8B5CF6, #3B82F6, #EF4444, #8B5CF6); }
+  /* Mor → Mavi → Pembe → Turuncu — Admin Dashboard stat kartı gradient border'ı için */
+  .gradient-violet-pink-orange { background-image: linear-gradient(120deg, #8B5CF6, #3B82F6, #EC4899, #F59E0B); }
+  /* Mor → Mavi → Camgöbeği → Pembe → Turuncu → Mor — Takvim sayfası için */
+  .gradient-violet-blue-cyan-pink-orange { background-image: linear-gradient(120deg, #8B5CF6, #3B82F6, #22D3EE, #EC4899, #F59E0B, #8B5CF6); }
+  .gradient-slow { animation-duration: 15s; }
+  .gradient-fast { animation-duration: 8s; }
+  /* Dinlenme-durumu kenarlık modifikatörü — kartların dıştaki gradient
+     kenarlığını sessizleştirir (CTA/aktif-sekme/progress-bar tam
+     parlaklıkta kalır, kartlarda gradient sadece ince bir iz olarak
+     hissedilir; global renk revizyonunda tüm kart border'larına
+     uygulanacak şekilde daha da azaltıldı). */
+  .gradient-border-quiet { opacity: 0.22; }
+
+  /* XP bar dolgusu üzerinde soldan sağa geçen ışık huzmesi — öğrenci paneli */
+  .xp-bar-shimmer {
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    animation: shimmer-sweep 2.6s ease-in-out infinite;
+    pointer-events: none;
+  }
 }
 
 /* ── Mobile performance ────────────────────────────────────── */

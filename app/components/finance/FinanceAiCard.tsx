@@ -15,18 +15,19 @@ const ICONS: Record<AiInsight["icon"], React.ReactNode> = {
 
 export default function FinanceAiCard({ insights }: { insights: AiInsight[] }) {
   return (
-    <div className="stat-card-glass rounded-2xl overflow-hidden h-full"
-      style={{ background: "rgba(15,15,22,0.95)", border: "1px solid rgba(139,92,246,0.25)" }}>
-      <div className="flex items-center gap-2.5 px-4 sm:px-5 py-3.5" style={{ borderBottom: "1px solid rgba(139,92,246,0.15)" }}>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+    <div className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet h-full">
+    <div className="glass rounded-2xl overflow-hidden h-full">
+      <div className="flex items-center gap-2.5 px-4 sm:px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="relative w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
           style={{ background: "rgba(255,255,255,0.92)", border: "1px solid rgba(139,92,246,0.3)" }}>
+          <span className="absolute inset-0 rounded-full animate-neon-pulse" style={{ background: "rgba(139,92,246,0.3)" }} />
           <CatIcon size={22} />
         </div>
         <div>
-          <div className="text-sm font-semibold tracking-wider" style={{ color: "#C4B5FD", fontFamily: "var(--font-bebas)", letterSpacing: "0.1em" }}>
+          <div className="text-sm font-semibold tracking-wider" style={{ color: "#C4B5FD", fontFamily: "var(--font-display)", letterSpacing: "0.1em" }}>
             KEDİ AI
           </div>
-          <div className="text-[10px] text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <div className="text-[10px] text-white/30" style={{ fontFamily: "var(--font-label)" }}>
             Otomatik Finans Analizi
           </div>
         </div>
@@ -34,7 +35,7 @@ export default function FinanceAiCard({ insights }: { insights: AiInsight[] }) {
 
       <div className="p-4 sm:p-5">
         {insights.length === 0 ? (
-          <p className="text-xs text-white/25 text-center py-6" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <p className="text-xs text-white/25 text-center py-6" style={{ fontFamily: "var(--font-label)" }}>
             Analiz için yeterli veri henüz yok
           </p>
         ) : (
@@ -45,7 +46,7 @@ export default function FinanceAiCard({ insights }: { insights: AiInsight[] }) {
                 transition={{ delay: i * 0.08, duration: 0.3 }}
                 className="flex items-start gap-2.5">
                 <span className="mt-0.5 flex-shrink-0" style={{ color: "#A78BFA" }}>{ICONS[insight.icon]}</span>
-                <p className="text-xs sm:text-sm text-white/75 leading-relaxed" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                <p className="text-xs sm:text-sm text-white/75 leading-relaxed" style={{ fontFamily: "var(--font-label)" }}>
                   {insight.text}
                 </p>
               </motion.div>
@@ -53,6 +54,7 @@ export default function FinanceAiCard({ insights }: { insights: AiInsight[] }) {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

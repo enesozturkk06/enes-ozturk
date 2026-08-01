@@ -16,6 +16,29 @@ import { tr } from "date-fns/locale";
 import { Award, Printer, Lock } from "lucide-react";
 import { triggerConfetti } from "@/app/components/shared/ConfettiEffect";
 
+const stagger = { animate: { transition: { staggerChildren: 0.06 } } };
+const fadeUp = {
+  initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
+
+function CountUp({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const duration = 600;
+    const start = performance.now();
+    const animate = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      setDisplay(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{display}</>;
+}
+
 /* ── Sertifika tanımları ─────────────────────────────────── */
 
 interface CertDef {
@@ -274,7 +297,7 @@ export default function SertifikaPage() {
   if (!student || loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-crimson border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 rounded-full animate-spin" style={{ border: "2px solid #8B5CF6", borderTopColor: "transparent" }} />
       </div>
     );
   }
@@ -305,47 +328,44 @@ export default function SertifikaPage() {
       )}
 
       {/* ── Sayfa içeriği ────────────────────────────────────── */}
-      <div className="max-w-4xl mx-auto space-y-6 no-print">
+      <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-4xl mx-auto space-y-6 no-print">
         <PageHeader title="Sertifikalarım" subtitle="Kazandığın başarı sertifikaları" accent="Başarı" />
 
         {/* Özet */}
-        <div className="flex items-center gap-4 p-4 border"
-          style={{ background: "rgba(139,92,246,0.04)", borderColor: "rgba(139,92,246,0.18)", borderRadius: 8 }}>
-          <Award size={24} style={{ color: "#A78BFA" }} />
-          <div>
-            <div className="text-xl font-bold" style={{ color: "#A78BFA", fontFamily: "var(--font-bebas)", letterSpacing: "0.08em" }}>
-              {earnedCount} / {certs.length} SERTİFİKA KAZANILDI
-            </div>
-            <div className="text-xs text-white/40" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-              {completedLessons} ders · {xp.toLocaleString()} XP
+        <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+          <div className="glass-strong relative rounded-2xl p-4 flex items-center gap-4">
+            <Award size={24} style={{ color: "#A78BFA" }} />
+            <div>
+              <div className="text-xl" style={{ color: "#A78BFA", fontFamily: "var(--font-display)", letterSpacing: "0.08em" }}>
+                <CountUp value={earnedCount} /> / {certs.length} SERTİFİKA KAZANILDI
+              </div>
+              <div className="text-xs text-white/40" style={{ fontFamily: "var(--font-label)" }}>
+                {completedLessons} ders · {xp.toLocaleString()} XP
+              </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Sertifika kartları */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {certs.map(({ def, earned, earnedText }, i) => (
             <motion.div
               key={def.id}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06 }}
+              initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+              transition={{ delay: i * 0.06, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              whileHover={earned ? { y: -3 } : undefined}
               onClick={() => handleCardClick(def, earned)}
-              className={`relative p-5 border transition-all duration-300 ${earned ? "cursor-pointer" : "opacity-50 cursor-default"}`}
+              className={`relative rounded-2xl overflow-hidden ${earned ? "glass-strong cursor-pointer" : "glass opacity-50 cursor-default"} p-5`}
               style={{
-                background:   earned ? `linear-gradient(135deg, ${def.glow.replace("0.4","0.06")}, rgba(0,0,0,0))` : "rgba(255,255,255,0.02)",
-                borderColor:  earned ? `${def.color}50` : "rgba(255,255,255,0.07)",
-                boxShadow:    earned ? `0 0 24px ${def.glow.replace("0.4","0.15")}` : "none",
-                borderRadius: 10,
+                boxShadow: earned ? `0 0 24px ${def.glow.replace("0.4","0.15")}` : "none",
+                transition: "box-shadow 0.25s",
               }}
             >
               {/* Earned shine strip */}
               {earned && (
-                <div style={{
-                  position: "absolute", top: 0, left: 0, right: 0, height: 2,
-                  background: `linear-gradient(90deg, transparent, ${def.color}, transparent)`,
-                  borderRadius: "10px 10px 0 0",
-                }} />
+                <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
+                  style={{ background: `linear-gradient(90deg, transparent, ${def.color}, transparent)` }} />
               )}
 
               {/* Lock overlay */}
@@ -360,20 +380,20 @@ export default function SertifikaPage() {
                   {def.icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-base font-bold" style={{
+                  <div className="text-base" style={{
                     color: earned ? def.color : "rgba(255,255,255,0.3)",
-                    fontFamily: "var(--font-bebas)", letterSpacing: "0.06em",
+                    fontFamily: "var(--font-display)", letterSpacing: "0.06em",
                   }}>
                     {def.title}
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-barlow-condensed)" }}>
+                  <div className="text-xs mt-0.5 text-white/40" style={{ fontFamily: "var(--font-label)" }}>
                     {def.subtitle}
                   </div>
                   {earned && (
                     <div className="mt-2 flex items-center gap-2">
-                      <span className="text-[10px] px-2 py-0.5" style={{
-                        background: `${def.color}20`, border: `1px solid ${def.color}40`,
-                        color: def.color, borderRadius: 12, fontFamily: "var(--font-barlow-condensed)",
+                      <span className="text-[10px] px-2 py-0.5 rounded-full" style={{
+                        background: `${def.color}20`,
+                        color: def.color, fontFamily: "var(--font-label)",
                       }}>
                         {earnedText}
                       </span>
@@ -386,13 +406,12 @@ export default function SertifikaPage() {
               {earned && (
                 <button
                   onClick={e => { e.stopPropagation(); handlePrint(def); }}
-                  className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold transition-all"
+                  className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-lg transition-transform hover:scale-[1.02] active:scale-95"
                   style={{
-                    background: `${def.color}15`,
-                    border: `1px solid ${def.color}40`,
+                    background: `${def.color}18`,
+                    border: `1px solid ${def.color}45`,
                     color: def.color,
-                    borderRadius: 6,
-                    fontFamily: "var(--font-barlow-condensed)",
+                    fontFamily: "var(--font-label)",
                     letterSpacing: "0.06em",
                   }}
                 >
@@ -401,12 +420,12 @@ export default function SertifikaPage() {
               )}
             </motion.div>
           ))}
-        </div>
+        </motion.div>
 
         {/* Sertifika önizleme */}
         {selected && (
-          <div className="mt-8">
-            <div className="text-xs text-white/30 uppercase tracking-widest mb-4 text-center" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+          <motion.div variants={fadeUp} className="mt-8">
+            <div className="text-xs text-white/30 uppercase tracking-widest mb-4 text-center" style={{ fontFamily: "var(--font-label)" }}>
               Sertifika Önizleme
             </div>
             <div className="overflow-x-auto rounded-lg">
@@ -419,15 +438,15 @@ export default function SertifikaPage() {
                 />
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         <div className="pb-20">
-          <p className="text-center text-xs text-white/20" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            Sertifikanı basmak için "Yazdır / PDF Kaydet" butonuna bas
+          <p className="text-center text-xs text-white/20" style={{ fontFamily: "var(--font-label)" }}>
+            Sertifikanı basmak için &quot;Yazdır / PDF Kaydet&quot; butonuna bas
           </p>
         </div>
-      </div>
+      </motion.div>
     </>
   );
 }

@@ -81,12 +81,10 @@ export default function FinanceQuickActions({
     <div className="flex flex-wrap items-center gap-2">
       {actions.map(a => (
         <button key={a.label} onClick={a.onClick}
-          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wide rounded-lg transition-all"
+          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wide rounded-lg transition-transform hover:scale-[1.03] active:scale-95 ${a.primary ? "gradient-animated gradient-slow gradient-violet-pink-orange" : "glass"}`}
           style={{
-            background: a.primary ? "linear-gradient(135deg,#8B5CF6,#A855F7)" : "rgba(255,255,255,0.04)",
-            border: a.primary ? "none" : "1px solid var(--color-iron)",
             color: a.primary ? "#fff" : a.color,
-            fontFamily: "var(--font-barlow-condensed)",
+            fontFamily: "var(--font-label)",
           }}>
           {a.icon}
           <span className="hidden sm:inline">{a.label}</span>

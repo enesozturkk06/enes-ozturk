@@ -54,11 +54,11 @@ export default function LandingBackground() {
         backgroundSize: "40px 40px",
       }} />
 
-      {/* Büyük glow'lar — will-change: transform ile GPU katmanı */}
+      {/* Büyük glow'lar — sadeleştirildi (3→2), will-change: transform ile GPU katmanı */}
       <motion.div className="absolute rounded-full"
         style={{
           width: 700, height: 700, left: "-20%", top: "-15%",
-          background: "radial-gradient(circle, rgba(139,92,246,0.18) 0%, rgba(139,92,246,0.04) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(139,92,246,0.14) 0%, rgba(139,92,246,0.03) 50%, transparent 70%)",
           filter: "blur(60px)",
           willChange: "transform",
         }}
@@ -68,28 +68,17 @@ export default function LandingBackground() {
       <motion.div className="absolute rounded-full"
         style={{
           width: 600, height: 600, right: "-18%", top: "20%",
-          background: "radial-gradient(circle, rgba(217,70,239,0.15) 0%, rgba(217,70,239,0.03) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(217,70,239,0.11) 0%, rgba(217,70,239,0.02) 50%, transparent 70%)",
           filter: "blur(70px)",
           willChange: "transform",
         }}
         animate={{ x: [0, -60, 30, 0], y: [0, 50, -30, 0] }}
         transition={{ duration: 22, repeat: Infinity, ease: "easeInOut", delay: 2 }}
       />
-      <motion.div className="absolute rounded-full"
-        style={{
-          width: 800, height: 400, left: "15%", bottom: "-18%",
-          background: "radial-gradient(ellipse, rgba(139,92,246,0.10) 0%, transparent 65%)",
-          filter: "blur(80px)",
-          willChange: "transform",
-        }}
-        animate={{ x: [0, 40, -25, 0] }}
-        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut", delay: 4 }}
-      />
 
-      {/* Dönen altıgenler — 3 adet (5'ten azaltıldı), will-change: transform */}
+      {/* Dönen altıgenler — 2 adet (3'ten sadeleştirildi), will-change: transform */}
       {[
         { size: 320, left: "-50px", top: "8%",   dur: 65, dir:  1 },
-        { size: 190, left: "7%",    bottom: "22%", dur: 38, dir:  1 },
         { size: 155, right: "10%",  bottom: "28%", dur: 28, dir: -1 },
       ].map((h, i) => (
         <motion.div key={i} className="absolute" style={{ width: h.size, height: h.size, willChange: "transform", ...h }}>

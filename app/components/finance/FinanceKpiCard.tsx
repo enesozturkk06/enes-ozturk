@@ -4,10 +4,13 @@ import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
+import CountUpNumber from "./CountUpNumber";
 
 export interface FinanceKpiCardProps {
   label: string;
-  value: string;
+  value: number;
+  prefix?: string;
+  suffix?: string;
   sub: string;
   deltaLabel: string;
   deltaPositive: boolean | null;
@@ -18,7 +21,7 @@ export interface FinanceKpiCardProps {
 }
 
 export default function FinanceKpiCard({
-  label, value, sub, deltaLabel, deltaPositive, icon, color, sparkline, index = 0,
+  label, value, prefix = "", suffix = "", sub, deltaLabel, deltaPositive, icon, color, sparkline, index = 0,
 }: FinanceKpiCardProps) {
   const reduced = useReducedMotion();
   const [hover, setHover] = useState(false);
@@ -30,48 +33,38 @@ export default function FinanceKpiCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: "easeOut", delay: index * 0.05 }}
+      initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
+      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: index * 0.05 }}
       whileHover={reduced ? undefined : { y: -3, scale: 1.015 }}
-      className="relative overflow-hidden stat-card-glass"
-      style={{
-        background: "rgba(15,15,22,0.95)",
-        border: "1px solid var(--color-iron)",
-        borderRadius: 16,
-        boxShadow: hover ? `0 0 28px ${color}22` : "none",
-        transition: "box-shadow 0.25s",
-        transform: "translateZ(0)",
-        WebkitTransform: "translateZ(0)",
-        isolation: "isolate",
-      }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet"
     >
-      <div className="absolute top-0 left-0 right-0 h-px"
-        style={{ background: `linear-gradient(90deg, transparent, ${color}70, transparent)` }} />
+      <div className="glass relative rounded-2xl h-full"
+        style={{ boxShadow: hover ? `0 0 28px ${color}30` : "none", transition: "box-shadow 0.25s" }}>
 
       <div className="p-4 sm:p-5">
         <div className="flex items-start justify-between mb-2">
           <span className="text-[10px] sm:text-xs text-white/35 tracking-widest uppercase leading-tight"
-            style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            style={{ fontFamily: "var(--font-label)" }}>
             {label}
           </span>
           <span style={{ color }} className="flex-shrink-0">{icon}</span>
         </div>
 
-        <div className="text-2xl sm:text-3xl font-display leading-tight" style={{ fontFamily: "var(--font-bebas)", color }}>
-          {value}
+        <div className="text-2xl sm:text-3xl leading-tight" style={{ fontFamily: "var(--font-display)", color }}>
+          <CountUpNumber value={value} prefix={prefix} suffix={suffix} />
         </div>
 
         <div className="flex items-center justify-between mt-1.5 gap-2">
           <div className="min-w-0">
-            <p className="text-[10px] sm:text-xs text-white/28 leading-tight truncate" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <p className="text-[10px] sm:text-xs text-white/28 leading-tight truncate" style={{ fontFamily: "var(--font-label)" }}>
               {sub}
             </p>
             <div className="flex items-center gap-1 mt-1">
               <DeltaIcon size={11} style={{ color: deltaColor, flexShrink: 0 }} />
-              <span className="text-[10px] font-semibold" style={{ color: deltaColor, fontFamily: "var(--font-barlow-condensed)" }}>
+              <span className="text-[10px] font-semibold" style={{ color: deltaColor, fontFamily: "var(--font-label)" }}>
                 {deltaLabel}
               </span>
             </div>
@@ -94,6 +87,7 @@ export default function FinanceKpiCard({
             </div>
           )}
         </div>
+      </div>
       </div>
     </motion.div>
   );

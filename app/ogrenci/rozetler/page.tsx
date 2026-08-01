@@ -7,136 +7,148 @@ import { getStudentAppointments, getLessonRecords, getStudentXPAdjustments } fro
 import type { Appointment, LessonRecord, XPAdjustment } from "@/lib/types";
 import { sumManualXP } from "@/lib/xp";
 import {
-  computeBadges, RARITY_LABELS, RARITY_COLORS,
+  computeBadges, RARITY_LABELS,
   type Badge, type Rarity,
 } from "@/lib/badges";
 import { PageHeader } from "@/app/components/ui";
 import { Lock, Award } from "lucide-react";
 import { triggerConfetti } from "@/app/components/shared/ConfettiEffect";
 
-/* ── Yardımcı ─────────────────────────────────────────────────────── */
-
-const rarityBorderStyle: Record<Rarity, string> = {
-  common:    "rgba(167,139,250,0.2)",
-  rare:      "rgba(139,92,246,0.3)",
-  epic:      "rgba(124,58,237,0.4)",
-  legendary: "rgba(91,33,182,0.5)",
+const stagger = { animate: { transition: { staggerChildren: 0.05 } } };
+const fadeUp = {
+  initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
 };
+
+/** Görsel nadirlik kademesi — madalya esintili (Bronz/Gümüş/Altın/Platin) renk ataması.
+ *  Gerçek rarity etiketleri (Yaygın/Nadir/Destansı/Efsanevi, lib/badges.ts) değişmiyor,
+ *  bu sadece ek bir görsel katman. legendary tek "akan gradient" alan kademe. */
+const RARITY_TIER_COLOR: Record<Rarity, string> = {
+  common:    "#C08552",
+  rare:      "#94A3B8",
+  epic:      "var(--color-achievement)",
+  legendary: "#C4B5FD",
+};
+
+function CountUp({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const duration = 600;
+    const start = performance.now();
+    const animate = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      setDisplay(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{display}</>;
+}
+
+/* ── Yardımcı ─────────────────────────────────────────────────────── */
 
 function BadgeCard({ badge, index }: { badge: Badge; index: number }) {
   const [hover, setHover] = useState(false);
+  const tierColor = RARITY_TIER_COLOR[badge.rarity];
+  const isLegendary = badge.rarity === "legendary";
+  const pct = badge.progressMax > 0 ? Math.round((badge.progressCurrent / badge.progressMax) * 100) : 0;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.045, duration: 0.3, ease: "easeOut" }}
+      variants={fadeUp}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className="relative flex flex-col items-center text-center p-5 border transition-all duration-300 select-none"
-      style={{
-        background:   badge.earned
-          ? badge.bgColor
-          : "rgba(255,255,255,0.02)",
-        borderColor:  badge.earned
-          ? rarityBorderStyle[badge.rarity]
-          : "rgba(255,255,255,0.06)",
-        boxShadow:    badge.earned && hover
-          ? `0 0 24px ${badge.color}30, 0 0 8px ${badge.color}15`
-          : badge.earned
-          ? `0 0 12px ${badge.color}20`
-          : "none",
-      }}
+      whileHover={{ y: -3 }}
+      className={`relative rounded-2xl overflow-hidden ${
+        badge.earned && isLegendary ? "p-[1px] gradient-animated gradient-slow gradient-violet-pink-orange" : "p-px"
+      }`}
+      style={{ background: badge.earned && !isLegendary ? `${tierColor}40` : "rgba(255,255,255,0.06)" }}
     >
-      {/* Rarity şerit */}
-      {badge.earned && (
-        <div
-          className="absolute top-0 left-0 right-0 h-0.5"
-          style={{ background: `linear-gradient(90deg, transparent, ${badge.color}, transparent)` }}
-        />
-      )}
-
-      {/* Rozet ikonu */}
       <div
-        className="relative w-14 h-14 flex items-center justify-center text-3xl mb-3 rounded-full transition-transform duration-300"
+        className={`relative flex flex-col items-center text-center p-5 h-full select-none ${badge.earned ? "glass-strong" : "glass"}`}
         style={{
-          background:  badge.earned ? badge.bgColor : "rgba(255,255,255,0.04)",
-          border:      `1px solid ${badge.earned ? badge.color + "30" : "rgba(255,255,255,0.06)"}`,
-          transform:   hover && badge.earned ? "scale(1.1)" : "scale(1)",
-          filter:      badge.earned ? "none" : "grayscale(1) brightness(0.4)",
+          boxShadow: badge.earned && hover ? `0 0 28px ${badge.color}35` : "none",
+          transition: "box-shadow 0.25s",
         }}
       >
-        {badge.icon}
-        {!badge.earned && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">
-            <Lock size={14} className="text-white/25" />
+        {/* Rarity şerit */}
+        {badge.earned && (
+          <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
+            style={{ background: `linear-gradient(90deg, transparent, ${badge.color}, transparent)` }} />
+        )}
+
+        {/* Rozet ikonu */}
+        <div
+          className="relative w-14 h-14 flex items-center justify-center text-3xl mb-3 rounded-full transition-transform duration-300"
+          style={{
+            background:  badge.earned ? badge.bgColor : "rgba(255,255,255,0.04)",
+            border:      `1px solid ${badge.earned ? badge.color + "40" : "rgba(255,255,255,0.08)"}`,
+            transform:   hover && badge.earned ? "scale(1.12)" : "scale(1)",
+            filter:      badge.earned ? "none" : "grayscale(1) brightness(0.4)",
+            boxShadow:   badge.earned ? `0 0 16px ${badge.color}30` : "none",
+          }}
+        >
+          {badge.icon}
+          {!badge.earned && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">
+              <Lock size={14} className="text-white/25" />
+            </div>
+          )}
+        </div>
+
+        {/* Rarity çipi — madalya esintili tier rengi, gerçek etiket metni aynı */}
+        <span
+          className="text-[9px] tracking-[0.3em] uppercase font-semibold mb-1.5 px-2 py-0.5 rounded-full"
+          style={{
+            color:      badge.earned ? tierColor : "rgba(255,255,255,0.15)",
+            background: badge.earned ? `${isLegendary ? "#8B5CF6" : tierColor}1f` : "rgba(255,255,255,0.04)",
+            fontFamily: "var(--font-label)",
+          }}
+        >
+          {RARITY_LABELS[badge.rarity]}
+        </span>
+
+        {/* İsim */}
+        <h3 className="text-sm font-semibold mb-1 transition-colors duration-200"
+          style={{ color: badge.earned ? "#fff" : "rgba(255,255,255,0.25)", fontFamily: "var(--font-label)", letterSpacing: "0.05em" }}>
+          {badge.name}
+        </h3>
+
+        {/* Açıklama */}
+        <p className="text-[10px] leading-relaxed"
+          style={{ color: badge.earned ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)", fontFamily: "var(--font-label)" }}>
+          {badge.description}
+        </p>
+
+        {/* Progress bar (kazanılmamış, ilerleme varsa) */}
+        {!badge.earned && badge.progressMax > 1 && (
+          <div className="w-full mt-3">
+            <div className="flex justify-between text-[9px] mb-1" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "var(--font-label)" }}>
+              <span>{badge.progressCurrent}/{badge.progressMax}</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <motion.div
+                className="h-full rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 0.7, ease: "easeOut", delay: index * 0.03 }}
+                style={{ background: `linear-gradient(90deg, ${badge.color}60, ${badge.color}) ` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Kazanıldı damgası */}
+        {badge.earned && (
+          <div className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full"
+            style={{ background: `${badge.color}25`, border: `1px solid ${badge.color}45` }}>
+            <Award size={10} style={{ color: badge.color }} />
           </div>
         )}
       </div>
-
-      {/* Rarity badge */}
-      <span
-        className="text-[9px] tracking-[0.3em] uppercase font-semibold mb-1.5 px-2 py-0.5 rounded-sm"
-        style={{
-          color:       badge.earned ? RARITY_COLORS[badge.rarity] : "rgba(255,255,255,0.15)",
-          background:  badge.earned ? `${RARITY_COLORS[badge.rarity]}12` : "rgba(255,255,255,0.04)",
-          fontFamily:  "var(--font-barlow-condensed)",
-        }}
-      >
-        {RARITY_LABELS[badge.rarity]}
-      </span>
-
-      {/* İsim */}
-      <h3
-        className="text-sm font-semibold mb-1 transition-colors duration-200"
-        style={{
-          color:      badge.earned ? "#fff" : "rgba(255,255,255,0.2)",
-          fontFamily: "var(--font-barlow-condensed)",
-          letterSpacing: "0.05em",
-        }}
-      >
-        {badge.name}
-      </h3>
-
-      {/* Açıklama */}
-      <p
-        className="text-[10px] leading-relaxed"
-        style={{
-          color:      badge.earned ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.12)",
-          fontFamily: "var(--font-inter)",
-        }}
-      >
-        {badge.description}
-      </p>
-
-      {/* Progress bar (kazanılmamış, ilerleme varsa) */}
-      {!badge.earned && badge.progressMax > 1 && (
-        <div className="w-full mt-3">
-          <div className="flex justify-between text-[9px] mb-1" style={{ color: "rgba(255,255,255,0.2)", fontFamily: "var(--font-barlow-condensed)" }}>
-            <span>{badge.progressCurrent}/{badge.progressMax}</span>
-            <span>{Math.round((badge.progressCurrent / badge.progressMax) * 100)}%</span>
-          </div>
-          <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{
-                width:      `${Math.round((badge.progressCurrent / badge.progressMax) * 100)}%`,
-                background: `linear-gradient(90deg, ${badge.color}60, ${badge.color}90)`,
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Kazanıldı damgası */}
-      {badge.earned && (
-        <div
-          className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full text-[9px]"
-          style={{ background: `${badge.color}20`, border: `1px solid ${badge.color}40` }}
-        >
-          <Award size={10} style={{ color: badge.color }} />
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -206,109 +218,91 @@ export default function RozetlerPage() {
     return order[a.rarity] - order[b.rarity];
   });
 
+  const collectionPct = badges.length > 0 ? Math.round((earned.length / badges.length) * 100) : 0;
+  const FILTERS: ["all" | "earned" | "locked", string][] = [
+    ["all", "Tümü"], ["earned", `Kazanılan (${earned.length})`], ["locked", `Kilitli (${locked.length})`],
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-4xl mx-auto space-y-6">
       <PageHeader title="Rozetlerim" subtitle="Başarılarınla kazandığın ödüller" accent="Koleksiyon" />
 
-      {/* Özet stat bar */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Özet stat kartları */}
+      <motion.div variants={fadeUp} className="grid grid-cols-3 gap-3">
         {[
-          { label: "Kazanılan",  value: earned.length, color: "#8B5CF6" },
-          { label: "Toplam",     value: badges.length, color: "rgba(255,255,255,0.4)" },
-          { label: "Kilitli",    value: locked.length, color: "rgba(255,255,255,0.2)" },
+          { label: "Kazanılan", value: earned.length, color: "#8B5CF6" },
+          { label: "Toplam",    value: badges.length, color: "#60A5FA" },
+          { label: "Kilitli",   value: locked.length, color: "rgba(255,255,255,0.4)" },
         ].map(s => (
-          <div
-            key={s.label}
-            className="p-4 border text-center"
-            style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(139,92,246,0.12)" }}
-          >
-            <div
-              className="text-3xl font-bold leading-none"
-              style={{ color: s.color, fontFamily: "var(--font-bebas)" }}
-            >
-              {s.value}
-            </div>
-            <div
-              className="text-[10px] mt-1 tracking-widest uppercase"
-              style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-barlow-condensed)" }}
-            >
-              {s.label}
+          <div key={s.label} className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet">
+            <div className="glass relative rounded-2xl p-4 text-center">
+              <div className="text-3xl leading-none" style={{ color: s.color, fontFamily: "var(--font-display)" }}>
+                <CountUp value={s.value} />
+              </div>
+              <div className="text-[10px] mt-1 tracking-widest uppercase text-white/30" style={{ fontFamily: "var(--font-label)" }}>
+                {s.label}
+              </div>
             </div>
           </div>
         ))}
-      </div>
+      </motion.div>
 
       {/* İlerleme çubuğu */}
-      <div
-        className="p-4 border"
-        style={{ background: "rgba(139,92,246,0.05)", borderColor: "rgba(139,92,246,0.15)" }}
-      >
-        <div className="flex justify-between text-xs mb-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-          <span style={{ color: "#8B5CF6" }}>Koleksiyon İlerlemesi</span>
-          <span style={{ color: "rgba(255,255,255,0.35)" }}>
-            {earned.length} / {badges.length} rozet
-          </span>
+      <motion.div variants={fadeUp} className="glass-strong rounded-2xl p-4">
+        <div className="flex justify-between text-xs mb-2" style={{ fontFamily: "var(--font-label)" }}>
+          <span style={{ color: "#A78BFA" }}>Koleksiyon İlerlemesi</span>
+          <span className="text-white/35">{earned.length} / {badges.length} rozet</span>
         </div>
-        <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
           <motion.div
-            className="h-full rounded-full"
+            className="h-full rounded-full gradient-animated gradient-violet-pink-orange"
             initial={{ width: 0 }}
-            animate={{ width: `${Math.round((earned.length / badges.length) * 100)}%` }}
+            animate={{ width: `${collectionPct}%` }}
             transition={{ duration: 0.9, ease: "easeOut", delay: 0.3 }}
-            style={{ background: "linear-gradient(90deg, #7C3AED, #A78BFA, #8B5CF6)" }}
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Filtre butonları */}
-      <div className="flex gap-2 flex-wrap">
-        {(["all", "earned", "locked"] as const).map(f => (
+      <motion.div variants={fadeUp} className="flex items-center gap-1.5 glass rounded-xl p-1 w-fit">
+        {FILTERS.map(([f, label]) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className="px-4 py-1.5 text-xs tracking-widest uppercase transition-all duration-200"
-            style={{
-              fontFamily:  "var(--font-barlow-condensed)",
-              background:  filter === f ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
-              border:      `1px solid ${filter === f ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
-              color:       filter === f ? "#A78BFA" : "rgba(255,255,255,0.3)",
-            }}
+            className="relative px-4 py-1.5 text-xs tracking-widest uppercase rounded-lg transition-colors"
+            style={{ fontFamily: "var(--font-label)", color: filter === f ? "#fff" : "rgba(255,255,255,0.4)" }}
           >
-            {f === "all" ? "Tümü" : f === "earned" ? `Kazanılan (${earned.length})` : `Kilitli (${locked.length})`}
+            {filter === f && (
+              <motion.div layoutId="rozetler-filter-pill" className="absolute inset-0 rounded-lg gradient-animated gradient-slow gradient-violet-pink-orange -z-10" />
+            )}
+            {label}
           </button>
         ))}
-      </div>
+      </motion.div>
 
       {/* Rozet ızgarası */}
       <AnimatePresence mode="popLayout">
         {sorted.length === 0 ? (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-16"
-          >
+          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass text-center py-16 rounded-2xl">
             <div className="text-5xl mb-4">🔒</div>
-            <p className="text-white/20 text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+            <p className="text-white/25 text-sm" style={{ fontFamily: "var(--font-label)" }}>
               Bu kategoride rozet yok
             </p>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <motion.div variants={stagger} initial="initial" animate="animate"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {sorted.map((badge, i) => (
               <BadgeCard key={badge.id} badge={badge} index={i} />
             ))}
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
       {/* Dipnot */}
-      <p
-        className="text-center text-[10px] pb-2"
-        style={{ color: "rgba(255,255,255,0.15)", fontFamily: "var(--font-barlow-condensed)" }}
-      >
+      <p className="text-center text-[10px] pb-2 text-white/20" style={{ fontFamily: "var(--font-label)" }}>
         Rozetler ders geçmişin ve aktivitene göre otomatik güncellenir
       </p>
-    </div>
+    </motion.div>
   );
 }

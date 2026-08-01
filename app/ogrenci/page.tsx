@@ -1,16 +1,24 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, getStudentNotifications,
   getPendingInvites, respondToInvite, cancelAppointment, createAdminNotification,
   checkPackageExpiryNotification, checkPackageWarningNotification,
+  getStudentXPAdjustments, getStudentMissionCompletions, getKediMissions,
 } from "@/lib/db";
-import type { Appointment, LessonRecord, Notification, PendingInvite } from "@/lib/types";
-import { StatCard, Card, Badge, ProgressBar, PageHeader } from "@/app/components/ui";
+import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, StudentMission } from "@/lib/types";
+import { StatCard, Badge, ProgressBar } from "@/app/components/ui";
 import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT, PACKAGE_EXPIRED_LESSONS_NOTE } from "@/lib/constants";
 import { getDaysRemaining, getPackageUrgency, isPackageExpired } from "@/lib/packageDuration";
+import { computeFullXP, getCurrentSeason, sumManualXP } from "@/lib/xp";
+import { computeBadges } from "@/lib/badges";
+import { computeStudentMissions, getWeekKey, type MissionComputeInput } from "@/lib/kediTasks";
+import ProfileHeroCard from "@/app/components/dashboard/ProfileHeroCard";
+import BadgeShowcase from "@/app/components/dashboard/BadgeShowcase";
+import DailyMissionsCard from "@/app/components/dashboard/DailyMissionsCard";
+import ActivityTimeline, { type TimelineItem } from "@/app/components/dashboard/ActivityTimeline";
 import {
   Calendar, Clock, TrendingUp, BookOpen, Bell,
   CheckCircle, XCircle, ChevronRight, Users, Zap, User,
@@ -22,8 +30,32 @@ import { isAndroidDevice } from "@/lib/device";
 import { format, parseISO, isFuture, differenceInHours } from "date-fns";
 import { tr } from "date-fns/locale";
 
+/** Kedi AI'ın son önerdiği plan tarihi — BlackCatAI.tsx'teki loadAIPlan ile aynı
+ *  localStorage anahtarlarını salt-okunur okur (görev motoru girdisi için). */
+function loadAIPlan(kind: "training" | "nutrition"): { date: string; summary: string } | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem(`kedi_ai_last_${kind}`);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.date === "string" && typeof parsed.summary === "string") return parsed;
+  } catch { /* sessizce geç */ }
+  return undefined;
+}
+
 const stagger = { animate: { transition: { staggerChildren: 0.05 } } };
 const fadeUp  = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" as const } } };
+
+/** Bu sayfaya özel glass kart wrapper'ı — paylaşılan app/components/ui Card'ın
+ *  yerine geçer (o component 16+ sayfada kullanılıyor, burada değiştirilmiyor). */
+function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`glass-strong relative rounded-2xl overflow-hidden w-full ${className}`}
+      style={{ borderColor: "rgba(139,92,246,0.14)" }}>
+      {children}
+    </div>
+  );
+}
 
 export default function OgrenciDashboard() {
   const { student } = useAuth();
@@ -31,6 +63,9 @@ export default function OgrenciDashboard() {
   const [records, setRecords]             = useState<LessonRecord[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [xpAdjustments, setXpAdjustments] = useState<XPAdjustment[]>([]);
+  const [missionCompletions, setMissionCompletions] = useState<Set<string>>(new Set());
+  const [customMissions, setCustomMissions] = useState<KediMission[]>([]);
   const [loading, setLoading]             = useState(true);
   const [inviteLoading, setInviteLoading] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget]   = useState<Appointment | null>(null);
@@ -46,16 +81,22 @@ export default function OgrenciDashboard() {
     if (!student) return;
     await checkPackageExpiryNotification(student).catch(() => {});
     await checkPackageWarningNotification(student).catch(() => {});
-    const [apts, recs, notifs, invites] = await Promise.all([
+    const [apts, recs, notifs, invites, xpAdjs, completions, missions] = await Promise.all([
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
       getStudentNotifications(student.id),
       getPendingInvites(student.id),
+      getStudentXPAdjustments(student.id).catch(() => []),
+      getStudentMissionCompletions(student.id).catch(() => new Set<string>()),
+      getKediMissions(student.id).catch(() => []),
     ]);
     setAppointments(apts);
     setRecords(recs);
     setNotifications(notifs);
     setPendingInvites(invites);
+    setXpAdjustments(xpAdjs);
+    setMissionCompletions(completions);
+    setCustomMissions(missions);
     setLoading(false);
   };
 
@@ -103,7 +144,7 @@ export default function OgrenciDashboard() {
   if (!student || loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-crimson border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 rounded-full animate-spin" style={{ border: "2px solid #8B5CF6", borderTopColor: "transparent" }} />
       </div>
     );
   }
@@ -116,18 +157,52 @@ export default function OgrenciDashboard() {
   // pkg.lessonCount = paket şablonundaki varsayılan — sabit olduğu için KULLANILMAZ
   const totalLessons = student.totalLessons > 0 ? student.totalLessons : (pkg?.lessonCount ?? 1);
   const progressPct  = Math.round((student.completedLessons / totalLessons) * 100);
+  const packageLabel = student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name ?? ""} Paketi`;
+
+  // ── XP / Rozet / Görev — salt-okunur türetilmiş değerler ──────────
+  // Aynı formül BlackCatAI.tsx'te ve app/ogrenci/seviye|rozetler sayfalarında
+  // kullanılıyor; burada SADECE görüntüleniyor, hiçbir XP/DB yazma işlemi yok.
+  const season      = getCurrentSeason();
+  const xpSummary   = computeFullXP(student.completedLessons, appointments, records, season, xpAdjustments);
+  const lifetimeXP  = xpSummary.lifetimeResult;
+  const manualXP    = sumManualXP(xpAdjustments);
+  const extraFlags: Record<string, boolean> = {};
+  if (typeof window !== "undefined") {
+    extraFlags["shadow-fan"] = localStorage.getItem("kedi_ai_used") === "1" || localStorage.getItem("kara_ai_used") === "1";
+  }
+  const badges      = computeBadges(student, appointments, records, extraFlags, manualXP);
+  const missionInput: MissionComputeInput = {
+    appointments, records,
+    totalXP:          lifetimeXP.breakdown.total,
+    lastTrainingPlan: loadAIPlan("training"),
+    lastNutritionPlan:loadAIPlan("nutrition"),
+  };
+  const missions: StudentMission[] = computeStudentMissions(missionInput, missionCompletions, getWeekKey(), customMissions);
+
+  // ── Son Aktiviteler — ders notu + bildirim + pozitif XP kaydı birleşimi ──
+  const timelineItems: TimelineItem[] = [
+    ...records.map(r => ({
+      id: `record-${r.id}`, type: "record" as const, date: r.createdAt,
+      title: `Ders notu eklendi — Genel ${r.overall}/10`,
+      subtitle: (() => { try { return format(parseISO(r.date), "dd MMMM yyyy", { locale: tr }); } catch { return undefined; } })(),
+    })),
+    ...notifications.map(n => ({
+      id: `notif-${n.id}`, type: "notification" as const, date: n.createdAt,
+      title: n.title, subtitle: n.message,
+    })),
+    ...xpAdjustments.filter(x => x.amount > 0).map(x => ({
+      id: `xp-${x.id}`, type: "xp" as const, date: x.createdAt,
+      title: `+${x.amount} XP — ${x.reason}`, subtitle: x.note || undefined,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
 
   return (
     <>
-    <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5">
+    <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5 pb-28">
 
-      {/* Header */}
+      {/* Hero + Profil Kartı + XP Bar */}
       <motion.div variants={fadeUp}>
-        <PageHeader
-          title={`Hoş Geldin, ${student.fullName.split(" ")[0]}!`}
-          subtitle={`${student.code} · ${pkg?.name ?? ""} Paketi`}
-          accent="Öğrenci Paneli"
-        />
+        <ProfileHeroCard student={student} xpResult={lifetimeXP} packageLabel={packageLabel} />
       </motion.div>
 
       {/* Push bildirim izni */}
@@ -143,11 +218,10 @@ export default function OgrenciDashboard() {
       {/* Bekleyen Düet Davetleri */}
       {pendingInvites.length > 0 && (
         <motion.div variants={fadeUp}>
-          <div className="rounded-2xl overflow-hidden"
-            style={{ background:"rgba(139,92,246,0.06)", border:"1px solid rgba(139,92,246,0.25)" }}>
+          <div className="glass rounded-2xl overflow-hidden" style={{ borderColor:"rgba(139,92,246,0.25)" }}>
             <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor:"rgba(139,92,246,0.15)" }}>
               <Users size={15} style={{ color:"#8B5CF6" }} />
-              <span className="text-sm font-semibold" style={{ color:"#8B5CF6", fontFamily:"var(--font-barlow-condensed)" }}>
+              <span className="text-sm font-semibold" style={{ color:"#8B5CF6", fontFamily:"var(--font-label)" }}>
                 Bekleyen Düet Davetleri ({pendingInvites.length})
               </span>
             </div>
@@ -156,11 +230,11 @@ export default function OgrenciDashboard() {
                 className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 border-t"
                 style={{ borderColor:"rgba(139,92,246,0.1)" }}>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white mb-0.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <div className="text-sm font-semibold text-white mb-0.5" style={{ fontFamily:"var(--font-label)" }}>
                     <span style={{ color:"#A855F7" }}>{inv.creatorName}</span>
                     {" "}düet ders davet etti
                   </div>
-                  <div className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+                  <div className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
                     {format(parseISO(inv.date), "dd MMMM yyyy (EEEE)", { locale: tr })} · {inv.startTime} – {inv.endTime}
                   </div>
                 </div>
@@ -168,14 +242,14 @@ export default function OgrenciDashboard() {
                   <button onClick={() => handleInviteResponse(inv, true)}
                     disabled={inviteLoading === inv.appointmentStudentId}
                     className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl disabled:opacity-50 transition-all"
-                    style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.3)", color:"#22c55e", fontFamily:"var(--font-barlow-condensed)" }}>
+                    style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.3)", color:"#22c55e", fontFamily:"var(--font-label)" }}>
                     <CheckCircle size={13}/>
                     {inviteLoading === inv.appointmentStudentId ? "..." : "Onayla"}
                   </button>
                   <button onClick={() => handleInviteResponse(inv, false)}
                     disabled={inviteLoading === inv.appointmentStudentId}
                     className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl disabled:opacity-50 transition-all"
-                    style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", color:"#ef4444", fontFamily:"var(--font-barlow-condensed)" }}>
+                    style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", color:"#ef4444", fontFamily:"var(--font-label)" }}>
                     <XCircle size={13}/>Reddet
                   </button>
                 </div>
@@ -189,15 +263,15 @@ export default function OgrenciDashboard() {
       {unreadNotifs > 0 && (
         <motion.div variants={fadeUp}>
           <Link href="/ogrenci/bildirimler"
-            className="flex items-center justify-between p-4 rounded-xl transition-all"
-            style={{ background:"rgba(217,119,6,0.06)", border:"1px solid rgba(217,119,6,0.2)" }}>
+            className="glass flex items-center justify-between p-4 rounded-xl transition-all"
+            style={{ borderColor:"rgba(251,146,60,0.25)" }}>
             <div className="flex items-center gap-3">
-              <Bell size={16} className="text-gold" />
-              <span className="text-sm text-white/70" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+              <Bell size={16} style={{ color: "var(--color-warning)" }} />
+              <span className="text-sm text-white/70" style={{ fontFamily:"var(--font-label)" }}>
                 {unreadNotifs} okunmamış bildiriminiz var
               </span>
             </div>
-            <ChevronRight size={16} className="text-gold/50" />
+            <ChevronRight size={16} style={{ color: "var(--color-warning)", opacity: 0.5 }} />
           </Link>
         </motion.div>
       )}
@@ -242,17 +316,27 @@ export default function OgrenciDashboard() {
         />
       </motion.div>
 
+      {/* Rozet Vitrini + Günlük Görevler */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        <motion.div variants={fadeUp}>
+          <BadgeShowcase badges={badges} />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <DailyMissionsCard missions={missions} />
+        </motion.div>
+      </div>
+
       {/* Paket kartı */}
       <motion.div variants={fadeUp} id="paket-kartı">
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
             <div className="min-w-0">
               <h3 className="text-lg font-display text-white tracking-wider"
-                style={{ fontFamily:"var(--font-bebas)" }}>
+                style={{ fontFamily:"var(--font-display)" }}>
                 {student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name} Paketi`}
               </h3>
               <p className="text-xs text-white/30 mt-0.5"
-                style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                style={{ fontFamily:"var(--font-label)" }}>
                 {student.subscriptionType === "monthly"
                   ? `${student.monthlyFee ? `₺${student.monthlyFee.toLocaleString("tr-TR")} / ay` : "Aylık ödeme"}`
                   : `${totalLessons} ders paketi`}
@@ -264,10 +348,10 @@ export default function OgrenciDashboard() {
           </div>
           {student.subscriptionType === "monthly" ? (
             <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-white/50" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+              <span className="text-sm text-white/50" style={{ fontFamily:"var(--font-label)" }}>
                 Bu ay tamamlanan ders
               </span>
-              <span className="text-2xl font-bold" style={{ color:"#8B5CF6", fontFamily:"var(--font-bebas)" }}>
+              <span className="text-2xl font-bold" style={{ color:"#8B5CF6", fontFamily:"var(--font-display)" }}>
                 {student.completedLessons}
               </span>
             </div>
@@ -276,7 +360,7 @@ export default function OgrenciDashboard() {
               <ProgressBar value={student.completedLessons} max={totalLessons} color="red"
                 label={`${student.completedLessons} / ${totalLessons} ders`} />
               <div className="mt-2 text-right text-xs text-white/30"
-                style={{ fontFamily:"var(--font-barlow-condensed)" }}>{progressPct}% tamamlandı</div>
+                style={{ fontFamily:"var(--font-label)" }}>{progressPct}% tamamlandı</div>
             </>
           )}
 
@@ -288,20 +372,20 @@ export default function OgrenciDashboard() {
             return (
               <div className="mt-4 pt-4 border-t border-white/5">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <span className="text-xs text-white/30 tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <span className="text-xs text-white/30 tracking-widest uppercase" style={{ fontFamily:"var(--font-label)" }}>
                     Paket Süresi
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded ${urgency.color}`}
-                    style={{ background: urgency.bg, border: `1px solid ${urgency.border}`, fontFamily:"var(--font-barlow-condensed)" }}>
+                    style={{ background: urgency.bg, border: `1px solid ${urgency.border}`, fontFamily:"var(--font-label)" }}>
                     {daysRemaining < 0 ? "Süresi Doldu" : `${daysRemaining} gün kaldı`}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-xs text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                <div className="flex items-center justify-between text-xs text-white/40" style={{ fontFamily:"var(--font-label)" }}>
                   <span>Başlangıç: {student.packageStartDate ? format(parseISO(student.packageStartDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
                   <span>Bitiş: {student.packageEndDate ? format(parseISO(student.packageEndDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
                 </div>
                 {daysRemaining < 0 && (
-                  <p className="text-xs text-red-400 mt-2" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <p className="text-xs text-red-400 mt-2" style={{ fontFamily:"var(--font-label)" }}>
                     {PACKAGE_EXPIRED_TEXT}
                   </p>
                 )}
@@ -318,20 +402,20 @@ export default function OgrenciDashboard() {
           <Card className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-display text-white tracking-wider"
-                style={{ fontFamily:"var(--font-bebas)" }}>Yaklaşan Randevular</h3>
+                style={{ fontFamily:"var(--font-display)" }}>Yaklaşan Randevular</h3>
               <Link href="/ogrenci/randevu"
                 className="text-xs text-gold/60 hover:text-gold tracking-wider transition-colors"
-                style={{ fontFamily:"var(--font-barlow-condensed)" }}>Tümü →</Link>
+                style={{ fontFamily:"var(--font-label)" }}>Tümü →</Link>
             </div>
             {upcoming.length === 0 ? (
               <div className="text-center py-8">
                 <Calendar size={28} className="text-white/10 mx-auto mb-3" />
-                <p className="text-white/30 text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                <p className="text-white/30 text-sm" style={{ fontFamily:"var(--font-label)" }}>
                   Yaklaşan randevunuz yok
                 </p>
                 <Link href="/ogrenci/randevu"
-                  className="mt-3 inline-block text-crimson text-xs tracking-wider hover:text-crimson-bright transition-colors"
-                  style={{ fontFamily:"var(--font-barlow-condensed)" }}>+ Randevu Al</Link>
+                  className="mt-3 inline-block text-xs tracking-wider transition-colors"
+                  style={{ color: "var(--color-error)", fontFamily:"var(--font-label)" }}>+ Randevu Al</Link>
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -344,10 +428,10 @@ export default function OgrenciDashboard() {
                       {/* Tarih bloğu */}
                       <div className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
                         style={{ background:"rgba(220,38,38,0.1)", border:"1px solid rgba(220,38,38,0.2)" }}>
-                        <span className="text-crimson text-xs font-display" style={{ fontFamily:"var(--font-bebas)" }}>
+                        <span className="text-xs" style={{ color: "var(--color-error)", fontFamily:"var(--font-display)" }}>
                           {format(parseISO(apt.date), "dd")}
                         </span>
-                        <span className="text-crimson/60 text-[9px]" style={{ fontFamily:"var(--font-bebas)" }}>
+                        <span className="text-[9px]" style={{ color: "var(--color-error)", opacity: 0.6, fontFamily:"var(--font-display)" }}>
                           {format(parseISO(apt.date), "MMM", { locale: tr }).toUpperCase()}
                         </span>
                       </div>
@@ -355,19 +439,19 @@ export default function OgrenciDashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-sm font-semibold text-white"
-                            style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            style={{ fontFamily:"var(--font-label)" }}>
                             {format(parseISO(apt.date), "EEEE", { locale: tr })}
                           </span>
                           {apt.lessonType !== "bireysel" && (
                             <span className="text-[9px] px-1.5 py-0.5 rounded"
-                              style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-barlow-condensed)" }}>
+                              style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-label)" }}>
                               {apt.lessonType === "duet" ? "Düet" : "Grup"}
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.4)" }}>
                           <Clock size={11}/>
-                          <span style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                          <span style={{ fontFamily:"var(--font-label)" }}>
                             {apt.startTime} – {apt.endTime}
                           </span>
                         </div>
@@ -378,7 +462,7 @@ export default function OgrenciDashboard() {
                         <button
                           onClick={() => handleCancelClick(apt)}
                           className="text-[10px] transition-colors"
-                          style={{ color: canCancel ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)", fontFamily:"var(--font-barlow-condensed)", cursor: canCancel ? "pointer" : "default" }}
+                          style={{ color: canCancel ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)", fontFamily:"var(--font-label)", cursor: canCancel ? "pointer" : "default" }}
                           title={canCancel ? "Randevuyu iptal et" : `${CANCEL_LIMIT_HOURS} saatten az kaldı`}
                         >
                           {canCancel ? "İptal et" : "⏱ İptal edilemez"}
@@ -397,22 +481,22 @@ export default function OgrenciDashboard() {
           <Card className="p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-display text-white tracking-wider"
-                style={{ fontFamily:"var(--font-bebas)" }}>Son Ders Notu</h3>
+                style={{ fontFamily:"var(--font-display)" }}>Son Ders Notu</h3>
               <Link href="/ogrenci/gelisim"
                 className="text-xs text-gold/60 hover:text-gold tracking-wider transition-colors"
-                style={{ fontFamily:"var(--font-barlow-condensed)" }}>Geçmiş →</Link>
+                style={{ fontFamily:"var(--font-label)" }}>Geçmiş →</Link>
             </div>
             {!lastRecord ? (
               <div className="text-center py-8">
                 <TrendingUp size={28} className="text-white/10 mx-auto mb-3" />
-                <p className="text-white/30 text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                <p className="text-white/30 text-sm" style={{ fontFamily:"var(--font-label)" }}>
                   Henüz ders kaydınız yok
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor:"rgba(255,255,255,0.06)" }}>
-                  <span className="text-sm text-white/50" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                  <span className="text-sm text-white/50" style={{ fontFamily:"var(--font-label)" }}>
                     {format(parseISO(lastRecord.date), "dd MMMM yyyy", { locale: tr })}
                   </span>
                   <Badge color={lastRecord.overall >= 8 ? "green" : lastRecord.overall >= 6 ? "gold" : "red"}>
@@ -437,7 +521,7 @@ export default function OgrenciDashboard() {
                   <div className="mt-3 p-3 rounded-xl border-l-2 border-gold/40"
                     style={{ background:"rgba(217,119,6,0.04)" }}>
                     <p className="text-xs text-white/50 leading-relaxed"
-                      style={{ fontFamily:"var(--font-inter)" }}>
+                      style={{ fontFamily:"var(--font-label)" }}>
                       {lastRecord.trainerNotes}
                     </p>
                   </div>
@@ -447,6 +531,11 @@ export default function OgrenciDashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* Son Aktiviteler Zaman Çizelgesi */}
+      <motion.div variants={fadeUp}>
+        <ActivityTimeline items={timelineItems} />
+      </motion.div>
 
       {/* Hızlı erişim — Android'de scroll glitch'ine sebep oluyor, CSS düzeltmesi
           yetersiz kaldığı için Android'de tamamen kaldırıldı. iOS ve masaüstünde
@@ -472,17 +561,16 @@ export default function OgrenciDashboard() {
                 cevrildi - ayni gorsel his, dokunma/scroll catismasi yok.
               */}
               <div
-                className="p-4 text-center rounded-xl transition-transform duration-150 hover:-translate-y-0.5 hover:scale-[1.02] active:scale-95"
+                className="glass p-4 text-center rounded-xl transition-transform duration-150 hover:-translate-y-0.5 hover:scale-[1.02] active:scale-95"
                 style={{
-                  background: "rgba(15,15,22,0.9)",
-                  border: color === "crimson" ? "1px solid rgba(220,38,38,0.15)" : color === "violet" ? "1px solid rgba(139,92,246,0.2)" : "1px solid rgba(217,119,6,0.15)",
+                  borderColor: color === "crimson" ? "rgba(239,68,68,0.15)" : color === "violet" ? "rgba(139,92,246,0.2)" : "rgba(217,119,6,0.15)",
                 }}
               >
-                <div className={color === "crimson" ? "text-crimson mx-auto mb-2" : color === "violet" ? "mx-auto mb-2" : "text-gold mx-auto mb-2"} style={{ display:"flex", justifyContent:"center", color: color === "violet" ? "#8B5CF6" : undefined }}>
+                <div className="mx-auto mb-2" style={{ display:"flex", justifyContent:"center", color: color === "crimson" ? "var(--color-error)" : color === "violet" ? "#8B5CF6" : "var(--color-achievement)" }}>
                   {icon}
                 </div>
                 <div className="text-xs text-white/55 tracking-wider"
-                  style={{ fontFamily:"var(--font-barlow-condensed)" }}>{label}</div>
+                  style={{ fontFamily:"var(--font-label)" }}>{label}</div>
               </div>
             </Link>
           ))}
@@ -496,21 +584,21 @@ export default function OgrenciDashboard() {
     {cancelTarget && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
         style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
-        <div className="relative w-full max-w-sm rounded-2xl overflow-hidden"
-          style={{ background:"rgba(15,15,22,0.99)", border:"1px solid rgba(239,68,68,0.3)" }}>
+        <div className="glass-strong relative w-full max-w-sm rounded-2xl overflow-hidden"
+          style={{ borderColor:"rgba(239,68,68,0.3)" }}>
           <div className="absolute top-0 left-0 right-0 h-px"
-            style={{ background:"linear-gradient(90deg,transparent,#ef4444,transparent)" }} />
+            style={{ background:"linear-gradient(90deg,transparent,var(--color-error),transparent)" }} />
           <div className="p-5">
-            <h3 className="text-xl text-white mb-1" style={{ fontFamily:"var(--font-bebas)", letterSpacing:"0.08em" }}>
+            <h3 className="text-xl text-white mb-1" style={{ fontFamily:"var(--font-display)", letterSpacing:"0.08em" }}>
               RANDEVU İPTAL
             </h3>
             {/* Randevu özeti */}
             <div className="my-3 p-3 rounded-xl space-y-1"
               style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <p className="text-xs text-white font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+              <p className="text-xs text-white font-semibold" style={{ fontFamily:"var(--font-label)" }}>
                 {format(parseISO(cancelTarget.date), "dd MMMM yyyy (EEEE)", { locale: tr })}
               </p>
-              <p className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+              <p className="text-xs" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
                 {cancelTarget.startTime} – {cancelTarget.endTime}
                 {cancelTarget.lessonType !== "bireysel" && (
                   <span className="ml-2 px-1.5 py-0.5 rounded text-[9px]"
@@ -520,26 +608,26 @@ export default function OgrenciDashboard() {
                 )}
               </p>
             </div>
-            <p className="text-sm mb-1" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-inter)" }}>
+            <p className="text-sm mb-1" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-label)" }}>
               Bu randevuyu iptal etmek istediğine emin misin?
             </p>
             {cancelTarget.lessonType === "duet" && (
-              <p className="text-xs mb-3" style={{ color:"rgba(217,70,239,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
+              <p className="text-xs mb-3" style={{ color:"rgba(217,70,239,0.7)", fontFamily:"var(--font-label)" }}>
                 ℹ️ Düet randevu — partnerin de panelinde iptal olarak görünecek.
               </p>
             )}
-            <p className="text-xs mb-4" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>
+            <p className="text-xs mb-4" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-label)" }}>
               İptal edilen randevudan ders düşülmez. Slot tekrar müsait hale gelir.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setCancelTarget(null)}
                 className="py-3 rounded-xl text-xs font-semibold uppercase"
-                style={{ border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+                style={{ border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
                 Vazgeç
               </button>
               <button onClick={handleCancelConfirm} disabled={cancelBusy}
                 className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50"
-                style={{ background:"rgba(239,68,68,0.7)", fontFamily:"var(--font-barlow-condensed)" }}>
+                style={{ background:"var(--color-error)", fontFamily:"var(--font-label)" }}>
                 {cancelBusy ? "İptal ediliyor..." : "İptal Et"}
               </button>
             </div>
@@ -552,44 +640,44 @@ export default function OgrenciDashboard() {
     {cancelBlocked && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
         style={{ background:"rgba(0,0,0,0.75)", backdropFilter:"blur(8px)" }}>
-        <div className="w-full max-w-sm rounded-2xl overflow-hidden"
-          style={{ background:"rgba(15,15,22,0.99)", border:"1px solid rgba(217,119,6,0.35)" }}>
+        <div className="glass-strong w-full max-w-sm rounded-2xl overflow-hidden"
+          style={{ borderColor:"rgba(251,146,60,0.35)" }}>
           {/* Üst şerit */}
-          <div className="h-0.5" style={{ background:"linear-gradient(90deg,transparent,#d97706,transparent)" }} />
+          <div className="h-0.5" style={{ background:"linear-gradient(90deg,transparent,var(--color-warning),transparent)" }} />
           <div className="p-5">
             {/* İkon + başlık */}
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center"
-                style={{ background:"rgba(217,119,6,0.12)", border:"1px solid rgba(217,119,6,0.25)" }}>
+                style={{ background:"rgba(251,146,60,0.12)", border:"1px solid rgba(251,146,60,0.25)" }}>
                 <span className="text-lg">⏱</span>
               </div>
               <div>
-                <p className="text-white font-semibold text-sm" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                <p className="text-white font-semibold text-sm" style={{ fontFamily:"var(--font-label)" }}>
                   İptal Edilemiyor
                 </p>
-                <p className="text-[10px] uppercase tracking-widest" style={{ color:"rgba(217,119,6,0.8)", fontFamily:"var(--font-barlow-condensed)" }}>
+                <p className="text-[10px] uppercase tracking-widest" style={{ color:"rgba(251,146,60,0.8)", fontFamily:"var(--font-label)" }}>
                   {CANCEL_LIMIT_HOURS} Saat Kuralı
                 </p>
               </div>
             </div>
 
             {/* Randevu özeti */}
-            <div className="mb-4 p-3 rounded-xl" style={{ background:"rgba(217,119,6,0.06)", border:"1px solid rgba(217,119,6,0.15)" }}>
-              <p className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+            <div className="mb-4 p-3 rounded-xl" style={{ background:"rgba(251,146,60,0.06)", border:"1px solid rgba(251,146,60,0.15)" }}>
+              <p className="text-xs font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>
                 {format(parseISO(cancelBlocked.date), "dd MMMM yyyy (EEEE)", { locale: tr })}
               </p>
-              <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>
+              <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
                 {cancelBlocked.startTime} – {cancelBlocked.endTime}
               </p>
             </div>
 
             {/* Uyarı mesajı */}
-            <p className="text-sm leading-relaxed mb-4" style={{ color:"rgba(255,255,255,0.6)", fontFamily:"var(--font-barlow-condensed)" }}>
-              Dersinize <strong style={{ color:"#d97706" }}>{CANCEL_LIMIT_HOURS} saatten az</strong> süre
+            <p className="text-sm leading-relaxed mb-4" style={{ color:"rgba(255,255,255,0.6)", fontFamily:"var(--font-label)" }}>
+              Dersinize <strong style={{ color:"var(--color-warning)" }}>{CANCEL_LIMIT_HOURS} saatten az</strong> süre
               kaldığı için iptal edemezsiniz.
             </p>
-            <div className="p-3 rounded-xl mb-4" style={{ background:"rgba(220,38,38,0.06)", border:"1px solid rgba(220,38,38,0.15)" }}>
-              <p className="text-xs leading-relaxed" style={{ color:"rgba(220,38,38,0.8)", fontFamily:"var(--font-barlow-condensed)" }}>
+            <div className="p-3 rounded-xl mb-4" style={{ background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.15)" }}>
+              <p className="text-xs leading-relaxed" style={{ color:"rgba(239,68,68,0.8)", fontFamily:"var(--font-label)" }}>
                 ⚠️ Derse katılmazsanız ders hakkınız kullanılmış sayılır.
                 Zorunlu durumlarda antrenörünüzle iletişime geçin.
               </p>
@@ -598,7 +686,7 @@ export default function OgrenciDashboard() {
             {/* Kapatma butonu */}
             <button onClick={() => setCancelBlocked(null)}
               className="w-full py-3 text-sm font-semibold tracking-widest uppercase transition-all"
-              style={{ background:"rgba(217,119,6,0.15)", border:"1px solid rgba(217,119,6,0.3)", color:"#d97706", fontFamily:"var(--font-barlow-condensed)" }}>
+              style={{ background:"rgba(251,146,60,0.15)", border:"1px solid rgba(251,146,60,0.3)", color:"var(--color-warning)", fontFamily:"var(--font-label)" }}>
               Anladım
             </button>
           </div>

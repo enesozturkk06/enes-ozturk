@@ -16,7 +16,7 @@ import {
   generateDietPlan, getDietPlan, saveDietPlan,
   type DietInput, type DietPlan, type GoalType, type ActivityLevel,
 } from "@/lib/diet";
-import { Card, PageHeader, ProgressBar } from "@/app/components/ui";
+import { PageHeader } from "@/app/components/ui";
 import {
   Scale, Droplets, Flame, Activity, TrendingUp, Plus, Save,
   Utensils, RefreshCw, ChevronDown, ChevronUp, Sparkles,
@@ -46,8 +46,45 @@ const goalOptions: { value: GoalType; label: string; icon: string }[] = [
 ];
 
 const V = "#8B5CF6";
-const inputCls = "w-full bg-steel/40 border border-white/8 focus:border-violet/40 text-white placeholder-white/15 px-3 py-2.5 text-sm outline-none transition-all";
+const inputCls = "glass w-full text-white placeholder-white/20 px-3 py-2.5 text-sm outline-none rounded-lg";
 const labelCls = "block text-xs text-white/35 tracking-widest uppercase mb-1.5";
+
+const stagger = { animate: { transition: { staggerChildren: 0.06 } } };
+const fadeUp = {
+  initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
+
+function CountUp({ value, decimals = 0, prefix = "", suffix = "" }: { value: number; decimals?: number; prefix?: string; suffix?: string }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const duration = 600;
+    const start = performance.now();
+    const animate = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      setDisplay(value * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{prefix}{display.toFixed(decimals)}{suffix}</>;
+}
+
+function GradientBar({ pct, colorFrom, colorTo }: { pct: number; colorFrom: string; colorTo: string }) {
+  return (
+    <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+      <motion.div
+        className="h-full rounded-full"
+        initial={{ width: 0 }}
+        animate={{ width: `${Math.min(100, pct)}%` }}
+        transition={{ duration: 0.9, ease: "easeOut" }}
+        style={{ background: `linear-gradient(90deg, ${colorFrom}, ${colorTo})` }}
+      />
+    </div>
+  );
+}
 
 type Tab = "saglik" | "ai-diyet";
 
@@ -208,7 +245,7 @@ export default function SaglikPage() {
      RENDER
      ══════════════════════════════════════════════════════════ */
   return (
-    <div className="max-w-5xl mx-auto space-y-5 w-full">
+    <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-5xl mx-auto space-y-5 w-full pb-28">
       <PageHeader
         title="Sağlık & Diyet"
         subtitle="BMI, kalori, su takibi ve kişisel AI diyet planı"
@@ -216,49 +253,53 @@ export default function SaglikPage() {
       />
 
       {/* Sekme geçişi */}
-      <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+      <motion.div variants={fadeUp} className="flex items-center gap-1.5 glass rounded-xl p-1 w-fit">
         {([
           { key: "saglik"  as Tab, label: "Sağlık Takibi", icon: <Scale size={14}/> },
           { key: "ai-diyet" as Tab, label: "AI Diyet",     icon: <Utensils size={14}/> },
         ]).map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className="flex items-center gap-1.5 px-4 py-3 text-sm border-b-2 transition-all"
+            className="relative flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg transition-colors"
             style={{
-              fontFamily: "var(--font-barlow-condensed)",
-              borderColor:  activeTab === t.key ? V : "transparent",
-              color:        activeTab === t.key ? V : "rgba(255,255,255,0.3)",
-              marginBottom: "-1px",
+              fontFamily: "var(--font-label)",
+              color: activeTab === t.key ? "#fff" : "rgba(255,255,255,0.4)",
             }}>
+            {activeTab === t.key && (
+              <motion.div layoutId="saglik-tab-pill" className="absolute inset-0 rounded-lg gradient-animated gradient-slow gradient-violet-pink-orange -z-10" />
+            )}
             {t.icon} {t.label}
             {t.key === "ai-diyet" && !dietPlan && (
-              <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full" style={{ background:"rgba(139,92,246,0.2)", color:V }}>YENİ</span>
+              <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full" style={{ background:"rgba(139,92,246,0.25)", color:"#fff" }}>YENİ</span>
             )}
           </button>
         ))}
-      </div>
+      </motion.div>
 
       {/* ══ SAĞLIK TAKİBİ ══════════════════════════════════════ */}
       <AnimatePresence mode="wait">
         {activeTab === "saglik" && (
           <motion.div key="saglik" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }} className="space-y-5">
             {loading ? (
-              <div className="text-center py-12"><div className="w-8 h-8 border-2 border-crimson border-t-transparent rounded-full animate-spin mx-auto" /></div>
+              <div className="text-center py-12">
+                <div className="w-8 h-8 rounded-full animate-spin mx-auto" style={{ border: "2px solid #8B5CF6", borderTopColor: "transparent" }} />
+              </div>
             ) : (
               <>
                 {/* Profil butonu */}
                 <div className="flex justify-end">
                   <button onClick={() => setProfileTab(v => !v)}
-                    className="flex items-center gap-2 text-xs text-white/40 hover:text-gold tracking-widest uppercase border border-white/10 hover:border-gold/30 px-3 py-2 transition-all"
-                    style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+                    className="glass flex items-center gap-2 text-xs text-white/40 hover:text-white tracking-widest uppercase px-3 py-2 rounded-lg transition-all"
+                    style={{ fontFamily: "var(--font-label)" }}>
                     <Activity size={14}/> Profil {profileTab ? "Kapat" : "Düzenle"}
                   </button>
                 </div>
 
                 {/* Profil formu */}
                 {profileTab && (
-                  <motion.div initial={{ opacity:0, y:-8 }} animate={{ opacity:1, y:0 }}>
-                    <Card className="p-6">
-                      <h3 className="text-lg font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>Sağlık Profiliniz</h3>
+                  <motion.div initial={{ opacity:0, y:-8, scale: 0.98 }} animate={{ opacity:1, y:0, scale: 1 }}
+                    className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+                    <div className="glass-strong relative rounded-2xl p-6">
+                      <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Sağlık Profiliniz</h3>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                         {[
                           { label:"Boy (cm)", key:"height" as const, type:"number" },
@@ -266,166 +307,172 @@ export default function SaglikPage() {
                           { label:"Yaş",       key:"age"    as const, type:"number" },
                         ].map(f => (
                           <div key={f.key}>
-                            <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>{f.label}</label>
+                            <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>{f.label}</label>
                             <input type={f.type} value={pf[f.key]}
                               onChange={e => setPf(p => ({ ...p, [f.key]: Number(e.target.value) }))}
-                              className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
+                              className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
                           </div>
                         ))}
                         <div>
-                          <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Cinsiyet</label>
+                          <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Cinsiyet</label>
                           <select value={pf.gender} onChange={e => setPf(p => ({ ...p, gender: e.target.value as "male"|"female" }))}
-                            className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-inter)" }}>
+                            className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-label)" }}>
                             <option value="male" className="bg-carbon">Erkek</option>
                             <option value="female" className="bg-carbon">Kadın</option>
                           </select>
                         </div>
                         <div className="sm:col-span-2">
-                          <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Aktivite Seviyesi</label>
+                          <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Aktivite Seviyesi</label>
                           <select value={pf.activityLevel} onChange={e => setPf(p => ({ ...p, activityLevel: e.target.value as HealthProfile["activityLevel"] }))}
-                            className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-inter)" }}>
+                            className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-label)" }}>
                             {activityOptions.map(o => <option key={o.value} value={o.value} className="bg-carbon">{o.label}</option>)}
                           </select>
                         </div>
                       </div>
                       <button onClick={saveProfile} disabled={profileSaving}
-                        className="flex items-center gap-2 bg-crimson hover:bg-crimson-bright disabled:opacity-50 text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 transition-all"
-                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        className="gradient-animated gradient-slow gradient-violet-pink-orange disabled:opacity-50 flex items-center gap-2 text-white text-xs font-semibold tracking-widest uppercase px-5 py-2.5 rounded-lg transition-transform hover:scale-105 active:scale-95"
+                        style={{ fontFamily:"var(--font-label)" }}>
                         <Save size={14}/>{profileSaving ? "Kaydediliyor..." : "Profili Kaydet"}
                       </button>
-                    </Card>
+                    </div>
                   </motion.div>
                 )}
 
                 {/* Özet kartlar */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
-                    { label:"BMI",          val: bmi ?? "—",       sub: bmiCat?.label ?? "Profil girin", color: bmiCat?.color ?? "text-white", icon: <Scale size={16}/> },
-                    { label:"Günlük Kalori",val: tdee ? tdee.toLocaleString("tr-TR") : "—", sub:"kcal / gün (TDEE)", color:"text-gold-bright", icon:<Flame size={16}/> },
-                    { label:"Bugün Su",     val: `${waterGlasses}/8`, sub:"bardak (250ml)", color:"text-blue-400", icon:<Droplets size={16}/> },
-                    { label:"Son Kilo",     val: lastWeight ? `${lastWeight.weight} kg` : "—", sub: lastWeight ? format(parseISO(lastWeight.date),"dd MMM",{locale:tr}) : "Kayıt yok", color:"text-green-400", icon:<TrendingUp size={16}/> },
+                    { label:"BMI",          val: bmi, isNum: !!bmi, sub: bmiCat?.label ?? "Profil girin", color: bmiCat?.color ?? "#fff", icon: <Scale size={16}/> },
+                    { label:"Günlük Kalori",val: tdee, isNum: !!tdee, suffix: " kcal", sub:"kcal / gün (TDEE)", color:"var(--color-achievement)", icon:<Flame size={16}/> },
+                    { label:"Bugün Su",     val: waterGlasses, isNum: true, suffix: "/8", sub:"bardak (250ml)", color:"#60A5FA", icon:<Droplets size={16}/> },
+                    { label:"Son Kilo",     val: lastWeight?.weight ?? null, isNum: !!lastWeight, suffix: " kg", sub: lastWeight ? format(parseISO(lastWeight.date),"dd MMM",{locale:tr}) : "Kayıt yok", color:"var(--color-success)", icon:<TrendingUp size={16}/> },
                   ].map(s => (
-                    <Card key={s.label} className="p-5">
-                      <div className="flex items-start justify-between mb-2">
-                        <span className="text-xs text-white/30 tracking-widest uppercase" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.label}</span>
-                        <span className={s.color}>{s.icon}</span>
+                    <div key={s.label} className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet">
+                      <div className="glass relative rounded-2xl p-5 h-full">
+                        <div className="flex items-start justify-between mb-2">
+                          <span className="text-xs text-white/30 tracking-widest uppercase" style={{ fontFamily:"var(--font-label)" }}>{s.label}</span>
+                          <span style={{ color: s.color }}>{s.icon}</span>
+                        </div>
+                        <div className="text-2xl" style={{ fontFamily:"var(--font-display)", color: s.color }}>
+                          {s.isNum ? <CountUp value={s.val as number} decimals={s.label === "BMI" ? 1 : 0} suffix={s.suffix ?? ""} /> : "—"}
+                        </div>
+                        <div className="text-xs text-white/25 mt-0.5" style={{ fontFamily:"var(--font-label)" }}>{s.sub}</div>
                       </div>
-                      <div className={`text-2xl font-display ${s.color}`} style={{ fontFamily:"var(--font-bebas)" }}>{s.val}</div>
-                      <div className="text-xs text-white/25 mt-0.5" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{s.sub}</div>
-                    </Card>
+                    </div>
                   ))}
-                </div>
+                </motion.div>
 
-                <div className="grid lg:grid-cols-3 gap-5">
+                <motion.div variants={fadeUp} className="grid lg:grid-cols-3 gap-5">
                   {/* Su */}
-                  <Card className="p-5">
-                    <h3 className="text-base font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>Su Tüketimi</h3>
+                  <div className="glass-strong rounded-2xl p-5">
+                    <h3 className="text-base text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Su Tüketimi</h3>
                     <div className="flex items-center justify-center gap-3 mb-4">
                       <button onClick={() => changeWater(-1)} disabled={savingWater || waterGlasses===0}
-                        className="w-8 h-8 border border-white/10 hover:border-crimson/40 hover:text-crimson text-white/40 text-xl flex items-center justify-center transition-all disabled:opacity-30">−</button>
+                        className="glass w-8 h-8 rounded-full hover:text-white text-white/40 text-xl flex items-center justify-center transition-all disabled:opacity-30">−</button>
                       <div className="text-center">
-                        <div className="text-5xl font-display text-blue-400" style={{ fontFamily:"var(--font-bebas)" }}>{waterGlasses}</div>
-                        <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-barlow-condensed)" }}>/ 8 bardak</div>
+                        <div className="text-5xl" style={{ fontFamily:"var(--font-display)", color: "#60A5FA" }}>{waterGlasses}</div>
+                        <div className="text-xs text-white/30" style={{ fontFamily:"var(--font-label)" }}>/ 8 bardak</div>
                       </div>
                       <button onClick={() => changeWater(1)} disabled={savingWater}
-                        className="w-8 h-8 border border-blue-400/30 hover:border-blue-400/60 hover:bg-blue-400/8 text-blue-400 text-xl flex items-center justify-center transition-all disabled:opacity-30">+</button>
+                        className="w-8 h-8 rounded-full text-xl flex items-center justify-center transition-all disabled:opacity-30"
+                        style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.3)", color: "#60A5FA" }}>+</button>
                     </div>
-                    <ProgressBar value={waterGlasses} max={8} color="green" />
+                    <GradientBar pct={(waterGlasses / 8) * 100} colorFrom="#3B82F6" colorTo="#60A5FA" />
                     <div className="mt-3 grid grid-cols-8 gap-1">
                       {Array.from({length:8},(_,i) => (
-                        <div key={i} className={`h-5 rounded-sm transition-all ${i<waterGlasses?"bg-blue-400/70":"bg-iron/50"}`} />
+                        <div key={i} className="h-5 rounded-sm transition-all" style={{ background: i < waterGlasses ? "#60A5FA" : "rgba(255,255,255,0.08)" }} />
                       ))}
                     </div>
-                  </Card>
+                  </div>
 
                   {/* Kalori */}
-                  <Card className="p-5">
-                    <h3 className="text-base font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>Kalori Takibi</h3>
+                  <div className="glass-strong rounded-2xl p-5">
+                    <h3 className="text-base text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Kalori Takibi</h3>
                     {todayCal && (
                       <div className="space-y-2 mb-4">
                         {[
-                          { l:"Alınan",       v:todayCal.consumed+" kcal",                         c:"text-gold-bright" },
-                          { l:"Yakılan",      v:todayCal.burned+" kcal",                            c:"text-green-400"  },
-                          { l:"Net / Hedef",  v:`${todayCal.consumed-todayCal.burned} / ${todayCal.target}`, c:"text-white" },
+                          { l:"Alınan",       v:todayCal.consumed+" kcal",                         c:"var(--color-achievement)" },
+                          { l:"Yakılan",      v:todayCal.burned+" kcal",                            c:"var(--color-success)"  },
+                          { l:"Net / Hedef",  v:`${todayCal.consumed-todayCal.burned} / ${todayCal.target}`, c:"#fff" },
                         ].map(r => (
                           <div key={r.l} className="flex justify-between text-xs">
-                            <span className="text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{r.l}</span>
-                            <span className={`font-semibold ${r.c}`} style={{ fontFamily:"var(--font-barlow-condensed)" }}>{r.v}</span>
+                            <span className="text-white/40" style={{ fontFamily:"var(--font-label)" }}>{r.l}</span>
+                            <span className="font-semibold" style={{ color: r.c, fontFamily:"var(--font-label)" }}>{r.v}</span>
                           </div>
                         ))}
-                        <ProgressBar value={Math.min(todayCal.consumed-todayCal.burned,todayCal.target)} max={todayCal.target} color="gold" />
+                        <GradientBar pct={(Math.min(todayCal.consumed-todayCal.burned,todayCal.target) / todayCal.target) * 100} colorFrom="#D97706" colorTo="var(--color-achievement)" />
                       </div>
                     )}
                     <div className="space-y-2">
-                      <input type="number" value={calIn}     onChange={e=>setCalIn(e.target.value)}     placeholder="Alınan kalori (kcal)"    className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
-                      <input type="number" value={calBurned} onChange={e=>setCalBurned(e.target.value)} placeholder="Antrenman yakımı (kcal)" className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
+                      <input type="number" value={calIn}     onChange={e=>setCalIn(e.target.value)}     placeholder="Alınan kalori (kcal)"    className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                      <input type="number" value={calBurned} onChange={e=>setCalBurned(e.target.value)} placeholder="Antrenman yakımı (kcal)" className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
                       <button onClick={saveCalories} disabled={savingCal||!calIn}
-                        className="w-full flex items-center justify-center gap-2 bg-gold/15 hover:bg-gold/25 border border-gold/25 text-gold text-xs font-semibold tracking-widest uppercase py-2 transition-all disabled:opacity-40"
-                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        className="w-full flex items-center justify-center gap-2 text-xs font-semibold tracking-widest uppercase py-2 rounded-lg transition-all disabled:opacity-40 hover:scale-[1.02]"
+                        style={{ background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.3)", color:"var(--color-achievement)", fontFamily:"var(--font-label)" }}>
                         <Plus size={13}/>{savingCal?"Kaydediliyor...":"Kaydet"}
                       </button>
                     </div>
-                  </Card>
+                  </div>
 
                   {/* Kilo */}
-                  <Card className="p-5">
-                    <h3 className="text-base font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>Kilo Kaydı</h3>
+                  <div className="glass-strong rounded-2xl p-5">
+                    <h3 className="text-base text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Kilo Kaydı</h3>
                     <div className="space-y-2 mb-4">
-                      <input type="number" step="0.1" value={todayWeight} onChange={e=>setTodayWeight(e.target.value)} placeholder="Bugünkü kilonuz (kg)" className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
+                      <input type="number" step="0.1" value={todayWeight} onChange={e=>setTodayWeight(e.target.value)} placeholder="Bugünkü kilonuz (kg)" className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
                       <button onClick={saveWeight} disabled={savingWeight||!todayWeight}
-                        className="w-full flex items-center justify-center gap-2 bg-crimson/12 hover:bg-crimson/20 border border-crimson/25 text-crimson text-xs font-semibold tracking-widest uppercase py-2 transition-all disabled:opacity-40"
-                        style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                        className="w-full flex items-center justify-center gap-2 text-xs font-semibold tracking-widest uppercase py-2 rounded-lg transition-all disabled:opacity-40 hover:scale-[1.02]"
+                        style={{ background:"rgba(34,197,94,0.15)", border:"1px solid rgba(34,197,94,0.3)", color:"var(--color-success)", fontFamily:"var(--font-label)" }}>
                         <Plus size={13}/>{savingWeight?"Kaydediliyor...":"Kaydet"}
                       </button>
                     </div>
                     <div className="space-y-1 max-h-36 overflow-y-auto">
                       {weightLogs.slice(-5).reverse().map(e => (
-                        <div key={e.date} className="flex justify-between py-1 border-b border-white/5 last:border-0">
-                          <span className="text-xs text-white/35" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{format(parseISO(e.date),"dd MMM",{locale:tr})}</span>
-                          <span className="text-xs text-green-400 font-semibold" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{e.weight} kg</span>
+                        <div key={e.date} className="flex justify-between py-1 border-b last:border-0" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                          <span className="text-xs text-white/35" style={{ fontFamily:"var(--font-label)" }}>{format(parseISO(e.date),"dd MMM",{locale:tr})}</span>
+                          <span className="text-xs font-semibold" style={{ color: "var(--color-success)", fontFamily:"var(--font-label)" }}>{e.weight} kg</span>
                         </div>
                       ))}
                     </div>
-                  </Card>
-                </div>
+                  </div>
+                </motion.div>
 
                 {/* Kilo grafiği */}
                 {weightLogs.length >= 2 && (
-                  <Card className="p-6">
-                    <h3 className="text-lg font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>Kilo Değişim Grafiği (30 Gün)</h3>
+                  <motion.div variants={fadeUp} className="glass-strong rounded-2xl p-6">
+                    <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Kilo Değişim Grafiği (30 Gün)</h3>
                     <ResponsiveContainer width="100%" height={220}>
                       <LineChart data={weightLogs.map(e=>({ tarih:format(parseISO(e.date),"dd MMM",{locale:tr}), kilo:e.weight }))}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                        <XAxis dataKey="tarih" tick={{ fill:"rgba(255,255,255,0.25)",fontSize:10,fontFamily:"var(--font-barlow-condensed)" }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="tarih" tick={{ fill:"rgba(255,255,255,0.3)",fontSize:10 }} />
                         <YAxis domain={["auto","auto"]} tick={{ fill:"rgba(255,255,255,0.25)",fontSize:10 }} />
-                        <Tooltip contentStyle={{ background:"#121826",border:"1px solid rgba(255,255,255,0.08)",borderRadius:0 }} labelStyle={{ color:"#fff" }} />
+                        <Tooltip contentStyle={{ background:"rgba(20,14,35,0.95)", backdropFilter: "blur(8px)", border:"1px solid rgba(139,92,246,0.35)", borderRadius:10 }} labelStyle={{ color:"#fff" }} />
                         <Line type="monotone" dataKey="kilo" stroke="#22c55e" strokeWidth={2} dot={{ fill:"#22c55e",r:3 }} />
                       </LineChart>
                     </ResponsiveContainer>
-                  </Card>
+                  </motion.div>
                 )}
 
                 {/* BMI tablosu */}
                 {bmi && (
-                  <Card className="p-5">
-                    <h3 className="text-base font-display text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-bebas)" }}>BMI Referans</h3>
+                  <motion.div variants={fadeUp} className="glass-strong rounded-2xl p-5">
+                    <h3 className="text-base text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>BMI Referans</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
-                        { range:"< 18.5", label:"Zayıf",        color:"text-blue-400",   bg:"bg-blue-400/8 border-blue-400/15" },
-                        { range:"18.5–24.9",label:"Normal",      color:"text-green-400",  bg:"bg-green-400/8 border-green-400/15" },
-                        { range:"25–29.9", label:"Fazla Kilolu", color:"text-gold-bright", bg:"bg-gold/8 border-gold/15" },
-                        { range:"≥ 30",    label:"Obez",         color:"text-crimson",     bg:"bg-crimson/8 border-crimson/15" },
+                        { range:"< 18.5", label:"Zayıf",        color:"#60A5FA" },
+                        { range:"18.5–24.9",label:"Normal",      color:"var(--color-success)" },
+                        { range:"25–29.9", label:"Fazla Kilolu", color:"var(--color-achievement)" },
+                        { range:"≥ 30",    label:"Obez",         color:"var(--color-error)" },
                       ].map(r => (
-                        <div key={r.label} className={`p-3 border text-center ${r.bg} ${bmiCat?.label===r.label?"ring-1 ring-white/20":""}`}>
-                          <div className={`text-sm font-semibold ${r.color}`} style={{ fontFamily:"var(--font-barlow-condensed)" }}>{r.label}</div>
-                          <div className="text-xs text-white/25" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{r.range}</div>
+                        <div key={r.label} className="glass rounded-xl p-3 text-center"
+                          style={{ boxShadow: bmiCat?.label===r.label ? `0 0 0 1px ${r.color}` : "none" }}>
+                          <div className="text-sm font-semibold" style={{ color: r.color, fontFamily:"var(--font-label)" }}>{r.label}</div>
+                          <div className="text-xs text-white/25" style={{ fontFamily:"var(--font-label)" }}>{r.range}</div>
                         </div>
                       ))}
                     </div>
-                    <p className="text-xs text-white/20 mt-3 text-center" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
-                      Mevcut BMI: <strong className={bmiCat?.color}>{bmi}</strong> — {bmiCat?.label}
+                    <p className="text-xs text-white/30 mt-3 text-center" style={{ fontFamily:"var(--font-label)" }}>
+                      Mevcut BMI: <strong style={{ color: bmiCat?.color }}>{bmi}</strong> — {bmiCat?.label}
                     </p>
-                  </Card>
+                  </motion.div>
                 )}
               </>
             )}
@@ -437,126 +484,124 @@ export default function SaglikPage() {
           <motion.div key="diyet" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }} className="space-y-5">
 
             {/* Form */}
-            <Card className="overflow-hidden">
-              <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor:"rgba(139,92,246,0.15)", background:"rgba(139,92,246,0.04)" }}>
-                <div className="flex items-center gap-2.5">
-                  <Sparkles size={16} style={{ color:V }} />
-                  <span className="text-base font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
-                    KİŞİSEL DİYET FORMU
-                  </span>
-                </div>
-                {dietPlan && (
-                  <span className="text-[10px] px-2 py-0.5" style={{ background:"rgba(34,197,94,0.12)", color:"#22c55e", border:"1px solid rgba(34,197,94,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
-                    Plan mevcut
-                  </span>
-                )}
-              </div>
-
-              <div className="p-5 space-y-4">
-                {/* Kişisel bilgiler */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Yaş</label>
-                    <input type="number" value={dInput.age} onChange={e=>setDInput(d=>({...d,age:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
+            <div className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+              <div className="glass-strong relative rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div className="flex items-center gap-2.5">
+                    <Sparkles size={16} style={{ color:V }} />
+                    <span className="text-base text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>
+                      KİŞİSEL DİYET FORMU
+                    </span>
                   </div>
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Cinsiyet</label>
-                    <select value={dInput.gender} onChange={e=>setDInput(d=>({...d,gender:e.target.value as "male"|"female"}))}
-                      className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-inter)" }}>
-                      <option value="male" className="bg-carbon">Erkek</option>
-                      <option value="female" className="bg-carbon">Kadın</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Boy (cm)</label>
-                    <input type="number" value={dInput.heightCm} onChange={e=>setDInput(d=>({...d,heightCm:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
-                  </div>
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Kilo (kg)</label>
-                    <input type="number" step="0.1" value={dInput.weightKg} onChange={e=>setDInput(d=>({...d,weightKg:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
-                  </div>
+                  {dietPlan && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background:"rgba(34,197,94,0.15)", color:"var(--color-success)", fontFamily:"var(--font-label)" }}>
+                      Plan mevcut
+                    </span>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Hedef Kilo (kg)</label>
-                    <input type="number" step="0.1" value={dInput.targetWeightKg} onChange={e=>setDInput(d=>({...d,targetWeightKg:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
+                <div className="p-5 space-y-4">
+                  {/* Kişisel bilgiler */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Yaş</label>
+                      <input type="number" value={dInput.age} onChange={e=>setDInput(d=>({...d,age:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                    </div>
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Cinsiyet</label>
+                      <select value={dInput.gender} onChange={e=>setDInput(d=>({...d,gender:e.target.value as "male"|"female"}))}
+                        className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-label)" }}>
+                        <option value="male" className="bg-carbon">Erkek</option>
+                        <option value="female" className="bg-carbon">Kadın</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Boy (cm)</label>
+                      <input type="number" value={dInput.heightCm} onChange={e=>setDInput(d=>({...d,heightCm:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                    </div>
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Kilo (kg)</label>
+                      <input type="number" step="0.1" value={dInput.weightKg} onChange={e=>setDInput(d=>({...d,weightKg:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                    </div>
                   </div>
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Günlük Öğün</label>
-                    <select value={dInput.mealsPerDay} onChange={e=>setDInput(d=>({...d,mealsPerDay:Number(e.target.value)}))}
-                      className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-inter)" }}>
-                      {[2,3,4,5].map(n => <option key={n} value={n} className="bg-carbon">{n} öğün</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Aktivite Seviyesi</label>
-                    <select value={dInput.activityLevel} onChange={e=>setDInput(d=>({...d,activityLevel:e.target.value as ActivityLevel}))}
-                      className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-inter)" }}>
-                      {activityOptions.map(o=><option key={o.value} value={o.value} className="bg-carbon">{o.label}</option>)}
-                    </select>
-                  </div>
-                </div>
 
-                {/* Hedef türü */}
-                <div>
-                  <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Hedef Türü</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    {goalOptions.map(g => {
-                      const active = dInput.goalType === g.value;
-                      return (
-                        <button key={g.value} type="button" onClick={()=>setDInput(d=>({...d,goalType:g.value}))}
-                          className="flex flex-col items-center gap-1 py-3 px-2 transition-all rounded"
-                          style={{
-                            background: active ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
-                            border: active ? `1px solid ${V}55` : "1px solid rgba(255,255,255,0.07)",
-                          }}>
-                          <span className="text-lg leading-none">{g.icon}</span>
-                          <span className="text-[10px] text-center leading-tight" style={{ color: active?"#fff":"rgba(255,255,255,0.4)", fontFamily:"var(--font-barlow-condensed)" }}>{g.label}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Hedef Kilo (kg)</label>
+                      <input type="number" step="0.1" value={dInput.targetWeightKg} onChange={e=>setDInput(d=>({...d,targetWeightKg:Number(e.target.value)}))} className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                    </div>
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Günlük Öğün</label>
+                      <select value={dInput.mealsPerDay} onChange={e=>setDInput(d=>({...d,mealsPerDay:Number(e.target.value)}))}
+                        className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-label)" }}>
+                        {[2,3,4,5].map(n => <option key={n} value={n} className="bg-carbon">{n} öğün</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Aktivite Seviyesi</label>
+                      <select value={dInput.activityLevel} onChange={e=>setDInput(d=>({...d,activityLevel:e.target.value as ActivityLevel}))}
+                        className={`${inputCls} appearance-none`} style={{ fontFamily:"var(--font-label)" }}>
+                        {activityOptions.map(o=><option key={o.value} value={o.value} className="bg-carbon">{o.label}</option>)}
+                      </select>
+                    </div>
                   </div>
-                </div>
 
-                {/* Tercihler */}
-                <div className="grid sm:grid-cols-3 gap-3">
+                  {/* Hedef türü */}
                   <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Sevdiği Yiyecekler</label>
-                    <input value={dInput.likedFoods} onChange={e=>setDInput(d=>({...d,likedFoods:e.target.value}))}
-                      placeholder="tavuk, pirinç, yoğurt..."
-                      className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
+                    <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Hedef Türü</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {goalOptions.map(g => {
+                        const active = dInput.goalType === g.value;
+                        return (
+                          <button key={g.value} type="button" onClick={()=>setDInput(d=>({...d,goalType:g.value}))}
+                            className={`flex flex-col items-center gap-1 py-3 px-2 rounded-xl transition-all ${active ? "gradient-animated gradient-slow gradient-violet-pink-orange" : "glass"}`}>
+                            <span className="text-lg leading-none">{g.icon}</span>
+                            <span className="text-[10px] text-center leading-tight" style={{ color: active?"#fff":"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>{g.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Sevmediği Yiyecekler</label>
-                    <input value={dInput.dislikedFoods} onChange={e=>setDInput(d=>({...d,dislikedFoods:e.target.value}))}
-                      placeholder="brokoli, mercimek..."
-                      className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
-                  </div>
-                  <div>
-                    <label className={labelCls} style={{ fontFamily:"var(--font-barlow-condensed)" }}>Alerjiler</label>
-                    <input value={dInput.allergies} onChange={e=>setDInput(d=>({...d,allergies:e.target.value}))}
-                      placeholder="fıstık, glüten, süt..."
-                      className={inputCls} style={{ fontFamily:"var(--font-inter)" }} />
-                  </div>
-                </div>
 
-                {/* Butonlar */}
-                <div className="flex gap-3 pt-1">
-                  <button onClick={generateAndSave} disabled={dietSaving}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 text-white text-sm font-semibold tracking-widest uppercase transition-all disabled:opacity-40"
-                    style={{ background:`linear-gradient(135deg,${V},#A855F7)`, fontFamily:"var(--font-barlow-condensed)", boxShadow:`0 0 20px ${V}30` }}>
-                    {dietSaving ? (
-                      <><div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"/>Oluşturuluyor...</>
-                    ) : dietPlan ? (
-                      <><RefreshCw size={15}/> Diyeti Yenile</>
-                    ) : (
-                      <><Sparkles size={15}/> AI Diyet Planı Oluştur</>
-                    )}
-                  </button>
+                  {/* Tercihler */}
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Sevdiği Yiyecekler</label>
+                      <input value={dInput.likedFoods} onChange={e=>setDInput(d=>({...d,likedFoods:e.target.value}))}
+                        placeholder="tavuk, pirinç, yoğurt..."
+                        className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                    </div>
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Sevmediği Yiyecekler</label>
+                      <input value={dInput.dislikedFoods} onChange={e=>setDInput(d=>({...d,dislikedFoods:e.target.value}))}
+                        placeholder="brokoli, mercimek..."
+                        className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                    </div>
+                    <div>
+                      <label className={labelCls} style={{ fontFamily:"var(--font-label)" }}>Alerjiler</label>
+                      <input value={dInput.allergies} onChange={e=>setDInput(d=>({...d,allergies:e.target.value}))}
+                        placeholder="fıstık, glüten, süt..."
+                        className={inputCls} style={{ fontFamily:"var(--font-label)" }} />
+                    </div>
+                  </div>
+
+                  {/* Butonlar */}
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={generateAndSave} disabled={dietSaving}
+                      className="gradient-animated gradient-slow gradient-violet-pink-orange flex-1 flex items-center justify-center gap-2 py-3 text-white text-sm font-semibold tracking-widest uppercase rounded-xl transition-transform hover:scale-[1.02] disabled:opacity-40"
+                      style={{ fontFamily:"var(--font-label)" }}>
+                      {dietSaving ? (
+                        <><div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"/>Oluşturuluyor...</>
+                      ) : dietPlan ? (
+                        <><RefreshCw size={15}/> Diyeti Yenile</>
+                      ) : (
+                        <><Sparkles size={15}/> AI Diyet Planı Oluştur</>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </Card>
+            </div>
 
             {/* Diyet Planı Sonucu */}
             {dietLoading ? (
@@ -567,14 +612,14 @@ export default function SaglikPage() {
               <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} className="space-y-4">
 
                 {/* Makro özet */}
-                <Card className="p-5">
+                <div className="glass-strong rounded-2xl p-5">
                   <div className="flex items-center gap-2 mb-4">
                     <Sparkles size={14} style={{ color:V }} />
-                    <h3 className="text-base font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                    <h3 className="text-base text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>
                       GÜNLÜK HEDEFLER
                     </h3>
                     {dietPlan.updatedAt && (
-                      <span className="ml-auto text-[10px]" style={{ color:"rgba(255,255,255,0.2)", fontFamily:"var(--font-barlow-condensed)" }}>
+                      <span className="ml-auto text-[10px] text-white/25" style={{ fontFamily:"var(--font-label)" }}>
                         {format(parseISO(dietPlan.updatedAt),"dd MMM yyyy",{locale:tr})}
                       </span>
                     )}
@@ -586,44 +631,44 @@ export default function SaglikPage() {
                       { label:"Karbonhidrat",  val:`${dietPlan.carbsG} g`,    color:"#f59e0b" },
                       { label:"Yağ",           val:`${dietPlan.fatG} g`,      color:"#60a5fa" },
                     ].map(m => (
-                      <div key={m.label} className="p-3 rounded-xl text-center" style={{ background:`${m.color}10`, border:`1px solid ${m.color}25` }}>
-                        <div className="text-lg font-bold" style={{ color:m.color, fontFamily:"var(--font-bebas)" }}>{m.val}</div>
-                        <div className="text-[10px] text-white/40" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{m.label}</div>
+                      <div key={m.label} className="glass rounded-xl p-3 text-center">
+                        <div className="text-lg font-bold" style={{ color:m.color, fontFamily:"var(--font-display)" }}>{m.val}</div>
+                        <div className="text-[10px] text-white/40" style={{ fontFamily:"var(--font-label)" }}>{m.label}</div>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded" style={{ background:"rgba(96,165,250,0.08)", border:"1px solid rgba(96,165,250,0.2)" }}>
+                  <div className="mt-3 glass flex items-center gap-2 px-3 py-2 rounded-xl">
                     <Droplets size={13} style={{ color:"#60a5fa" }} />
-                    <span className="text-xs" style={{ color:"#60a5fa", fontFamily:"var(--font-barlow-condensed)" }}>
+                    <span className="text-xs" style={{ color:"#60a5fa", fontFamily:"var(--font-label)" }}>
                       Günlük su hedefi: {Math.round(dietPlan.waterMl / 250)} bardak ({dietPlan.waterMl} ml)
                     </span>
                   </div>
-                </Card>
+                </div>
 
                 {/* Öğün planı */}
-                <Card className="overflow-hidden">
-                  <div className="px-5 py-3 border-b" style={{ borderColor:"rgba(139,92,246,0.12)" }}>
-                    <h3 className="text-base font-display text-white tracking-wider" style={{ fontFamily:"var(--font-bebas)" }}>
+                <div className="glass-strong rounded-2xl overflow-hidden">
+                  <div className="px-5 py-3" style={{ borderBottom: "1px solid rgba(139,92,246,0.15)" }}>
+                    <h3 className="text-base text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>
                       GÜNLÜK ÖĞÜN PLANI
                     </h3>
                   </div>
-                  <div className="divide-y" style={{ borderColor:"rgba(139,92,246,0.08)" }}>
+                  <div className="divide-y" style={{ borderColor:"rgba(139,92,246,0.1)" }}>
                     {dietPlan.meals.map((meal, i) => (
                       <div key={i}>
                         <button
-                          className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
+                          className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
                           onClick={() => setExpandedMeal(expandedMeal === i ? null : i)}>
                           <div className="w-12 text-center flex-shrink-0">
-                            <div className="text-xs font-bold" style={{ color:V, fontFamily:"var(--font-bebas)", letterSpacing:"0.05em" }}>{meal.time}</div>
+                            <div className="text-xs font-bold" style={{ color:V, fontFamily:"var(--font-display)", letterSpacing:"0.05em" }}>{meal.time}</div>
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-barlow-condensed)" }}>{meal.name}</span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background:"rgba(139,92,246,0.12)", color:V, fontFamily:"var(--font-barlow-condensed)" }}>
+                              <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>{meal.name}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background:"rgba(139,92,246,0.15)", color:"#C4B5FD", fontFamily:"var(--font-label)" }}>
                                 {meal.calories} kcal
                               </span>
                             </div>
-                            <div className="text-xs text-white/30 truncate" style={{ fontFamily:"var(--font-barlow-condensed)" }}>
+                            <div className="text-xs text-white/30 truncate" style={{ fontFamily:"var(--font-label)" }}>
                               {meal.items[0]}{meal.items.length > 1 ? ` + ${meal.items.length-1} daha` : ""}
                             </div>
                           </div>
@@ -635,11 +680,11 @@ export default function SaglikPage() {
                         <AnimatePresence>
                           {expandedMeal === i && (
                             <motion.div initial={{ height:0, opacity:0 }} animate={{ height:"auto", opacity:1 }} exit={{ height:0, opacity:0 }} style={{ overflow:"hidden" }}>
-                              <div className="px-5 pb-4 pt-1 space-y-3" style={{ borderTop:"1px solid rgba(139,92,246,0.08)" }}>
+                              <div className="px-5 pb-4 pt-1 space-y-3" style={{ borderTop:"1px solid rgba(139,92,246,0.1)" }}>
                                 {/* Besinler */}
                                 <ul className="space-y-1">
                                   {meal.items.map((item, j) => (
-                                    <li key={j} className="flex items-center gap-2 text-xs" style={{ color:"rgba(255,255,255,0.6)", fontFamily:"var(--font-barlow-condensed)" }}>
+                                    <li key={j} className="flex items-center gap-2 text-xs" style={{ color:"rgba(255,255,255,0.6)", fontFamily:"var(--font-label)" }}>
                                       <div className="w-1 h-1 rounded-full flex-shrink-0" style={{ background:V }} />
                                       {item}
                                     </li>
@@ -652,9 +697,9 @@ export default function SaglikPage() {
                                     { l:"Karb",     v:meal.macros.carbs+"g",   c:"#f59e0b" },
                                     { l:"Yağ",      v:meal.macros.fat+"g",     c:"#60a5fa" },
                                   ].map(m => (
-                                    <div key={m.l} className="text-center py-1.5 rounded" style={{ background:`${m.c}10`, border:`1px solid ${m.c}20` }}>
-                                      <div className="text-xs font-bold" style={{ color:m.c, fontFamily:"var(--font-barlow-condensed)" }}>{m.v}</div>
-                                      <div className="text-[9px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-barlow-condensed)" }}>{m.l}</div>
+                                    <div key={m.l} className="glass text-center py-1.5 rounded-lg">
+                                      <div className="text-xs font-bold" style={{ color:m.c, fontFamily:"var(--font-label)" }}>{m.v}</div>
+                                      <div className="text-[9px] text-white/30" style={{ fontFamily:"var(--font-label)" }}>{m.l}</div>
                                     </div>
                                   ))}
                                 </div>
@@ -665,27 +710,27 @@ export default function SaglikPage() {
                       </div>
                     ))}
                   </div>
-                </Card>
+                </div>
 
                 {/* İpuçları */}
-                <Card className="p-5">
-                  <h3 className="text-base font-display text-white tracking-wider mb-3" style={{ fontFamily:"var(--font-bebas)" }}>
+                <div className="glass-strong rounded-2xl p-5">
+                  <h3 className="text-base text-white tracking-wider mb-3" style={{ fontFamily:"var(--font-display)" }}>
                     ÖNEMLİ İPUÇLARI
                   </h3>
                   <ul className="space-y-2">
                     {dietPlan.tips.map((tip, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-barlow-condensed)" }}>
+                      <li key={i} className="flex items-start gap-2 text-xs" style={{ color:"rgba(255,255,255,0.5)", fontFamily:"var(--font-label)" }}>
                         <span className="flex-shrink-0 mt-0.5 text-[10px]" style={{ color:V }}>✦</span>
                         {tip}
                       </li>
                     ))}
                   </ul>
-                </Card>
+                </div>
               </motion.div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
