@@ -24,11 +24,11 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.28 }}
       className="bg-carbon border flex flex-col overflow-hidden group"
-      style={{ borderColor: "rgba(139,92,246,0.12)" }}
+      style={{ borderColor: "rgba(255,255,255,0.08)" }}
     >
       {/* Görsel */}
       <div className="relative h-44 flex items-center justify-center overflow-hidden"
-        style={{ background: "rgba(139,92,246,0.04)", borderBottom: "1px solid rgba(139,92,246,0.1)" }}>
+        style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={product.imageUrl} alt={product.name}
@@ -90,7 +90,7 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
       <a href={waLink(product.name)} target="_blank" rel="noopener noreferrer"
         className="flex items-center justify-center gap-2 py-3 text-xs font-semibold tracking-widest uppercase transition-all border-t"
         style={{
-          borderColor: "rgba(139,92,246,0.12)",
+          borderColor: "rgba(255,255,255,0.08)",
           color: product.status === "coming_soon" ? "rgba(255,255,255,0.25)" : "#fff",
           background: product.status === "coming_soon" ? "rgba(255,255,255,0.03)" : "rgba(34,197,94,0.12)",
           fontFamily: "var(--font-barlow-condensed)",

@@ -285,9 +285,8 @@ function LifetimeXPCard({ xpResult }: { xpResult: XPResult }) {
   return (
     <div className="glass-strong relative rounded-2xl p-5 overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${current.gradFrom}22, rgba(0,0,0,0) 60%), rgba(139,92,246,0.08)`,
         borderColor: current.borderColor,
-        boxShadow: `0 0 40px ${current.glowColor}, inset 0 0 40px ${current.glowColor}22`,
+        boxShadow: `0 0 28px ${current.glowColor}`,
       }}>
       <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl"
         style={{ background: `linear-gradient(90deg, transparent, ${current.colorPrimary}, ${next?.colorPrimary ?? current.colorPrimary}, transparent)` }} />

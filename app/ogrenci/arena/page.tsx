@@ -264,11 +264,10 @@ export default function ArenaPage() {
       {/* ═══════════════════════════════════════════════
           ARENA HERO
       ═══════════════════════════════════════════════ */}
-      <div className="relative overflow-hidden rounded-2xl py-7 px-5 text-center"
+      <div className="relative overflow-hidden rounded-2xl py-7 px-5 text-center glass-strong"
         style={{
-          background: "linear-gradient(160deg,rgba(220,38,38,0.18) 0%,rgba(124,58,237,0.1) 60%,rgba(0,0,0,0) 100%), rgba(255,255,255,0.02)",
           border: "1px solid rgba(220,38,38,0.35)",
-          boxShadow: "0 0 60px rgba(220,38,38,0.2), 0 0 120px rgba(220,38,38,0.08)",
+          boxShadow: "0 0 40px rgba(220,38,38,0.14)",
         }}>
         <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"
           style={{ background: "linear-gradient(90deg,transparent,#DC2626,#7C3AED,transparent)" }} />

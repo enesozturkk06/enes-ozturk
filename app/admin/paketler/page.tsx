@@ -283,7 +283,6 @@ export default function PaketlerPage() {
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="glass-strong relative overflow-hidden rounded-2xl"
-            style={{ borderColor: "rgba(139,92,246,0.3)" }}
           >
             <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-pink-orange" />
 

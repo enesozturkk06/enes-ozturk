@@ -136,8 +136,7 @@ export default function Hero() {
 
         {/* Stat şeridi — tek cam kart, iç bölücülerle (önceden 4 ayrı blur katmanıydı) */}
         <motion.div {...fadeUp(lite ? 0.5 : 0.75)}
-          className="glass grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 max-w-3xl mx-auto rounded-2xl overflow-hidden"
-          style={{ borderColor: "rgba(139,92,246,0.12)" }}>
+          className="glass grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-white/8 max-w-3xl mx-auto rounded-2xl overflow-hidden">
           {[
             { n: "20+", l: "Profesyonel Maç" },
             { n: "16",  l: "Nakavt Galibiyeti" },
@@ -146,7 +145,6 @@ export default function Hero() {
           ].map((s, i) => (
             <motion.div key={s.l}
               className="px-5 py-5 text-center cursor-default transition-colors duration-300"
-              style={{ borderColor: "rgba(139,92,246,0.1)" }}
               whileHover={!lite ? { background: "rgba(139,92,246,0.06)" } : undefined}
               initial={{ opacity: 0, y: lite ? 8 : 20 }}
               animate={{ opacity: 1, y: 0 }}

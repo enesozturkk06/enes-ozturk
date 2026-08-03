@@ -44,10 +44,7 @@ function Card({ children, className = "", style = {}, glass = "glass" }: {
   return (
     <div
       className={`${glass} relative rounded-2xl overflow-hidden w-full ${className}`}
-      style={{
-        borderColor: "rgba(139,92,246,0.14)",
-        ...style,
-      }}
+      style={style}
     >
       {children}
     </div>
@@ -271,9 +268,9 @@ export default function RandevuPage() {
       <AnimatePresence>
         {pendingInvites.length > 0 && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-4 w-full">
-            <Card style={{ border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.06)" }}>
+            <Card glass="glass">
               {/* Başlık */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: "rgba(139,92,246,0.15)" }}>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/8">
                 <Bell size={14} style={{ color: V, flexShrink: 0 }} />
                 <span className="text-sm font-semibold" style={{ color: V, fontFamily: "var(--font-label)" }}>
                   Bekleyen Davet ({pendingInvites.length})
@@ -281,7 +278,7 @@ export default function RandevuPage() {
               </div>
               {/* Davet listesi */}
               {pendingInvites.map(inv => (
-                <div key={inv.appointmentStudentId} className="px-4 py-3 border-b last:border-0" style={{ borderColor: "rgba(139,92,246,0.1)" }}>
+                <div key={inv.appointmentStudentId} className="px-4 py-3 border-b border-white/6 last:border-0">
                   {/* Kim davet etti */}
                   <div className="flex items-center gap-2 mb-1">
                     <Users size={13} style={{ color: V, flexShrink: 0 }} />
@@ -597,7 +594,7 @@ export default function RandevuPage() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
               >
-                <Card glass="glass-strong" style={{ borderColor: "rgba(139,92,246,0.3)" }}>
+                <Card glass="glass-strong">
                   <div className="absolute top-0 left-0 right-0 h-px"
                     style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
                   <div className="p-5">

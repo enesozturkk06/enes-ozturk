@@ -7,9 +7,11 @@ interface Props {
   student: Student;
   xpResult: XPResult;
   packageLabel: string;
+  dateLabel?: string;
+  aiTip?: string;
 }
 
-export default function ProfileHeroCard({ student, xpResult, packageLabel }: Props) {
+export default function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip }: Props) {
   const reduced = useReducedMotion();
   const { current, next, progressPct, xpInLevel, xpToNext } = xpResult.level;
   const initials = student.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
@@ -41,8 +43,8 @@ export default function ProfileHeroCard({ student, xpResult, packageLabel }: Pro
             <h1 className="text-2xl sm:text-3xl lg:text-4xl text-white tracking-wide truncate" style={{ fontFamily: "var(--font-display)" }}>
               Hoş Geldin, {student.fullName.split(" ")[0]}!
             </h1>
-            <p className="text-xs sm:text-sm text-white/40 mt-1" style={{ fontFamily: "var(--font-label)" }}>
-              {student.code} · {packageLabel}
+            <p className="text-xs sm:text-sm mt-1" style={{ color: "rgba(255,255,255,0.72)", fontFamily: "var(--font-label)" }}>
+              {student.code} · {packageLabel}{dateLabel ? ` · ${dateLabel}` : ""}
             </p>
           </div>
 
@@ -78,6 +80,16 @@ export default function ProfileHeroCard({ student, xpResult, packageLabel }: Pro
             </motion.div>
           </div>
         </div>
+
+        {/* Kedi AI mini tavsiye — tam kart aşağıdaki Kedi AI bölümünde, burada sadece tek satır önizleme */}
+        {aiTip && (
+          <div className="flex items-center gap-2 mt-5 pt-4 border-t border-white/8">
+            <span className="text-base flex-shrink-0">🐾</span>
+            <p className="text-xs sm:text-sm truncate" style={{ color: "rgba(255,255,255,0.72)", fontFamily: "var(--font-label)" }}>
+              {aiTip}
+            </p>
+          </div>
+        )}
       </div>
     </motion.div>
   );

@@ -535,7 +535,7 @@ export default function OdemelerPage() {
       <AnimatePresence>
         {addOpen && (
           <motion.div initial={{ opacity: 0, y: -14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -10 }}
-            className="glass-strong relative rounded-2xl overflow-hidden" style={{ borderColor: "rgba(139,92,246,0.3)" }}>
+            className="glass-strong relative rounded-2xl overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-pink-orange" />
             <div className="p-4 sm:p-5">
               <div className="flex items-center justify-between mb-4">
@@ -883,7 +883,6 @@ export default function OdemelerPage() {
             <motion.div initial={{ scale: 0.94, y: 16, filter: "blur(6px)" }} animate={{ scale: 1, y: 0, filter: "blur(0px)" }} exit={{ scale: 0.95, filter: "blur(4px)" }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="glass-strong relative z-10 w-full max-w-sm rounded-2xl overflow-hidden p-5"
-              style={{ borderColor: "rgba(139,92,246,0.3)" }}
               onClick={e => e.stopPropagation()}>
               <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-pink-orange" />
               <div className="flex items-center justify-between mb-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import { useToast } from "@/app/components/shared/Toast";
@@ -94,8 +95,11 @@ export default function SaglikPage() {
   const { student } = useAuth();
   const { toast }   = useToast();
   const today       = todayDate();
+  const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab]       = useState<Tab>("saglik");
+  // Dashboard'daki "AI Diyet" hızlı işlemi ?tab=ai-diyet ile doğrudan bu sekmeye
+  // yönlendirir — sayfanın kendi state/mantığı değişmedi, sadece başlangıç sekmesi.
+  const [activeTab, setActiveTab]       = useState<Tab>(searchParams.get("tab") === "ai-diyet" ? "ai-diyet" : "saglik");
 
   /* Sağlık verileri */
   const [profile, setProfile]           = useState<HealthProfile | null>(null);

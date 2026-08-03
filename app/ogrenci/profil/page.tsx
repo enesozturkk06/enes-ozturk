@@ -356,11 +356,10 @@ export default function ProfilPage() {
         {/* ═══════════════════════════════════════════════
             HERO CARD
         ═══════════════════════════════════════════════ */}
-        <div className="relative overflow-hidden rounded-2xl"
+        <div className="relative overflow-hidden rounded-2xl glass-strong"
           style={{
-            background: `linear-gradient(160deg, ${gf}18 0%, ${gt}06 50%, rgba(0,0,0,0) 100%), rgba(255,255,255,0.02)`,
             border: `1px solid ${gc}${isLegend ? "88" : "44"}`,
-            boxShadow: `0 0 60px ${gc}${isLegend ? "44" : "22"}, 0 0 120px ${gc}${isLegend ? "22" : "11"}`,
+            boxShadow: `0 0 40px ${gc}${isLegend ? "30" : "18"}`,
           }}>
           {/* Top accent bar */}
           <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"

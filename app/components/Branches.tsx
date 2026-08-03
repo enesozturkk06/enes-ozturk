@@ -59,9 +59,9 @@ function BranchCard({ b, i }: { b: typeof branches[0]; i: number }) {
       />
 
       <div className="glass relative rounded-2xl p-6 h-full flex flex-col overflow-hidden"
-        style={{ borderColor: "rgba(139,92,246,0.1)", transition: "border-color 0.4s" }}
+        style={{ borderColor: "rgba(255,255,255,0.08)", transition: "border-color 0.4s" }}
         onMouseEnter={e => (e.currentTarget.style.borderColor = `${b.accent}45`)}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(139,92,246,0.1)")}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
       >
         {/* Box shadow glow on hover */}
         <motion.div

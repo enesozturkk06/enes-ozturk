@@ -105,8 +105,7 @@ export default function Contact() {
                   <motion.a href={c.href} target={c.href.startsWith("http") ? "_blank" : undefined}
                     rel="noopener noreferrer"
                     whileHover={{ scale: 1.02, borderColor: `${c.accent}40` }}
-                    className="glass flex gap-4 p-4 rounded-xl transition-all"
-                    style={{ borderColor: "rgba(139,92,246,0.1)" }}>
+                    className="glass flex gap-4 p-4 rounded-xl transition-all">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
                       style={{ background: `${c.accent}12`, border: `1px solid ${c.accent}22`, color: c.accent }}>
                       {c.icon}
@@ -155,8 +154,7 @@ export default function Contact() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}>
-            <div className="glass relative rounded-2xl p-8 overflow-hidden"
-              style={{ borderColor: "rgba(139,92,246,0.2)" }}>
+            <div className="glass relative rounded-2xl p-8 overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-px"
                 style={{ background: "linear-gradient(90deg,transparent,rgba(139,92,246,0.5),rgba(217,70,239,0.3),transparent)" }} />
               <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 rounded-tl-2xl"

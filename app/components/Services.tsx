@@ -89,7 +89,6 @@ function ServiceCard({ s, i }: { s: typeof services[0]; i: number }) {
       {/* Kart gövdesi */}
       <div
         className="glass relative flex flex-col flex-1 rounded-2xl p-6 overflow-hidden transition-all duration-500"
-        style={{ borderColor: "rgba(139,92,246,0.12)" }}
       >
         {/* Hover'da çerçeve parlıyor */}
         <motion.div

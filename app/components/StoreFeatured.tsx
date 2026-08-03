@@ -21,11 +21,10 @@ function ProductCard({ p, i }: { p: Product; i: number }) {
       viewport={{ once: true }}
       transition={{ delay: i * 0.07, duration: 0.4 }}
       className="glass flex flex-col overflow-hidden group rounded-2xl"
-      style={{ borderColor: "rgba(139,92,246,0.12)" }}
     >
       {/* Görsel / ikon */}
       <div className="relative h-40 flex items-center justify-center overflow-hidden"
-        style={{ background: "rgba(139,92,246,0.04)", borderBottom: "1px solid rgba(139,92,246,0.08)" }}>
+        style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         {p.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={p.imageUrl} alt={p.name}
@@ -79,7 +78,7 @@ function ProductCard({ p, i }: { p: Product; i: number }) {
         target="_blank" rel="noopener noreferrer"
         className="flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold tracking-widest uppercase border-t transition-all"
         style={{
-          borderColor: "rgba(139,92,246,0.1)",
+          borderColor: "rgba(255,255,255,0.06)",
           color: p.status === "coming_soon" ? "rgba(255,255,255,0.2)" : "#22c55e",
           background: p.status === "coming_soon" ? "transparent" : "rgba(34,197,94,0.06)",
           fontFamily: "var(--font-label)",

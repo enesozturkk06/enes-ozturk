@@ -320,7 +320,7 @@ export default function TakvimPage() {
 
         {/* Sol: Saat ekleme */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="glass-strong relative rounded-2xl overflow-hidden" style={{ borderColor: "rgba(139,92,246,0.25)" }}>
+          <div className="glass-strong relative rounded-2xl overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange" />
             <div className="p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -402,7 +402,7 @@ export default function TakvimPage() {
         <div className="lg:col-span-2 space-y-4">
 
           {/* Randevu oluşturma */}
-          <div className="glass-strong relative rounded-2xl overflow-hidden" style={{ borderColor: "rgba(139,92,246,0.25)" }}>
+          <div className="glass-strong relative rounded-2xl overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange" />
             <button className="w-full flex items-center justify-between p-4"
               onClick={() => setAptPanel(o => !o)}>

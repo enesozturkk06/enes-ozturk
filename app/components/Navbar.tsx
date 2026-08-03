@@ -36,8 +36,8 @@ export default function Navbar() {
       style={{
         paddingTop: "env(safe-area-inset-top, 0px)",
         ...(scrolled ? {
-          borderColor: "rgba(139,92,246,0.15)",
-          boxShadow: "0 4px 30px rgba(139,92,246,0.08)",
+          borderColor: "rgba(255,255,255,0.08)",
+          boxShadow: "0 4px 30px rgba(0,0,0,0.25)",
         } : {}),
       }}
     >
@@ -148,18 +148,18 @@ export default function Navbar() {
       {/* Mobil menü */}
       <div className={`lg:hidden transition-all duration-500 overflow-hidden ${menuOpen ? "max-h-screen opacity-100" : "max-h-0 opacity-0"}`}>
         <div className="glass-dark px-6 py-5 space-y-3"
-          style={{ borderTop:"1px solid rgba(139,92,246,0.12)" }}>
+          style={{ borderTop:"1px solid rgba(255,255,255,0.08)" }}>
           {navLinks.map(l => l.external ? (
             <Link key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
               className="flex items-center gap-2 text-sm tracking-widest text-white/70 uppercase py-2 border-b transition-colors hover:text-violet-bright"
-              style={{ fontFamily:"var(--font-label)", borderColor:"rgba(139,92,246,0.08)" }}>
+              style={{ fontFamily:"var(--font-label)", borderColor:"rgba(255,255,255,0.06)" }}>
               {l.label}
               <span className="text-[8px] px-1.5 py-0.5 rounded" style={{ background:"rgba(139,92,246,0.2)", color:"#A855F7" }}>YENİ</span>
             </Link>
           ) : (
             <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
               className="block text-sm tracking-widest text-white/70 uppercase py-2 border-b transition-colors hover:text-violet-bright"
-              style={{ fontFamily:"var(--font-label)", borderColor:"rgba(139,92,246,0.08)" }}>
+              style={{ fontFamily:"var(--font-label)", borderColor:"rgba(255,255,255,0.06)" }}>
               {l.label}
             </a>
           ))}
