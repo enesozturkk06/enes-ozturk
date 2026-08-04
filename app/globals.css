@@ -128,36 +128,42 @@
     animation: shimmer-violet 3s linear infinite;
   }
 
-  /* Birleşik kart sistemi — Apple/Tesla/Riot Games kalitesinde koyu yüzey.
-     Katmanlı derinlik SADECE box-shadow ile (üstte ince ışık çizgisi +
-     altta hafif vinyet) — gradient/background-image DEĞİL, kart gövdesi
-     hâlâ tek düz renk, "hiçbir kartta gradient dolgu olmasın" kuralı
-     korunuyor. Gradient sadece dıştaki p-[1px] kenarlık halkası
-     tekniğiyle (gradient-animated + gradient-border-quiet) verilir.
-     Hover'da sadece yükselme değil, zemin de gerçekten hafifçe
-     aydınlanır ("ışık kazanıyor" hissi) + altın kenarlık parıltısı. */
+  /* Birleşik kart sistemi — Apple/Linear/Stripe/Riot Games kalitesinde
+     koyu yüzey. Premium his artık VARSAYILAN durumda — eskiden sadece
+     hover'da görünen glow/derinlik/kenarlık şimdi normal halde, hover
+     bunun üstüne yalnızca ~%15 daha güçlü glow + hafif yükselme ekliyor
+     (hover artık "farklı bir görünüm" değil, "biraz daha parlak" bir
+     devamı). Katmanlı derinlik SADECE box-shadow ile (üstte ince cam
+     yansıması + altta hafif vinyet + çok hafif altın/kırmızı ambient
+     glow) — gradient/background-image DEĞİL, kart gövdesi hâlâ tek düz
+     renk, "hiçbir kartta gradient dolgu olmasın" kuralı korunuyor.
+     Gradient sadece dıştaki p-[1px] kenarlık halkası tekniğiyle
+     (gradient-animated + gradient-border-quiet) verilir. */
   .glass, .glass-strong, .glass-dark {
     background: #16171B;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.20);
     border-radius: 20px;
     box-shadow:
       0 22px 55px rgba(0,0,0,0.55),
-      inset 0 1px 0 rgba(255,255,255,0.07),
+      0 0 0 1px rgba(245,158,11,0.09),
+      0 0 34px -10px rgba(220,38,38,0.13),
+      inset 0 1px 0 rgba(255,255,255,0.08),
       inset 0 -26px 40px -30px rgba(0,0,0,0.5);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    transition: transform 0.25s cubic-bezier(0.22,1,0.36,1),
-                border-color 0.25s cubic-bezier(0.22,1,0.36,1),
-                box-shadow 0.25s cubic-bezier(0.22,1,0.36,1),
-                background-color 0.25s ease;
+    transition: transform 0.28s cubic-bezier(0.22,1,0.36,1),
+                border-color 0.28s cubic-bezier(0.22,1,0.36,1),
+                box-shadow 0.28s cubic-bezier(0.22,1,0.36,1),
+                background-color 0.28s ease;
   }
   .glass:hover, .glass-strong:hover, .glass-dark:hover {
     transform: translateY(-3px);
     background-color: #1A1B20;
     border-color: rgba(255,255,255,0.30);
     box-shadow:
-      0 30px 68px rgba(0,0,0,0.6),
-      0 0 0 1px rgba(245,158,11,0.16),
+      0 28px 64px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(245,158,11,0.15),
+      0 0 42px -8px rgba(220,38,38,0.19),
       inset 0 1px 0 rgba(255,255,255,0.12),
       inset 0 -26px 40px -30px rgba(0,0,0,0.45);
   }
@@ -198,11 +204,12 @@
   /* Dinlenme-durumu kenarlık modifikatörü — kartların dıştaki gradient
      kenarlığını sessizleştirir (CTA/aktif-sekme/progress-bar tam
      parlaklıkta kalır, kartlarda gradient sadece ince bir iz olarak
-     hissedilir). Hover'da güçlenir — mouse kart üzerindeyken iç .glass
+     hissedilir). Artık varsayılan olarak zaten belirgin; hover'da
+     yalnızca ~%15 daha güçlenir. Mouse kart üzerindeyken iç .glass
      div'i hover olsa da bu opacity geçişi dıştaki wrapper'ı da kapsar
      (aynı kutu alanı içinde iç içe elemanlar aynı anda hover olur). */
-  .gradient-border-quiet { opacity: 0.38; transition: opacity 0.25s cubic-bezier(0.22,1,0.36,1); }
-  .gradient-border-quiet:hover { opacity: 0.8; }
+  .gradient-border-quiet { opacity: 0.45; transition: opacity 0.28s cubic-bezier(0.22,1,0.36,1); }
+  .gradient-border-quiet:hover { opacity: 0.85; }
 
   /* XP bar dolgusu üzerinde soldan sağa geçen ışık huzmesi — öğrenci paneli */
   .xp-bar-shimmer {
