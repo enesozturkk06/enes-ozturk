@@ -186,9 +186,9 @@ function IOSModal({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
 
           <motion.div
-            initial={{ y: 60, opacity: 0, scale: 0.94, filter: "blur(6px)" }}
-            animate={{ y: 0, opacity: 1, scale: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 300, damping: 28 } }}
-            exit={{ y: 30, opacity: 0, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.2, ease: "easeIn" } }}
+            initial={{ y: 60, scale: 0.94, filter: "blur(6px)" }}
+            animate={{ y: 0, scale: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 300, damping: 28 } }}
+            exit={{ y: 30, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.2, ease: "easeIn" } }}
             className="relative z-10 w-full max-w-sm gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet rounded-t-2xl sm:rounded-2xl p-[1px] overflow-hidden"
           >
             <div className="glass-strong relative rounded-t-2xl sm:rounded-2xl">

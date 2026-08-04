@@ -47,11 +47,10 @@ function LevelCard({ level, isCurrent, isEarned, index }: {
       whileHover={{ y: -3 }}
       className={`relative flex flex-col p-5 rounded-2xl select-none ${isEarned ? "glass-strong" : "glass"}`}
       style={{
-        background: isEarned ? `linear-gradient(135deg, ${level.gradFrom}18, ${level.gradTo}0a)` : undefined,
         borderColor: isCurrent ? level.colorPrimary + "99" : isEarned ? level.colorPrimary + "44" : undefined,
         boxShadow: isCurrent
-          ? `0 0 32px ${level.glowColor}, 0 0 12px ${level.glowColor}`
-          : isEarned && hover ? `0 0 20px ${level.glowColor}` : "none",
+          ? `0 0 20px ${level.glowColor}`
+          : isEarned && hover ? `0 0 16px ${level.glowColor}` : "none",
         transition: "box-shadow 0.25s, transform 0.25s",
       }}
     >

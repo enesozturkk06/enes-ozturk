@@ -100,7 +100,7 @@ export default function AdminLoginPage() {
         <motion.div
           animate={shake ? { x: [-10, 10, -8, 8, -5, 5, 0] } : {}}
           transition={{ duration: 0.48 }}
-          className={`relative bg-carbon border transition-all duration-400 ${borderColor}`}
+          className={`relative glass-strong border transition-all duration-400 ${borderColor}`}
         >
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/55 to-transparent" />
           <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-gold/55" />

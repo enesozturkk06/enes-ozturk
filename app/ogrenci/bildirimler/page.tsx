@@ -65,7 +65,7 @@ export default function BildirimlerPage() {
                   initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.06 }}
                 >
-                  <div className="p-4 border border-l-2 border-crimson hover:border-crimson/60 cursor-pointer bg-carbon transition-all duration-300" onClick={() => handleRead(n.id)}>
+                  <div className="p-4 rounded-lg border border-l-2 border-crimson hover:border-crimson/60 cursor-pointer glass transition-all duration-300" onClick={() => handleRead(n.id)}>
                     <div className="flex items-start gap-3">
                       <div className={`flex-shrink-0 mt-0.5 ${TYPE_COLOR[n.type] === "gold" ? "text-gold" : TYPE_COLOR[n.type] === "green" ? "text-green-400" : TYPE_COLOR[n.type] === "blue" ? "text-blue-400" : "text-crimson"}`}>
                         {TYPE_ICON[n.type]}

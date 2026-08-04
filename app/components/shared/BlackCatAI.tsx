@@ -1611,7 +1611,7 @@ export default function BlackCatAI() {
             {/* Mobil overlay */}
             <motion.div
               className="fixed inset-0 sm:hidden"
-              style={{ zIndex:54, background:"rgba(0,0,0,0.55)", backdropFilter:"blur(4px)" }}
+              style={{ zIndex:54, background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}
               initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
               onClick={() => setOpen(false)}
             />

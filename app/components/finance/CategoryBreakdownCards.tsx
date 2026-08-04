@@ -14,8 +14,8 @@ function CategoryCard({
   const [open, setOpen] = useState(false);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+      initial={{ y: 16, scale: 0.96, filter: "blur(6px)" }}
+      animate={{ y: 0, scale: 1, filter: "blur(0px)" }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: index * 0.05 }}
       className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet">
       <div className="glass rounded-2xl overflow-hidden">

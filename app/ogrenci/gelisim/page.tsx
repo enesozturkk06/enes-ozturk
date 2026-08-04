@@ -74,7 +74,7 @@ export default function GelisimPage() {
                   {format(parseISO(last.date), "dd MMMM yyyy", { locale: tr })}
                 </div>
               )}
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
                 <RadarChart data={radarData}>
                   <PolarGrid stroke="rgba(255,255,255,0.08)" />
                   <PolarAngleAxis dataKey="subject" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11, fontFamily: "var(--font-barlow-condensed)" }} />
@@ -93,7 +93,7 @@ export default function GelisimPage() {
                   En az 2 ders kaydı gerekli
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
                   <LineChart data={lineData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                     <XAxis dataKey="name" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10, fontFamily: "var(--font-barlow-condensed)" }} />
@@ -142,7 +142,7 @@ export default function GelisimPage() {
                   </div>
 
                   {r.trainerNotes && (
-                    <div className="mt-3 p-3 bg-carbon/60 border-l-2 border-gold/40">
+                    <div className="mt-3 p-3 rounded-lg glass border-l-2 border-gold/40">
                       <div className="text-xs text-gold/60 mb-1 tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Antrenör Notu</div>
                       <p className="text-xs text-white/50 leading-relaxed" style={{ fontFamily: "var(--font-inter)" }}>{r.trainerNotes}</p>
                     </div>

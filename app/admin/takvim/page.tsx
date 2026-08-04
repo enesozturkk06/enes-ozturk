@@ -493,8 +493,8 @@ export default function TakvimPage() {
                         style={{ fontFamily:"var(--font-display)", fontSize:"1rem" }}>
                         <option value="" className="bg-carbon">Saat seçin...</option>
                         {slots.filter(s => s.open && !selectedDayAppointments.find(a=>a.startTime===s.start&&a.status!=="iptal"))
-                          .map(s => (
-                          <option key={s.start} value={s.start} className="bg-carbon">
+                          .map((s, i) => (
+                          <option key={s.id ?? `${s.start}-${i}`} value={s.start} className="bg-carbon">
                             {s.start} – {s.end}
                           </option>
                         ))}

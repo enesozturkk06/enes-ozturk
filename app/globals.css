@@ -8,16 +8,16 @@
   --color-violet-dim:    #6D28D9;
   --color-violet-pale:   #EDE9FE;
 
-  /* crimson artık violet (tüm eski `bg-crimson` otomatik güncellenir) */
-  --color-crimson:       #8B5CF6;
-  --color-crimson-dark:  #6D28D9;
-  --color-crimson-bright:#A855F7;
+  /* crimson = gerçek marka kırmızısı (#dc2626 ile aynı aile) */
+  --color-crimson:       #DC2626;
+  --color-crimson-dark:  #991B1B;
+  --color-crimson-bright:#EF4444;
 
-  /* gold artık magenta-pembe (neon vurgu) */
-  --color-gold:          #D946EF;
-  --color-gold-bright:   #E879F9;
-  --color-gold-light:    #F0ABFC;
-  --color-gold-pale:     #FAE8FF;
+  /* gold = gerçek altın/amber (--color-achievement ile aynı aile) */
+  --color-gold:          #F59E0B;
+  --color-gold-bright:   #FBBF24;
+  --color-gold-light:    #FCD34D;
+  --color-gold-pale:     #FEF3C7;
 
   /* Arka planlar — tam siyah (#09090B) */
   --color-obsidian: #09090B;
@@ -29,10 +29,8 @@
 
   /* ── EO OS V3 Design System — semantic renkler ───────────────
      Pozitif=Yeşil, Uyarı=Turuncu, Hata=Kırmızı, Başarı=Altın.
-     DİKKAT: yukarıdaki --color-gold (magenta) ve --color-crimson
-     (violet) isimleri artık gerçek anlamlarını taşımıyor — yeni kod
-     bunları "gold"/"crimson" sanıp kullanmasın, kafa karıştırır.
-     Gerçek altın/amber için --color-achievement kullanılır. */
+     --color-crimson artık gerçek kırmızı, --color-achievement gerçek
+     altın/amber — ikisi de aynı anlamı taşıyor, tutarlı kullanılabilir. */
   --color-success:            #22C55E;
   --color-success-bright:     #4ADE80;
   --color-warning:            #FB923C;
@@ -130,30 +128,25 @@
     animation: shimmer-violet 3s linear infinite;
   }
 
-  /* Glassmorphism kartlar — nötr koyu antrasit cam (renk sistemi geri alma:
-     eskiden rgba(139,92,246,...) mor tonluydu, her kart mor hissediyordu.
-     Artık gerçek karanlık/antrasit + düz siyah elevation gölgesi; renkli
-     glow sadece glow ve gradient-border teknikleriyle, tek odak noktalarında
-     ayrıca ekleniyor — taban artık nötr. */
-  .glass {
-    background: rgba(255,255,255,0.035);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+  /* Birleşik kart sistemi — Apple/Linear/Notion/Vercel tarzı düz koyu
+     yüzey. Ambient ışığa/blur'a bağımlı değil: tek düz renk (#17181C),
+     ince nötr kenarlık, sabit gölge. Blur/translucency/inset-parıltı
+     tamamen kaldırıldı — kart artık arkasında ne olursa olsun aynı
+     görünür. Gradient sadece dıştaki p-[1px] kenarlık halkası
+     tekniğiyle (gradient-animated + gradient-border-quiet) verilir,
+     kart gövdesi hiçbir zaman gradient/radial-gradient içermez. */
+  .glass, .glass-strong, .glass-dark {
+    background: #17181C;
     border: 1px solid rgba(255,255,255,0.08);
-    box-shadow: 0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+    border-radius: 20px;
+    box-shadow: 0 18px 45px rgba(0,0,0,0.35);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: transform 0.2s ease, border-color 0.2s ease;
   }
-  .glass-strong {
-    background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
-    border: 1px solid rgba(255,255,255,0.1);
-    box-shadow: 0 14px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
-  }
-  .glass-dark {
-    background: rgba(9,9,11,0.75);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.08);
+  .glass:hover, .glass-strong:hover, .glass-dark:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255,255,255,0.16);
   }
 
   /* Neon glow efektleri */
@@ -161,12 +154,7 @@
   .glow-magenta { box-shadow: 0 0 20px rgba(217,70,239,0.45), 0 0 60px rgba(217,70,239,0.12); }
   .glow-ring    { box-shadow: 0 0 0 1px rgba(139,92,246,0.4), 0 0 20px rgba(139,92,246,0.3); }
 
-  /* Legacy uyumluluk */
-  .glass-card { background:rgba(139,92,246,0.04); backdrop-filter:blur(20px); border:1px solid rgba(139,92,246,0.18); }
   .text-gradient-gold { background:linear-gradient(90deg,#8B5CF6,#D946EF,#8B5CF6); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:shimmer-violet 3s linear infinite; }
-
-  /* StatCard (admin + öğrenci panelinde her sayfanın üstünde 4'lü grid) */
-  .stat-card-glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 
   /* ── EO OS V3 — Dynamic Gradient System ──────────────────────
      Çok yavaş (8-15sn), GPU-dostu (background-position, compositor
@@ -212,21 +200,7 @@
   }
 }
 
-/* ── Mobile performance ────────────────────────────────────── */
-@media (max-width: 1023px) {
-  /* Backdrop blur: mobilde en pahalı CSS özelliği, Android'de scroll
-     sırasında glitch/çizgi render hatasına sebep oluyor — kaldır.
-     Arka plan zaten %95 opak olduğu için görsel kayıp yok. */
-  .stat-card-glass { backdrop-filter: none; -webkit-backdrop-filter: none; }
-}
-
 @media (max-width: 767px) {
-  /* Backdrop blur: mobilde en pahalı CSS özelliği — küçült */
-  .glass        { backdrop-filter: blur(6px);  -webkit-backdrop-filter: blur(6px); }
-  .glass-strong { backdrop-filter: blur(8px);  -webkit-backdrop-filter: blur(8px); }
-  .glass-dark   { backdrop-filter: blur(5px);  -webkit-backdrop-filter: blur(5px); }
-  .glass-card   { backdrop-filter: blur(6px);  -webkit-backdrop-filter: blur(6px); }
-
   /* Shimmer animasyonu: her frame GPU paint — mobilde kapat */
   .text-gradient-violet,
   .text-gradient-gold { animation: none; }
@@ -305,18 +279,6 @@ img, video, svg { max-width: 100%; height: auto; }
 /* Tüm kutular border-box (eski Safari/Android için açık bildirim) */
 *, *::before, *::after { box-sizing: border-box; }
 
-/* Genel neon arka plan */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(ellipse 70% 50% at 15% 25%, rgba(139,92,246,0.08) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 85% 65%, rgba(217,70,239,0.07) 0%, transparent 55%);
-}
-
 /* ── Confetti / XP animasyonları ─────────────────────────────── */
 @keyframes xpFloat {
   0%   { opacity: 0; transform: translateX(-50%) translateY(0)   scale(0.6); }
@@ -343,7 +305,6 @@ body::before {
 /* Print styles */
 @media print {
   body { background: #fff !important; color: #000 !important; }
-  body::before { display: none; }
   .no-print { display: none !important; }
   .print-only { display: block !important; }
 }

@@ -70,7 +70,7 @@ export default function DerslerPage() {
               <div className="text-xs text-white/30" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{studentRecords.length} ders kaydı · Ortalama radar</div>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
             <RadarChart data={avgScore}>
               <PolarGrid stroke="rgba(255,255,255,0.08)" />
               <PolarAngleAxis dataKey="subject" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11, fontFamily: "var(--font-barlow-condensed)" }} />

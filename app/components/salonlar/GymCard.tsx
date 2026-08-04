@@ -24,12 +24,11 @@ export default function GymCard({
 }: Props) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-      exit={{ opacity: 0, scale: 0.95 }}
+      initial={{ y: 16, scale: 0.96, filter: "blur(6px)" }}
+      animate={{ y: 0, scale: 1, filter: "blur(0px)" }}
+      exit={{ scale: 0.95 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: index * 0.05 }}
-      whileHover={{ y: -3 }}
-      className={`relative rounded-2xl overflow-hidden ${isEditing ? "p-[1px] gradient-animated gradient-slow gradient-violet-pink-orange" : "p-px"}`}
+      className={`relative rounded-2xl overflow-hidden ${isEditing ? "p-[1px] gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet" : "p-px"}`}
       style={{ background: isEditing ? undefined : "rgba(255,255,255,0.06)" }}
     >
       <div className={`glass-strong relative rounded-2xl h-full flex flex-col ${!gym.isActive ? "opacity-50" : ""}`}>

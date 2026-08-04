@@ -22,8 +22,8 @@ export default function GroupPerformanceCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+      initial={{ y: 16, scale: 0.96, filter: "blur(6px)" }}
+      animate={{ y: 0, scale: 1, filter: "blur(0px)" }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: index * 0.05 }}
       whileHover={reduced ? undefined : { y: -3 }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}

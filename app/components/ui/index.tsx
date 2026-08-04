@@ -1,6 +1,6 @@
 "use client";
-import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from "framer-motion";
-import { type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useState, useEffect, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from "react";
 import Link from "next/link";
 import { X as XIcon } from "lucide-react";
 
@@ -43,101 +43,110 @@ export function Button({ variant = "primary", size = "md", loading, children, cl
 }
 
 // ── Card ──────────────────────────────────────────────────────────────────────
-interface CardProps { children: ReactNode; className?: string; hover?: boolean; glow?: "red" | "gold"; id?: string }
-export function Card({ children, className = "", hover, glow, id }: CardProps) {
+// Hover (translateY + kenarlık parlaması) artık .glass-strong CSS kuralının
+// kendisinde — tüm kartlarda otomatik ve tutarlı, ayrı bir motion.hover'a
+// gerek yok.
+interface CardProps { children: ReactNode; className?: string; glow?: "red" | "gold"; id?: string }
+export function Card({ children, className = "", glow, id }: CardProps) {
   const glowClass = glow === "red" ? "hover:border-crimson/30 hover:shadow-[0_0_30px_rgba(220,38,38,0.08)]"
     : glow === "gold" ? "hover:border-gold/30 hover:shadow-[0_0_30px_rgba(217,119,6,0.08)]" : "";
   return (
-    <motion.div
-      id={id}
-      whileHover={hover ? { y: -2 } : undefined}
-      className={`bg-carbon border border-white/8 rounded-2xl ${glowClass} transition-all duration-300 ${className}`}
-    >
+    <div id={id} className={`glass-strong ${glowClass} ${className}`}>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-// ── StatCard — tıklanabilir, animasyonlu, neon glow ─────────────────────────
+// ── StatCard — proje genelindeki tüm KPI kutularının ortak temeli ───────────
+// AdminStatCard/PaketStatCard/SalonStatCard/TakvimStatCard bunun ince birer
+// adapter'ı. Zemin/kenarlık/radius/gölge/hover .glass'tan geliyor (bkz.
+// globals.css) — burada sadece semantik değer/ikon rengi ve layout var.
+// Gradient sadece dış p-[1px] kenarlık halkası olarak kalır, kart gövdesi
+// (.glass) hiçbir zaman gradient/dolgu içermez. Hover CSS'ten geliyor; ayrı
+// bir JS glow veya whileHover yok (inline stil CSS'i kalıcı ezerdi).
+const STATCARD_NAMED_COLORS: Record<string, string> = {
+  red: "#dc2626", gold: "#f59e0b", white: "#ffffff", green: "#22c55e",
+};
+function useCountUp(value: number, enabled: boolean) {
+  const [display, setDisplay] = useState(value);
+  useEffect(() => {
+    if (!enabled) return;
+    let raf = 0;
+    const duration = 600;
+    const start = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      setDisplay(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, enabled]);
+  return enabled ? display : value;
+}
 interface StatCardProps {
   label: string; value: string | number; sub?: string;
-  color?: "red" | "gold" | "white" | "green";
+  prefix?: string; suffix?: string; countUp?: boolean; // value sayısal ise saydırarak göster
+  color?: string; // "red"|"gold"|"white"|"green" veya herhangi bir CSS rengi (hex/rgb/var(...))
+  gradientVariant?: string; // dış kenarlık halkasının gradient class'ı
   icon?: ReactNode;
+  pulse?: boolean;
   href?: string;       // yönlendirilecek sayfa
   onClick?: () => void; // veya tıklama aksiyonu
+  index?: number;      // grid içindeki sırası — girişte hafif kademeli gecikme için
 }
-export function StatCard({ label, value, sub, color = "white", icon, href, onClick }: StatCardProps) {
-  const reduced = useReducedMotion();
-  const colorMap = {
-    red:   { text: "#dc2626", glow: "rgba(220,38,38,0.18)", border: "rgba(220,38,38,0.25)" },
-    gold:  { text: "#f59e0b", glow: "rgba(217,119,6,0.15)",  border: "rgba(217,119,6,0.22)"  },
-    white: { text: "#ffffff", glow: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.1)" },
-    green: { text: "#22c55e", glow: "rgba(34,197,94,0.14)",   border: "rgba(34,197,94,0.22)"  },
-  };
-  const c = colorMap[color];
+export function StatCard({
+  label, value, sub, prefix = "", suffix = "", countUp = false,
+  color, gradientVariant = "gradient-violet-pink-orange", icon, pulse, href, onClick, index = 0,
+}: StatCardProps) {
+  const text = color ? (STATCARD_NAMED_COLORS[color] ?? color) : "#ffffff";
   const isClickable = !!(href || onClick);
+  const numericValue = typeof value === "number" ? value : Number(value);
+  const display = useCountUp(Number.isFinite(numericValue) ? numericValue : 0, countUp);
+  const renderedValue = countUp ? `${prefix}${display.toLocaleString("tr-TR")}${suffix}` : value;
 
   const inner = (
     <motion.div
-      whileHover={isClickable && !reduced ? { y: -3, scale: 1.02 } : undefined}
-      whileTap={isClickable && !reduced ? { scale: 0.97 } : undefined}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-      className="relative overflow-hidden rounded-2xl stat-card-glass"
-      style={{
-        background: "rgba(15,15,22,0.95)",
-        border: `1px solid ${isClickable ? c.border : "rgba(255,255,255,0.08)"}`,
-        boxShadow: isClickable ? `0 0 0px ${c.glow}` : "none",
-        transition: "box-shadow 0.25s, border-color 0.25s",
-        minHeight: 88, // touch alanı
-        cursor: isClickable ? "pointer" : "default",
-        transform: "translateZ(0)",
-        WebkitTransform: "translateZ(0)",
-        isolation: "isolate",
-      }}
-      onMouseEnter={!reduced && isClickable ? e => {
-        e.currentTarget.style.boxShadow = `0 0 24px ${c.glow}`;
-      } : undefined}
-      onMouseLeave={!reduced && isClickable ? e => {
-        e.currentTarget.style.boxShadow = "none";
-      } : undefined}
+      transition={{ duration: 0.3, ease: "easeOut", delay: index * 0.04 }}
+      className={`relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow ${gradientVariant} gradient-border-quiet`}
+      style={{ cursor: isClickable ? "pointer" : "default" }}
     >
-      {/* Üst vurgu çizgisi */}
-      <div className="absolute top-0 left-0 right-0 h-px"
-        style={{ background: `linear-gradient(90deg, transparent, ${c.text}50, transparent)` }} />
-
-      <div className="p-4 sm:p-5">
-        <div className="flex items-start justify-between mb-2">
-          <span className="text-[10px] sm:text-xs text-white/35 tracking-widest uppercase leading-tight"
-            style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            {label}
-          </span>
-          {icon && <div style={{ color: c.text }} className="flex-shrink-0">{icon}</div>}
-        </div>
-        <div className="text-2xl sm:text-3xl font-display" style={{ fontFamily: "var(--font-bebas)", color: c.text }}>
-          {value}
-        </div>
-        {sub && (
-          <div className="text-[10px] sm:text-xs text-white/28 mt-1 leading-tight"
-            style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-            {sub}
+      <div className="glass relative overflow-hidden h-full" style={{ minHeight: 88 }}>
+        {pulse && (
+          <span className="absolute top-3 right-3 w-2 h-2 rounded-full animate-neon-pulse" style={{ background: text }} />
+        )}
+        <div className="p-4 sm:p-5">
+          <div className="flex items-start justify-between mb-2">
+            <span className="text-[10px] sm:text-xs text-zinc-400 tracking-widest uppercase leading-tight"
+              style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              {label}
+            </span>
+            {icon && <div style={{ color: text }} className="flex-shrink-0">{icon}</div>}
           </div>
-        )}
-        {/* Tıklanabilir ok göstergesi */}
-        {isClickable && (
-          <div className="absolute bottom-3 right-3 opacity-30 group-hover:opacity-70 transition-opacity"
-            style={{ color: c.text, fontSize: 12 }}>→</div>
-        )}
+          <div className="text-2xl sm:text-3xl font-bold" style={{ fontFamily: "var(--font-bebas)", color: text }}>
+            {renderedValue}
+          </div>
+          {sub && (
+            <div className="text-[10px] sm:text-xs text-zinc-500 mt-1 leading-tight"
+              style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              {sub}
+            </div>
+          )}
+          {isClickable && (
+            <div className="absolute bottom-3 right-3 opacity-40" style={{ color: text, fontSize: 12 }}>→</div>
+          )}
+        </div>
       </div>
     </motion.div>
   );
 
   if (href) {
-    return <Link href={href} className="block group">{inner}</Link>;
+    return <Link href={href} className="block">{inner}</Link>;
   }
   if (onClick) {
-    return <button onClick={onClick} className="block w-full text-left group">{inner}</button>;
+    return <button onClick={onClick} className="block w-full text-left">{inner}</button>;
   }
   return inner;
 }
@@ -242,11 +251,11 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = "max-
           className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4"
           onClick={e => e.target === e.currentTarget && onClose()}
         >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
           <motion.div
-            initial={{ y: 40, opacity: 0, scale: 0.94, filter: "blur(6px)" }}
-            animate={{ y: 0, opacity: 1, scale: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 300, damping: 28 } }}
-            exit={{ y: 20, opacity: 0, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.2, ease: "easeIn" } }}
+            initial={{ y: 40, scale: 0.94, filter: "blur(6px)" }}
+            animate={{ y: 0, scale: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 300, damping: 28 } }}
+            exit={{ y: 20, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.2, ease: "easeIn" } }}
             className={`relative z-10 w-full sm:${maxWidth} gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet rounded-t-2xl sm:rounded-2xl p-[1px] overflow-hidden`}
             style={{ maxHeight: "90svh" }}
           >
@@ -266,8 +275,7 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = "max-
               {footer && (
                 <div className="flex-shrink-0 px-5 pt-4 rounded-b-2xl"
                   style={{
-                    borderTop: "1px solid rgba(139,92,246,0.12)",
-                    background: "rgba(139,92,246,0.04)",
+                    borderTop: "1px solid rgba(255,255,255,0.08)",
                     paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
                   }}>
                   {footer}
@@ -284,25 +292,14 @@ export function Modal({ open, onClose, title, children, footer, maxWidth = "max-
 // ── PageHeader ────────────────────────────────────────────────────────────────
 interface PageHeaderProps { title: string; subtitle?: string; accent?: string; actions?: ReactNode }
 export function PageHeader({ title, subtitle, accent, actions }: PageHeaderProps) {
-  // Sayfa kaydırıldıkça glass arkaplan hafifçe koyulaşır/bulanıklaşır — sticky/position
-  // değişikliği yok, salt kozmetik bir geçiş (motion value, re-render tetiklemez).
-  const { scrollY } = useScroll();
-  const blur = useTransform(scrollY, [0, 120], [20, 32]);
-  const backdropFilter = useTransform(blur, v => `blur(${v}px)`);
-  const bgAlpha = useTransform(scrollY, [0, 120], [0.05, 0.1]);
-  const background = useTransform(bgAlpha, v => `rgba(139,92,246,${v})`);
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.98, filter: "blur(6px)" }}
-      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+      initial={{ y: 16, scale: 0.98, filter: "blur(6px)" }}
+      animate={{ y: 0, scale: 1, filter: "blur(0px)" }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px] mb-6 sm:mb-8"
     >
-      <motion.div
-        style={{ backdropFilter, WebkitBackdropFilter: backdropFilter, background }}
-        className="relative rounded-2xl border border-[rgba(255,255,255,0.08)] flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5"
-      >
+      <div className="glass-strong relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5">
         <div className="min-w-0">
           {accent && (
             <div className="flex items-center gap-2.5 mb-2">
@@ -319,7 +316,7 @@ export function PageHeader({ title, subtitle, accent, actions }: PageHeaderProps
           )}
         </div>
         {actions && <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-shrink-0">{actions}</div>}
-      </motion.div>
+      </div>
     </motion.div>
   );
 }

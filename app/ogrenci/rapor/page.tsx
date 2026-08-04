@@ -33,6 +33,12 @@ const fadeUp = {
   initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
   animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
 };
+/* gradient-border-quiet taşıyan elemanlar için: opacity'yi CSS yönetir (0.22),
+   Framer Motion sadece y/scale/filter animasyonu yapar. */
+const fadeUpNoOpacity = {
+  initial: { y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 function CountUp({ value, decimals = 0, prefix = "", suffix = "" }: { value: number; decimals?: number; prefix?: string; suffix?: string }) {
   const [display, setDisplay] = useState(0);
@@ -273,7 +279,7 @@ export default function RaporPage() {
         {/* Radar */}
         <div className="glass-strong rounded-2xl p-4">
           <div className="text-xs text-white/40 uppercase tracking-widest mb-3" style={{ fontFamily: "var(--font-label)" }}>Teknik Radar — {monthLabel}</div>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
             <RadarChart data={radarData}>
               <PolarGrid stroke="rgba(255,255,255,0.07)" />
               <PolarAngleAxis dataKey="subject" tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }} />
@@ -285,7 +291,7 @@ export default function RaporPage() {
         {/* Bar chart */}
         <div className="glass-strong rounded-2xl p-4">
           <div className="text-xs text-white/40 uppercase tracking-widest mb-3" style={{ fontFamily: "var(--font-label)" }}>Teknik Puanlar</div>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
             <BarChart data={barData} barSize={22}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="name" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }} />
@@ -304,7 +310,7 @@ export default function RaporPage() {
       {/* 6 aylık trend */}
       <motion.div variants={fadeUp} className="glass-strong rounded-2xl p-4">
         <div className="text-xs text-white/40 uppercase tracking-widest mb-3" style={{ fontFamily: "var(--font-label)" }}>Son 6 Ay Genel Puan Trendi</div>
-        <ResponsiveContainer width="100%" height={180}>
+        <ResponsiveContainer width="100%" height={180} minWidth={0} minHeight={0}>
           <LineChart data={trendData}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis dataKey="name" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} />
@@ -316,7 +322,7 @@ export default function RaporPage() {
       </motion.div>
 
       {/* ── Kedi AI Değerlendirmesi ──────────────────────────── */}
-      <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+      <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
         <div className="glass-strong relative rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xl">🐾</span>

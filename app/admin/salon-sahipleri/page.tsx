@@ -19,6 +19,12 @@ const fadeUp = {
   initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
   animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
 };
+/* gradient-border-quiet taşıyan elemanlar için: opacity'yi CSS yönetir (0.22),
+   Framer Motion sadece y/scale/filter animasyonu yapar. */
+const fadeUpNoOpacity = {
+  initial: { y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 function CountUp({ value }: { value: number }) {
   const [display, setDisplay] = useState(0);
@@ -78,7 +84,7 @@ function CreateModal({ onClose, onCreate }: { onClose: () => void; onCreate: (o:
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:"rgba(9,9,11,0.85)", backdropFilter:"blur(12px)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
       <motion.div initial={{ scale:0.94, opacity:0, filter:"blur(6px)" }} animate={{ scale:1, opacity:1, filter:"blur(0px)" }} exit={{ scale:0.94, opacity:0 }} transition={{ duration:0.25, ease:[0.22,1,0.36,1] }}
         className="glass-strong relative w-full max-w-sm rounded-2xl overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-0.5 gradient-animated gradient-slow gradient-violet-pink-orange" />
@@ -131,7 +137,7 @@ function DeleteConfirm({ owner, onClose, onDelete }: { owner: SalonOwner; onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:"rgba(9,9,11,0.85)", backdropFilter:"blur(12px)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
       <motion.div initial={{ scale:0.94, opacity:0, filter:"blur(6px)" }} animate={{ scale:1, opacity:1, filter:"blur(0px)" }} exit={{ scale:0.94, opacity:0 }}
         className="glass-strong w-full max-w-xs rounded-2xl p-6 space-y-4">
         <div className="flex items-center gap-3">
@@ -196,7 +202,7 @@ function AssignModal({ owner, allStudents, onClose, onSave }: {
   const filtered = active.filter(s => !search || s.fullName.toLowerCase().includes(search.toLowerCase()) || s.code.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:"rgba(9,9,11,0.85)", backdropFilter:"blur(12px)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
       <motion.div initial={{ scale:0.94, opacity:0, filter:"blur(6px)" }} animate={{ scale:1, opacity:1, filter:"blur(0px)" }} exit={{ scale:0.94, opacity:0 }}
         className="glass-strong w-full max-w-md flex flex-col relative overflow-hidden rounded-2xl" style={{ maxHeight:"90vh" }}>
         <div className="absolute top-0 left-0 right-0 h-0.5 gradient-animated gradient-slow gradient-violet-pink-orange" />
@@ -401,7 +407,7 @@ export default function SalonSahipleriPage() {
   return (
     <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-6">
       {/* Hero */}
-      <motion.div variants={fadeUp} className="relative rounded-3xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+      <motion.div variants={fadeUpNoOpacity} className="relative rounded-3xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
         <div className="glass-strong relative rounded-3xl p-6 sm:p-8">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>

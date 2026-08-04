@@ -48,6 +48,12 @@ const fadeUp  = {
   initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
   animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
 };
+/* gradient-border-quiet taşıyan elemanlar için: opacity'yi CSS yönetir (0.22),
+   Framer Motion sadece y/scale/filter animasyonu yapar. */
+const fadeUpNoOpacity = {
+  initial: { y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -624,7 +630,7 @@ export default function AdminDashboard() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Bugünkü / Geçmiş Tamamlanmamış / Tamamlanan dersler */}
-        <motion.div variants={fadeUp} className="lg:col-span-2 relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+        <motion.div variants={fadeUpNoOpacity} className="lg:col-span-2 relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-2xl p-5 sm:p-6" id="bugunun-dersleri">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <h3 className="text-xl text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>
@@ -751,7 +757,7 @@ export default function AdminDashboard() {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          <motion.div variants={fadeUp} className="cursor-pointer relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]" onClick={() => setNotifOpen(true)}>
+          <motion.div variants={fadeUpNoOpacity} className="cursor-pointer relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]" onClick={() => setNotifOpen(true)}>
             <div className="glass-strong relative rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -781,7 +787,7 @@ export default function AdminDashboard() {
           </motion.div>
 
           {/* Push bildirimleri */}
-          <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+          <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
             <div className="glass-strong relative rounded-2xl p-4 space-y-3">
               <h3 className="text-base text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>
                 Push Bildirimleri
@@ -814,7 +820,7 @@ export default function AdminDashboard() {
           </motion.div>
 
           {lowLessons.length > 0 && (
-            <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+            <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
               <div className="glass-strong relative rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Bell size={16} style={{ color:"var(--color-achievement)" }}/>
@@ -854,7 +860,7 @@ export default function AdminDashboard() {
           )}
 
           {/* ── 🎁 Hediye Ders Onayları ─────────────────────────── */}
-          <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+          <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
             <div className="glass-strong relative rounded-2xl p-4 sm:p-5">
               <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <span className="text-lg">🎁</span>
@@ -1024,7 +1030,7 @@ export default function AdminDashboard() {
             )}
           </AnimatePresence>
 
-          <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+          <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
             <div className="glass-strong relative rounded-2xl p-4">
               <h3 className="text-sm text-white tracking-wider mb-3" style={{ fontFamily:"var(--font-display)" }}>Hızlı Erişim</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -1048,7 +1054,7 @@ export default function AdminDashboard() {
 
       {/* ── XP & Seviye Takibi ─────────────────────────────────── */}
       {students.length > 0 && (
-        <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+        <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-2xl p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <Zap size={18} style={{ color: "#A78BFA" }} />
@@ -1173,7 +1179,7 @@ export default function AdminDashboard() {
 
       {/* ── Onur Listesi (Hall of Fame) Yönetimi ───────────────── */}
       {students.length > 0 && (
-        <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+        <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-2xl p-4 sm:p-6 space-y-5">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <Crown size={18} style={{ color: "#FBBF24" }} />
@@ -1252,7 +1258,7 @@ export default function AdminDashboard() {
 
       {/* ══ Uygulama Ayarları ══ */}
       {students.length > 0 && (
-        <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.04 }}
+        <motion.div initial={{ y:16 }} animate={{ y:0 }} transition={{ delay:0.04 }}
           className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-2xl p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -1306,7 +1312,7 @@ export default function AdminDashboard() {
 
       {/* ══ Kedi AI Görevleri ══ */}
       {students.length > 0 && (
-        <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.05 }}
+        <motion.div initial={{ y:16 }} animate={{ y:0 }} transition={{ delay:0.05 }}
           className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-2xl p-4 sm:p-6 space-y-5">
             <div className="flex items-center gap-2 mb-1">
@@ -1426,7 +1432,7 @@ export default function AdminDashboard() {
 
       {/* ══ Arena Düello Yönetimi ══ */}
       {arenaduels.length > 0 && (
-        <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.05 }}
+        <motion.div initial={{ y:16 }} animate={{ y:0 }} transition={{ delay:0.05 }}
           className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-2xl p-4 sm:p-6 space-y-5">
             <div className="flex items-center gap-2 mb-1">
@@ -2084,7 +2090,7 @@ export default function AdminDashboard() {
         <>
           {/* Overlay */}
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-            className="fixed inset-0 z-40 bg-black/50"
+            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
             onClick={() => setNotifOpen(false)} />
           {/* Panel — mobilde alt yarı, desktop'ta tam yükseklik sağ kenar */}
           <motion.div

@@ -110,7 +110,7 @@ export default function KickboxingClasses() {
           {disciplines.map((d) => (
             <div
               key={d.name}
-              className={`group text-center p-4 bg-carbon border border-white/5 hover:border-${d.color}/30 transition-all duration-300 cursor-default`}
+              className={`group text-center p-4 bg-carbon border border-white/5 ${d.color === "gold" ? "hover:border-gold/30" : "hover:border-crimson/30"} transition-all duration-300 cursor-default`}
             >
               <div className="text-2xl mb-2">{d.icon}</div>
               <div

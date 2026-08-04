@@ -57,7 +57,7 @@ export default function DayTimeline({ date, slots, appointments, isToday, now, c
           {format(parseISO(date), compact ? "EEE d MMM" : "EEEE, dd MMMM", { locale: tr }).toUpperCase()}
         </span>
         {isToday && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.15)", color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
+          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(245,158,11,0.12)", color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>
             BUGÜN
           </span>
         )}
@@ -92,7 +92,7 @@ export default function DayTimeline({ date, slots, appointments, isToday, now, c
               const endMin = toMinutes(slot.end);
               const ongoing = isToday && isBooked && nowMin >= startMin && nowMin < endMin;
               return (
-                <motion.div key={slot.start}
+                <motion.div key={slot.id ?? `${slot.start}-${i}`}
                   initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                   whileHover={isBooked ? { scale: 1.015 } : undefined}
                   transition={{ delay: i * 0.015, duration: 0.25 }}
@@ -101,13 +101,12 @@ export default function DayTimeline({ date, slots, appointments, isToday, now, c
                   style={{
                     top: `${pct(startMin)}%`,
                     height: `${Math.max(pct(endMin) - pct(startMin), 3)}%`,
-                    background: isBooked ? "linear-gradient(135deg, rgba(139,92,246,0.28), rgba(236,72,153,0.18))"
-                      : slot.open ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.02)",
+                    background: isBooked ? "rgba(139,92,246,0.08)"
+                      : slot.open ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.02)",
                     border: ongoing ? "1.5px solid var(--color-achievement-bright)"
-                      : isBooked ? "1px solid rgba(139,92,246,0.4)"
-                      : slot.open ? "1px solid rgba(34,197,94,0.2)" : "1px solid rgba(255,255,255,0.05)",
-                    boxShadow: ongoing ? "0 0 16px rgba(245,158,11,0.35)"
-                      : isBooked ? "0 0 12px rgba(139,92,246,0.15)" : "none",
+                      : isBooked ? "1px solid rgba(139,92,246,0.25)"
+                      : slot.open ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(255,255,255,0.05)",
+                    boxShadow: ongoing ? "0 0 12px rgba(245,158,11,0.25)" : "none",
                     cursor: isBooked && onApptClick ? "pointer" : "default",
                     transition: "box-shadow 0.25s",
                   }}>

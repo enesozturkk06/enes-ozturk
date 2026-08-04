@@ -1,6 +1,4 @@
 "use client";
-import { useState } from "react";
-import { motion } from "framer-motion";
 import {
   Edit, Users, QrCode, Trash2, RotateCcw, Phone, Zap,
 } from "lucide-react";
@@ -30,7 +28,6 @@ export default function StudentCard({
   student: s, xpTotal, badges, lastLessonDate, lastPaymentDate,
   onEdit, onPartner, onQr, onDelete, onRenew,
 }: Props) {
-  const [hover, setHover] = useState(false);
   const initials = s.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const days = getDaysRemaining(s.packageEndDate);
   const urgency = days !== null ? getPackageUrgency(days) : null;
@@ -40,13 +37,8 @@ export default function StudentCard({
   const paymentColor = s.paymentStatus === "odendi" ? "#4ADE80" : s.paymentStatus === "kismi" ? "#FBBF24" : "#F87171";
 
   return (
-    <motion.div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet"
-    >
-      <div className="glass-strong relative rounded-2xl p-5 h-full flex flex-col gap-4"
-        style={{ boxShadow: hover ? "0 0 32px rgba(139,92,246,0.22)" : "none", transition: "box-shadow 0.25s" }}>
+    <div className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet">
+      <div className="glass-strong relative h-full flex flex-col gap-4 p-5">
 
         {/* Üst: avatar + isim + kod + seviye + ödeme rozeti */}
         <div className="flex items-start justify-between gap-2">
@@ -175,6 +167,6 @@ export default function StudentCard({
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

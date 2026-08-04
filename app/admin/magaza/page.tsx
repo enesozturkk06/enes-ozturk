@@ -180,7 +180,7 @@ export default function MagazaAdminPage() {
               const cat = CATEGORIES[p.category];
               return (
                 <motion.div key={p.id} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:i*0.04 }}
-                  className="bg-carbon border overflow-hidden flex flex-col"
+                  className="glass border rounded-2xl overflow-hidden flex flex-col"
                   style={{ borderColor: p.isActive ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.06)", opacity: p.isActive ? 1 : 0.5 }}>
 
                   {/* Görsel veya ikon */}
@@ -255,7 +255,7 @@ export default function MagazaAdminPage() {
             onClick={() => setPanelMode("none")}>
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
             <motion.div initial={{ y:40, opacity:0 }} animate={{ y:0, opacity:1 }} exit={{ y:40, opacity:0 }}
-              className="relative z-10 w-full sm:max-w-lg bg-carbon border border-white/10 flex flex-col"
+              className="relative z-10 w-full sm:max-w-lg glass-strong border border-white/10 flex flex-col"
               style={{ borderRadius:"16px 16px 0 0", maxHeight:"92dvh" }}
               onClick={e => e.stopPropagation()}>
               {/* Header */}
@@ -360,7 +360,7 @@ export default function MagazaAdminPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
             <motion.div initial={{ scale:0.93, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.93, opacity:0 }}
-              className="w-full max-w-xs bg-carbon border p-6 space-y-4" style={{ borderColor:"rgba(220,38,38,0.3)" }}>
+              className="w-full max-w-xs glass-strong rounded-2xl border p-6 space-y-4" style={{ borderColor:"rgba(220,38,38,0.3)" }}>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center" style={{ background:"rgba(220,38,38,0.1)", border:"1px solid rgba(220,38,38,0.25)" }}>
                   <AlertTriangle size={18} className="text-red-400" />

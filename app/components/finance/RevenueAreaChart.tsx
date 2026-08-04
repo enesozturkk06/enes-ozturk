@@ -23,7 +23,7 @@ export default function RevenueAreaChart({
 
   return (
     <div className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet h-full">
-    <div className="glass rounded-2xl p-4 sm:p-5 h-full">
+    <div className="glass-strong rounded-2xl p-4 sm:p-5 h-full">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h3 className="text-base sm:text-lg text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>
           Gelir Grafiği
@@ -48,7 +48,7 @@ export default function RevenueAreaChart({
           Bu aralıkta gelir kaydı yok
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={260} minWidth={0} minHeight={0}>
           <AreaChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
             <defs>
               <linearGradient id="financeRevenueGradient" x1="0" y1="0" x2="0" y2="1">

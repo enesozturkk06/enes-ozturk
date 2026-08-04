@@ -352,7 +352,7 @@ export default function ArenaPage() {
       <div>
         <SectionHeader icon={<Swords size={12} color="#DC2626" />} label="Düello Gönder" accent="#DC2626" />
         <div className="rounded-xl overflow-hidden p-4"
-          style={{ background: "linear-gradient(135deg,rgba(220,38,38,0.1),rgba(0,0,0,0))", border: "1px solid rgba(220,38,38,0.25)" }}>
+          style={{ background: "rgba(20,20,20,0.9)", border: "1px solid rgba(220,38,38,0.25)" }}>
           <div className="space-y-3">
             {/* Opponent select */}
             <div>
@@ -431,7 +431,7 @@ export default function ArenaPage() {
             <motion.div key={i} whileHover={{ scale: 1.05 }} transition={{ duration: 0.15 }}
               className="flex flex-col items-center gap-1.5 p-3 rounded-xl text-center"
               style={{
-                background: b.earned ? "linear-gradient(135deg,rgba(251,191,36,0.12),rgba(0,0,0,0))" : "rgba(255,255,255,0.02)",
+                background: b.earned ? "rgba(251,191,36,0.06)" : "rgba(255,255,255,0.02)",
                 border: `1px solid ${b.earned ? "rgba(251,191,36,0.35)" : "rgba(255,255,255,0.06)"}`,
                 opacity: b.earned ? 1 : 0.4,
               }}>

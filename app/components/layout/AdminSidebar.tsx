@@ -168,7 +168,7 @@ export default function AdminSidebar() {
       {/* ── Mobil menü ───────────────────────────────────── */}
       {open && (
         <div className="lg:hidden fixed inset-0 z-40" onClick={() => setOpen(false)}>
-          <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           <nav
             className="glass-strong absolute left-0 right-0 px-3 pb-4"
             style={{ top: "calc(env(safe-area-inset-top, 0px) + 56px)", paddingTop: "8px", borderRadius: "0 0 20px 20px", border: "none" }}

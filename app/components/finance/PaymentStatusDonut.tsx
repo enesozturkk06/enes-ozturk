@@ -12,7 +12,7 @@ export default function PaymentStatusDonut({ slices }: { slices: PaymentStatusSl
 
   return (
     <div className="relative rounded-2xl p-[1px] overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet h-full">
-    <div className="glass rounded-2xl p-4 sm:p-5 h-full">
+    <div className="glass-strong rounded-2xl p-4 sm:p-5 h-full">
       <div className="flex items-center gap-2 mb-3">
         <CircleDollarSign size={15} style={{ color: "#60A5FA" }} />
         <h3 className="text-sm uppercase tracking-widest text-white/40" style={{ fontFamily: "var(--font-label)" }}>
@@ -27,7 +27,7 @@ export default function PaymentStatusDonut({ slices }: { slices: PaymentStatusSl
       ) : (
         <div className="flex items-center gap-4">
           <div className="w-28 h-28 flex-shrink-0 relative">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <PieChart>
                 <Pie data={data} dataKey="count" nameKey="label" innerRadius={34} outerRadius={52}
                   paddingAngle={3} isAnimationActive={!reduced} animationDuration={600}>

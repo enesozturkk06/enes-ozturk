@@ -29,6 +29,13 @@ const fadeUp = {
   initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
   animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
 };
+/* gradient-border-quiet taşıyan elemanlar için: opacity'yi CSS yönetir (0.22),
+   Framer Motion sadece y/scale/filter animasyonu yapar — aksi halde motion'ın
+   opacity:1'i CSS'in opacity:0.22'sini kalıcı olarak eziyordu. */
+const fadeUpNoOpacity = {
+  initial: { y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 function Field({
   label, value, onChange, type = "text", placeholder, required, suffix,
@@ -233,7 +240,7 @@ export default function SalonlarPage() {
 
       <motion.div variants={stagger} initial="initial" animate="animate">
         {/* ── HERO ─────────────────────────────────────────────────── */}
-        <motion.div variants={fadeUp} className="relative rounded-3xl overflow-hidden mb-6 gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+        <motion.div variants={fadeUpNoOpacity} className="relative rounded-3xl overflow-hidden mb-6 gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-3xl p-6 sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
               <div>
@@ -311,7 +318,7 @@ export default function SalonlarPage() {
         <AnimatePresence>
           {panelOpen && (
             <motion.div
-              initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+              initial={{ y: -16 }} animate={{ y: 0 }} exit={{ y: -12 }}
               transition={{ duration: 0.25 }} className="mb-6 relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]"
             >
               <div className="glass-strong relative rounded-2xl p-6">

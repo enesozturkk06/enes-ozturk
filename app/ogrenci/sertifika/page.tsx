@@ -21,6 +21,12 @@ const fadeUp = {
   initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
   animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
 };
+/* gradient-border-quiet taşıyan elemanlar için: opacity'yi CSS yönetir (0.22),
+   Framer Motion sadece y/scale/filter animasyonu yapar. */
+const fadeUpNoOpacity = {
+  initial: { y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 function CountUp({ value }: { value: number }) {
   const [display, setDisplay] = useState(0);
@@ -332,7 +338,7 @@ export default function SertifikaPage() {
         <PageHeader title="Sertifikalarım" subtitle="Kazandığın başarı sertifikaları" accent="Başarı" />
 
         {/* Özet */}
-        <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+        <motion.div variants={fadeUpNoOpacity} className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
           <div className="glass-strong relative rounded-2xl p-4 flex items-center gap-4">
             <Award size={24} style={{ color: "#A78BFA" }} />
             <div>

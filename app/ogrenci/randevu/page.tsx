@@ -827,7 +827,7 @@ export default function RandevuPage() {
       {/* ══ 18 SAAT ENGEL MODALI ════════════════════════════════ */}
       {cancelBlocked && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ background:"rgba(0,0,0,0.75)", backdropFilter:"blur(8px)" }}>
+          style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
           <div className="glass-strong relative w-full max-w-sm rounded-2xl overflow-hidden"
             style={{ borderColor: "rgba(251,146,60,0.35)" }}>
             <div className="h-0.5" style={{ background:"linear-gradient(90deg,transparent,var(--color-warning),transparent)" }} />

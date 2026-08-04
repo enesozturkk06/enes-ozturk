@@ -26,6 +26,12 @@ const fadeUp = {
   initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
   animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
 };
+/* gradient-border-quiet taşıyan elemanlar için: opacity'yi CSS yönetir (0.22),
+   Framer Motion sadece y/scale/filter animasyonu yapar. */
+const fadeUpNoOpacity = {
+  initial: { y: 16, scale: 0.96, filter: "blur(6px)" },
+  animate: { y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+};
 
 export default function GroupLessonsSection({
   groups, members, payments, sessions, gyms, students,
@@ -106,7 +112,7 @@ export default function GroupLessonsSection({
   return (
     <motion.div variants={stagger} initial="initial" animate="animate">
       {/* ── HERO ─────────────────────────────────────────────────── */}
-      <motion.div variants={fadeUp} className="relative rounded-3xl overflow-hidden mb-4 gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
+      <motion.div variants={fadeUpNoOpacity} className="relative rounded-3xl overflow-hidden mb-4 gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
         <div className="glass-strong relative rounded-3xl p-5 sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <div>

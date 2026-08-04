@@ -93,7 +93,7 @@ function StatCard({ icon, label, value, sub, accent }: {
       transition={{ duration: 0.15 }}
       className="relative flex flex-col p-3.5 overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${accent}0f 0%, rgba(0,0,0,0) 100%)`,
+        background: "rgba(20,20,20,0.9)",
         border: `1px solid ${accent}22`,
         borderRadius: 10,
       }}
@@ -613,7 +613,7 @@ export default function ProfilPage() {
         {stats && (
           <div className="rounded-xl overflow-hidden p-4 sm:p-5"
             style={{
-              background: `linear-gradient(135deg, ${gf}12, rgba(0,0,0,0))`,
+              background: "rgba(20,20,20,0.9)",
               border: `1px solid ${gc}28`,
             }}>
             <div className="flex items-center gap-2 mb-4">
@@ -742,7 +742,7 @@ export default function ProfilPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
             className="relative overflow-hidden rounded-xl p-4 sm:p-5"
             style={{
-              background: "linear-gradient(135deg,rgba(124,58,237,0.12),rgba(192,132,252,0.05))",
+              background: "rgba(20,20,20,0.9)",
               border: "1px solid rgba(139,92,246,0.28)",
             }}>
             <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-xl"
@@ -770,9 +770,9 @@ export default function ProfilPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
             className="relative overflow-hidden rounded-xl"
             style={{
-              background: "linear-gradient(135deg,rgba(220,38,38,0.14),rgba(239,68,68,0.05))",
+              background: "rgba(20,20,20,0.9)",
               border: `1px solid rgba(220,38,38,0.${isWednesday?"5":"3"})`,
-              boxShadow: isWednesday ? "0 0 30px rgba(220,38,38,0.2)" : "none",
+              boxShadow: isWednesday ? "0 0 20px rgba(220,38,38,0.1)" : "none",
             }}>
             <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-xl"
               style={{ background: "linear-gradient(90deg,transparent,#DC2626,#F97316,transparent)" }} />
@@ -815,9 +815,9 @@ export default function ProfilPage() {
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
             className="relative overflow-hidden rounded-xl p-4 text-center"
             style={{
-              background: "linear-gradient(135deg,rgba(124,58,237,0.22),rgba(192,132,252,0.08))",
+              background: "rgba(20,20,20,0.9)",
               border: "1px solid rgba(192,132,252,0.45)",
-              boxShadow: "0 0 40px rgba(192,132,252,0.14), inset 0 0 40px rgba(192,132,252,0.04)",
+              boxShadow: "0 0 24px rgba(192,132,252,0.1)",
             }}>
             <div className="absolute top-0 left-0 right-0 h-[2px]"
               style={{ background: "linear-gradient(90deg,transparent,#C084FC,#F0ABFC,transparent)" }} />

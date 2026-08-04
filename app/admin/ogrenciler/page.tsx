@@ -626,7 +626,7 @@ export default function OgrencilerPage() {
       {/* ── YENİ ÖĞRENCİ FORMU ────────────────────────────────────── */}
       <AnimatePresence>
         {addOpen && (
-          <motion.div initial={{ opacity: 0, y: -14, scale: 0.98, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }} exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
+          <motion.div initial={{ y: -14, scale: 0.98, filter: "blur(6px)" }} animate={{ y: 0, scale: 1, filter: "blur(0px)" }} exit={{ y: -10, filter: "blur(4px)" }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
             <div className="glass-strong relative rounded-2xl p-5">
@@ -1197,7 +1197,7 @@ export default function OgrencilerPage() {
 
             {/* Mevcut partner */}
             {currentPartner ? (
-              <div className="mb-4 p-3 rounded-xl flex items-center justify-between" style={{ background:"rgba(139,92,246,0.08)", border:"1px solid rgba(139,92,246,0.25)" }}>
+              <div className="mb-4 p-3 rounded-xl flex items-center justify-between glass">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background:"rgba(139,92,246,0.2)", color:"#A855F7" }}>
                     {currentPartner.fullName.split(" ").map(n=>n[0]).join("").slice(0,2)}

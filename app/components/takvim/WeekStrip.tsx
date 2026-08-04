@@ -47,9 +47,11 @@ export default function WeekStrip({
                 style={{ borderRight: "1px solid rgba(255,255,255,0.04)" }}>
                 {isSelected && (
                   <motion.div layoutId="takvim-selected-day"
-                    className="absolute inset-1 rounded-xl gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange"
-                    style={{ opacity: 0.28 }}
-                    transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} />
+                    className="absolute inset-1 rounded-xl overflow-hidden gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange"
+                    style={{ padding: 1.5 }}
+                    transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
+                    <div className="w-full h-full rounded-[10px]" style={{ background: "rgba(22,22,22,0.95)" }} />
+                  </motion.div>
                 )}
                 <span className="relative text-xs text-white/35 mb-1" style={{ fontFamily: "var(--font-label)" }}>
                   {format(parseISO(date), "EEE", { locale: tr }).toUpperCase()}

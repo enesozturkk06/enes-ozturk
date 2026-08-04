@@ -68,7 +68,7 @@ export default function GirisPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-carbon border border-white/8 p-8 relative">
+        <div className="glass-strong p-8 relative">
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-crimson to-transparent" />
           <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-crimson" />
           <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-crimson" />

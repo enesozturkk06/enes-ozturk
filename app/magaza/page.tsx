@@ -23,7 +23,7 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.28 }}
-      className="bg-carbon border flex flex-col overflow-hidden group"
+      className="glass border flex flex-col overflow-hidden group"
       style={{ borderColor: "rgba(255,255,255,0.08)" }}
     >
       {/* Görsel */}

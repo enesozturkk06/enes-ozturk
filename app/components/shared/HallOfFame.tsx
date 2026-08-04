@@ -38,24 +38,24 @@ function getDisplayValue(entry: HallEntry, def: CategoryDef): string {
 function premiumStyle(entry: HallEntry): { background: string; border: string; glow: string; ring: string } {
   if (entry.level.id === "legend") {
     return {
-      background: "linear-gradient(160deg, rgba(251,191,36,0.14), rgba(0,0,0,0.55))",
+      background: "rgba(20,20,20,0.9)",
       border:     "rgba(251,191,36,0.5)",
-      glow:       "0 0 40px rgba(251,191,36,0.3), 0 0 80px rgba(0,0,0,0.6), inset 0 0 30px rgba(251,191,36,0.06)",
+      glow:       "0 0 24px rgba(251,191,36,0.18)",
       ring:       "#FBBF24",
     };
   }
   if (entry.level.id === "diamond") {
     return {
-      background: "linear-gradient(160deg, rgba(103,232,249,0.12), rgba(167,139,250,0.10))",
+      background: "rgba(20,20,20,0.9)",
       border:     "rgba(103,232,249,0.4)",
-      glow:       "0 0 32px rgba(103,232,249,0.3), 0 0 50px rgba(167,139,250,0.2)",
+      glow:       "0 0 20px rgba(103,232,249,0.16)",
       ring:       "#67E8F9",
     };
   }
   return {
-    background: `linear-gradient(160deg, ${entry.level.gradFrom}1c, ${entry.level.gradTo}0c)`,
+    background: "rgba(20,20,20,0.9)",
     border:     entry.level.colorPrimary + "44",
-    glow:       `0 0 20px ${entry.level.glowColor}`,
+    glow:       `0 0 16px ${entry.level.glowColor}`,
     ring:       entry.level.colorPrimary,
   };
 }
@@ -330,10 +330,10 @@ export function HallOfFamePremium({ entries }: { entries: HallEntry[] }) {
     <div
       className="p-3 sm:p-6 border space-y-3 sm:space-y-5"
       style={{
-        background: "linear-gradient(180deg, rgba(139,92,246,0.05), rgba(0,0,0,0.3))",
+        background: "rgba(20,20,20,0.9)",
         borderColor: "rgba(139,92,246,0.16)",
         borderRadius: 20,
-        boxShadow: "0 0 40px rgba(139,92,246,0.06), inset 0 0 60px rgba(0,0,0,0.3)",
+        boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
       }}
     >
       {/* Başlık */}

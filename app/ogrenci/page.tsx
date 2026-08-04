@@ -332,7 +332,7 @@ export default function OgrenciDashboard() {
                 style={{ fontFamily:"var(--font-display)" }}>
                 {student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name} Paketi`}
               </h3>
-              <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+              <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                 {student.subscriptionType === "monthly"
                   ? `${student.monthlyFee ? `₺${student.monthlyFee.toLocaleString("tr-TR")} / ay` : "Aylık ödeme"}`
                   : `${totalLessons} ders paketi`}
@@ -359,14 +359,14 @@ export default function OgrenciDashboard() {
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
                   <div className="text-xl font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{student.completedLessons}</div>
-                  <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Kullanılan Ders</div>
+                  <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Kullanılan Ders</div>
                 </div>
                 <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
                   <div className="text-xl font-bold" style={{ color:"var(--color-error)", fontFamily:"var(--font-display)" }}>{student.remainingLessons}</div>
-                  <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Kalan Ders</div>
+                  <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Kalan Ders</div>
                 </div>
               </div>
-              <div className="mt-2 text-right text-xs" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>{progressPct}% tamamlandı</div>
+              <div className="mt-2 text-right text-xs" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>{progressPct}% tamamlandı</div>
             </>
           )}
 
@@ -378,7 +378,7 @@ export default function OgrenciDashboard() {
             return (
               <div className="mt-4 pt-4 border-t border-white/8">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <span className="text-xs tracking-widest uppercase" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+                  <span className="text-xs tracking-widest uppercase" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                     Paket Süresi
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${urgency.color}`}
@@ -386,12 +386,12 @@ export default function OgrenciDashboard() {
                     {daysRemaining < 0 ? "Süresi Doldu" : `${daysRemaining} gün kaldı`}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-xs" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+                <div className="flex items-center justify-between text-xs" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                   <span>Başlangıç: {student.packageStartDate ? format(parseISO(student.packageStartDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
                   <span>Bitiş: {student.packageEndDate ? format(parseISO(student.packageEndDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
                 </div>
                 {lastRecord && (
-                  <div className="text-xs mt-1" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+                  <div className="text-xs mt-1" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                     Son kullanım: {format(parseISO(lastRecord.date), "dd MMMM yyyy", { locale: tr })}
                   </div>
                 )}
@@ -418,7 +418,7 @@ export default function OgrenciDashboard() {
           {!nextAppointment ? (
             <div className="text-center py-8">
               <Calendar size={28} className="text-white/10 mx-auto mb-3" />
-              <p className="text-sm" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+              <p className="text-sm" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                 Yaklaşan randevunuz yok
               </p>
               <Link href="/ogrenci/randevu"
@@ -463,7 +463,7 @@ export default function OgrenciDashboard() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.55)" }}>
+                  <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.50)" }}>
                     <Clock size={11}/>
                     <span style={{ fontFamily:"var(--font-label)" }}>{nextAppointment.startTime} – {nextAppointment.endTime}</span>
                     {nextGym && <span style={{ fontFamily:"var(--font-label)" }}>· {nextGym.name}</span>}
@@ -500,22 +500,22 @@ export default function OgrenciDashboard() {
             <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
               <Droplets size={16} className="mx-auto mb-1" style={{ color:"#60A5FA" }} />
               <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{waterGlasses}/8</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Bugünkü Su</div>
+              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Bugünkü Su</div>
             </div>
             <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
               <Flame size={16} className="mx-auto mb-1" style={{ color:"var(--color-achievement)" }} />
               <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{todayCalEntry ? todayCalEntry.consumed : "—"}</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Bugünkü Kalori</div>
+              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Bugünkü Kalori</div>
             </div>
             <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
               <Scale size={16} className="mx-auto mb-1" style={{ color:"var(--color-success)" }} />
               <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{lastWeight ? `${lastWeight.weight}kg` : "—"}</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Son Kilo</div>
+              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Son Kilo</div>
             </div>
             <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
               <Activity size={16} className="mx-auto mb-1" style={{ color:"#A78BFA" }} />
               <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{bmi ? bmi.toFixed(1) : "—"}</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                 BMI{bmiCat ? ` · ${bmiCat.label}` : ""}
               </div>
             </div>
@@ -533,7 +533,7 @@ export default function OgrenciDashboard() {
           {!dietPlan ? (
             <div className="text-center py-6">
               <Utensils size={28} className="text-white/10 mx-auto mb-3" />
-              <p className="text-sm mb-3" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+              <p className="text-sm mb-3" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                 Henüz bir AI diyet planınız yok
               </p>
               <Link href="/ogrenci/saglik?tab=ai-diyet"
@@ -544,19 +544,19 @@ export default function OgrenciDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
                 <div className="text-lg font-bold" style={{ color:"var(--color-achievement)", fontFamily:"var(--font-display)" }}>{dietPlan.dailyCalories}</div>
-                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Kalori Hedefi</div>
+                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Kalori Hedefi</div>
               </div>
               <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
                 <div className="text-lg font-bold" style={{ color:"#F87171", fontFamily:"var(--font-display)" }}>{dietPlan.proteinG}g</div>
-                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Protein</div>
+                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Protein</div>
               </div>
               <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
                 <div className="text-lg font-bold" style={{ color:"#FBBF24", fontFamily:"var(--font-display)" }}>{dietPlan.carbsG}g / {dietPlan.fatG}g</div>
-                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Karb / Yağ</div>
+                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Karb / Yağ</div>
               </div>
               <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
                 <div className="text-lg font-bold" style={{ color:"#60A5FA", fontFamily:"var(--font-display)" }}>{waterGlasses}/8</div>
-                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>Su Hedefi</div>
+                <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Su Hedefi</div>
               </div>
             </div>
           )}
@@ -604,7 +604,7 @@ export default function OgrenciDashboard() {
           {!lastRecord ? (
             <div className="text-center py-8">
               <TrendingUp size={28} className="text-white/10 mx-auto mb-3" />
-              <p className="text-sm" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+              <p className="text-sm" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                 Henüz ders kaydınız yok
               </p>
             </div>
@@ -635,7 +635,7 @@ export default function OgrenciDashboard() {
               {lastRecord.trainerNotes && (
                 <div className="mt-3 p-3 rounded-xl border-l-2 border-gold/40"
                   style={{ background:"rgba(217,119,6,0.04)" }}>
-                  <p className="text-xs leading-relaxed" style={{ color:"rgba(255,255,255,0.55)", fontFamily:"var(--font-label)" }}>
+                  <p className="text-xs leading-relaxed" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
                     {lastRecord.trainerNotes}
                   </p>
                 </div>
@@ -753,7 +753,7 @@ export default function OgrenciDashboard() {
     {/* ══ 18 SAAT ENGEL MODALI — premium, DB'ye dokunmaz ══════════ */}
     {cancelBlocked && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        style={{ background:"rgba(0,0,0,0.75)", backdropFilter:"blur(8px)" }}>
+        style={{ background:"rgba(0,0,0,0.7)", backdropFilter:"blur(6px)" }}>
         <div className="glass-strong w-full max-w-sm rounded-2xl overflow-hidden"
           style={{ borderColor:"rgba(251,146,60,0.35)" }}>
           {/* Üst şerit */}

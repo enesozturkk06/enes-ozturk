@@ -300,7 +300,7 @@ export default function SaglikPage() {
 
                 {/* Profil formu */}
                 {profileTab && (
-                  <motion.div initial={{ opacity:0, y:-8, scale: 0.98 }} animate={{ opacity:1, y:0, scale: 1 }}
+                  <motion.div initial={{ y:-8, scale: 0.98 }} animate={{ y:0, scale: 1 }}
                     className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
                     <div className="glass-strong relative rounded-2xl p-6">
                       <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Sağlık Profiliniz</h3>
@@ -443,7 +443,7 @@ export default function SaglikPage() {
                 {weightLogs.length >= 2 && (
                   <motion.div variants={fadeUp} className="glass-strong rounded-2xl p-6">
                     <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Kilo Değişim Grafiği (30 Gün)</h3>
-                    <ResponsiveContainer width="100%" height={220}>
+                    <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
                       <LineChart data={weightLogs.map(e=>({ tarih:format(parseISO(e.date),"dd MMM",{locale:tr}), kilo:e.weight }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                         <XAxis dataKey="tarih" tick={{ fill:"rgba(255,255,255,0.3)",fontSize:10 }} />
