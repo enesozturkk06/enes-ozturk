@@ -30,7 +30,7 @@ export default function PackageCard({
       className={`relative rounded-2xl overflow-hidden ${pkg.highlight ? "p-[1px] gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet" : "p-px"}`}
       style={{ background: pkg.highlight ? undefined : "rgba(255,255,255,0.06)" }}
     >
-      <div className={`glass-strong relative rounded-2xl h-full flex flex-col ${!pkg.isActive ? "opacity-50" : ""}`}
+      <div className={`glass-strong relative rounded-2xl h-full flex flex-col ${!pkg.isActive ? "opacity-70" : ""}`}
         style={{
           borderColor: isEditing ? "rgba(139,92,246,0.5)" : undefined,
           boxShadow: isEditing ? "0 0 24px rgba(139,92,246,0.15)" : "none",

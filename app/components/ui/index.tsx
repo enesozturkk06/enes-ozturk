@@ -14,14 +14,14 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function Button({ variant = "primary", size = "md", loading, children, className = "", ...props }: BtnProps) {
   const reduced = useReducedMotion();
-  const base = "inline-flex items-center justify-center gap-2 font-semibold tracking-widest uppercase transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed";
+  const base = "inline-flex items-center justify-center gap-2 font-semibold tracking-widest uppercase transition-all duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] disabled:opacity-50 disabled:cursor-not-allowed";
   const sizes = { sm: "px-4 py-2 text-xs", md: "px-6 py-3 text-sm", lg: "px-8 py-4 text-base" };
   const variants = {
-    primary: "bg-crimson hover:bg-crimson-bright text-white hover:shadow-[0_0_25px_rgba(220,38,38,0.5)]",
+    primary: "bg-crimson hover:bg-crimson-bright text-white shadow-[0_4px_20px_rgba(220,38,38,0.38)] hover:shadow-[0_0_28px_rgba(220,38,38,0.6)]",
     secondary: "border border-white/20 text-white/70 hover:border-white/40 hover:text-white",
     ghost: "text-white/50 hover:text-white",
-    danger: "bg-red-700 hover:bg-red-600 text-white",
-    gold: "bg-gold hover:bg-gold-bright text-obsidian hover:shadow-[0_0_25px_rgba(217,119,6,0.4)]",
+    danger: "bg-red-700 hover:bg-red-600 text-white shadow-[0_4px_20px_rgba(185,28,28,0.38)]",
+    gold: "bg-gold hover:bg-gold-bright text-obsidian shadow-[0_4px_20px_rgba(217,119,6,0.38)] hover:shadow-[0_0_28px_rgba(217,119,6,0.5)]",
   };
   return (
     <motion.button
@@ -123,9 +123,9 @@ export function StatCard({
               style={{ fontFamily: "var(--font-barlow-condensed)" }}>
               {label}
             </span>
-            {icon && <div style={{ color: text }} className="flex-shrink-0">{icon}</div>}
+            {icon && <div style={{ color: text, filter: `drop-shadow(0 0 9px ${text}90)` }} className="flex-shrink-0">{icon}</div>}
           </div>
-          <div className="text-2xl sm:text-3xl font-bold" style={{ fontFamily: "var(--font-bebas)", color: text }}>
+          <div className="text-2xl sm:text-3xl font-bold" style={{ fontFamily: "var(--font-bebas)", color: text, textShadow: `0 0 24px ${text}55`, letterSpacing: "-0.01em" }}>
             {renderedValue}
           </div>
           {sub && (

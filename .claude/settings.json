@@ -36,7 +36,9 @@
       "Read(//c/c/Users/incek/Desktop/enes/**)",
       "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(24\\).toString\\('hex'\\)\\)\")",
       "Bash(curl -s -X POST \"https://enes-ozturk.vercel.app/api/push/send\" -H \"Content-Type: application/json\" -d '{\"title\":\"test\",\"message\":\"test\"}' -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\")",
-      "Bash(curl -s https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/push_subscriptions?select=* -H 'apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -H 'Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -w '\\\\nHTTP_STATUS:%{http_code}\\\\n')"
+      "Bash(curl -s https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/push_subscriptions?select=* -H 'apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -H 'Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -w '\\\\nHTTP_STATUS:%{http_code}\\\\n')",
+      "Bash(git log *)",
+      "Bash(grep -rn 'text-white\\\\\\\\\\\\|bg-white\\\\\\\\\\\\|border-white\\\\\\\\\\\\|bg-black\\\\\\\\\\\\|bg-crimson\\\\\\\\\\\\|bg-gold\\\\\\\\\\\\|border-gold\\\\\\\\\\\\|border-crimson\\\\\\\\\\\\|bg-steel\\\\\\\\\\\\|border-white\\\\\\\\' app --include=\"*.tsx\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\incek\\Desktop"

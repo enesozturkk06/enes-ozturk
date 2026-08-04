@@ -631,7 +631,7 @@ export default function AdminDashboard() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Bugünkü / Geçmiş Tamamlanmamış / Tamamlanan dersler */}
         <motion.div variants={fadeUpNoOpacity} className="lg:col-span-2 relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
-          <div className="glass-strong relative rounded-2xl p-5 sm:p-6" id="bugunun-dersleri">
+          <div className="glass-strong relative rounded-2xl p-5 sm:p-6 h-full" id="bugunun-dersleri">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <h3 className="text-xl text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>
                 {lessonFilter === "today" ? "Bugünkü Dersler" : lessonFilter === "incomplete" ? "Geçmiş Tamamlanmamış Dersler" : "Tamamlanan Dersler"}

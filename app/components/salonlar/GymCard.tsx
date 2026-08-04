@@ -31,7 +31,7 @@ export default function GymCard({
       className={`relative rounded-2xl overflow-hidden ${isEditing ? "p-[1px] gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet" : "p-px"}`}
       style={{ background: isEditing ? undefined : "rgba(255,255,255,0.06)" }}
     >
-      <div className={`glass-strong relative rounded-2xl h-full flex flex-col ${!gym.isActive ? "opacity-50" : ""}`}>
+      <div className={`glass-strong relative rounded-2xl h-full flex flex-col ${!gym.isActive ? "opacity-70" : ""}`}>
         <div className="p-5 flex-1">
           <div className="flex items-start justify-between gap-2 mb-3">
             <h3 className="text-xl text-white tracking-wider leading-tight truncate" style={{ fontFamily: "var(--font-display)" }}>

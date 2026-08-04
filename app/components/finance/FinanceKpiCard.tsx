@@ -44,10 +44,10 @@ export default function FinanceKpiCard({
             style={{ fontFamily: "var(--font-label)" }}>
             {label}
           </span>
-          <span style={{ color }} className="flex-shrink-0">{icon}</span>
+          <span style={{ color, filter: `drop-shadow(0 0 9px ${color}90)` }} className="flex-shrink-0">{icon}</span>
         </div>
 
-        <div className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: "var(--font-display)", color }}>
+        <div className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: "var(--font-display)", color, textShadow: `0 0 24px ${color}55`, letterSpacing: "-0.01em" }}>
           <CountUpNumber value={value} prefix={prefix} suffix={suffix} />
         </div>
 

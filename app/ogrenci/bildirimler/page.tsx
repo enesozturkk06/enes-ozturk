@@ -92,7 +92,7 @@ export default function BildirimlerPage() {
             <div className="space-y-3">
               <div className="text-xs text-white/20 tracking-widest uppercase" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Okunmuş</div>
               {read.map((n, i) => (
-                <Card key={n.id} className="p-4 opacity-50">
+                <Card key={n.id} className="p-4 opacity-70">
                   <div className="flex items-start gap-3">
                     <div className="text-white/20 flex-shrink-0 mt-0.5">{TYPE_ICON[n.type]}</div>
                     <div className="flex-1">
