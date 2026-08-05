@@ -5,7 +5,11 @@ import { useAuth } from "@/app/providers";
 import { generateWorkout } from "@/lib/workout-generator";
 import type { WorkoutInput, WorkoutPlan } from "@/lib/types";
 import { Card, Button, Select, PageHeader } from "@/app/components/ui";
-import { Dumbbell, Zap, Target, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import KediAiProgramPanel from "@/app/components/shared/KediAiProgramPanel";
+import KediVisionPanel from "@/app/components/shared/KediVisionPanel";
+import { Dumbbell, Zap, Target, RotateCcw, ChevronDown, ChevronUp, Sparkles, ScanEye } from "lucide-react";
+
+type Tab = "klasik" | "kedi-ai" | "vision";
 
 const levelOpts = [
   { value: "baslangic", label: "Başlangıç" },
@@ -68,6 +72,7 @@ function Section({ title, icon, children, color = "red" }: { title: string; icon
 
 export default function AntrenmanPage() {
   const { student } = useAuth();
+  const [tab, setTab] = useState<Tab>("kedi-ai");
   const [input, setInput] = useState<WorkoutInput>({
     level: student?.level ?? "baslangic",
     goal: "kondisyon",
@@ -91,6 +96,30 @@ export default function AntrenmanPage() {
     <div className="max-w-4xl mx-auto space-y-6 pb-28">
       <PageHeader title="AI Antrenman Sistemi" subtitle="Kişiselleştirilmiş günlük program oluşturun" accent="Ev Antrenmanı" />
 
+      {/* Sekme geçişi */}
+      <div className="flex items-center gap-1.5 glass rounded-xl p-1 w-fit">
+        {([
+          { key: "kedi-ai" as Tab, label: "Kedi AI Premium", icon: <Sparkles size={14} /> },
+          { key: "vision" as Tab, label: "Kedi AI Vision", icon: <ScanEye size={14} /> },
+          { key: "klasik" as Tab, label: "Klasik Program", icon: <Dumbbell size={14} /> },
+        ]).map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className="relative flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg transition-colors"
+            style={{ fontFamily: "var(--font-label)", color: tab === t.key ? "#fff" : "rgba(255,255,255,0.4)" }}>
+            {tab === t.key && (
+              <motion.div layoutId="antrenman-tab-pill" className="absolute inset-0 rounded-lg gradient-animated gradient-slow gradient-violet-pink-orange -z-10" />
+            )}
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "kedi-ai" && <KediAiProgramPanel />}
+
+      {tab === "vision" && <KediVisionPanel />}
+
+      {tab === "klasik" && (
+      <>
       {/* Input form */}
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-6">
@@ -225,6 +254,8 @@ export default function AntrenmanPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      </>
+      )}
     </div>
   );
 }

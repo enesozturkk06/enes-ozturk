@@ -6,6 +6,7 @@ import { useAuth } from "@/app/providers";
 import StudentNav from "@/app/components/layout/StudentNav";
 import WhatsAppButton from "@/app/components/shared/WhatsAppButton";
 import BlackCatAI from "@/app/components/shared/BlackCatAI";
+import KediIntroModal from "@/app/components/shared/KediIntroModal";
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const { student, loaded } = useAuth();
@@ -61,6 +62,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       </motion.main>
       <WhatsAppButton />
       <BlackCatAI />
+      <KediIntroModal actorType="student" />
     </div>
   );
 }

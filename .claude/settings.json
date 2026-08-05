@@ -38,7 +38,24 @@
       "Bash(curl -s -X POST \"https://enes-ozturk.vercel.app/api/push/send\" -H \"Content-Type: application/json\" -d '{\"title\":\"test\",\"message\":\"test\"}' -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\")",
       "Bash(curl -s https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/push_subscriptions?select=* -H 'apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -H 'Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ' -w '\\\\nHTTP_STATUS:%{http_code}\\\\n')",
       "Bash(git log *)",
-      "Bash(grep -rn 'text-white\\\\\\\\\\\\|bg-white\\\\\\\\\\\\|border-white\\\\\\\\\\\\|bg-black\\\\\\\\\\\\|bg-crimson\\\\\\\\\\\\|bg-gold\\\\\\\\\\\\|border-gold\\\\\\\\\\\\|border-crimson\\\\\\\\\\\\|bg-steel\\\\\\\\\\\\|border-white\\\\\\\\' app --include=\"*.tsx\")"
+      "Bash(grep -rn 'text-white\\\\\\\\\\\\|bg-white\\\\\\\\\\\\|border-white\\\\\\\\\\\\|bg-black\\\\\\\\\\\\|bg-crimson\\\\\\\\\\\\|bg-gold\\\\\\\\\\\\|border-gold\\\\\\\\\\\\|border-crimson\\\\\\\\\\\\|bg-steel\\\\\\\\\\\\|border-white\\\\\\\\' app --include=\"*.tsx\")",
+      "WebSearch",
+      "Bash(curl -s \"https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=muay%20thai%20stance%20fighter&srnamespace=6&format=json&srlimit=5\")",
+      "Bash(curl -s \"https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=muay%20thai%20fight&srnamespace=6&format=json&srlimit=8\")",
+      "Bash(curl -s \"https://commons.wikimedia.org/w/api.php?action=query&titles=File:Muay%20Thai%20Fight%20Us%20Vs%20Burma%20\\(80668029\\).jpeg&prop=imageinfo&iiprop=url&format=json\")",
+      "Bash(curl -sL https://upload.wikimedia.org/wikipedia/commons/4/45/Muay_Thai_Fight_Us_Vs_Burma_%2880668029%29.jpeg -o C:/Users/incek/AppData/Local/Temp/claude/c--Users-incek-Desktop-enes/6a63c8bf-8a7a-440d-b8c7-e61bfe2dacfc/scratchpad/test-fight.jpg)",
+      "Bash(node vision-test.mjs ./test-fight.jpg)",
+      "Bash(node vision-test2.mjs \"nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free\")",
+      "Bash(node vision-test2.mjs \"nvidia/nemotron-nano-12b-v2-vl:free\")",
+      "Bash(node -e \"console.log\\(new Date\\(1785974400000\\).toString\\(\\)\\)\")",
+      "Bash(git stash *)",
+      "Bash(curl -s \"https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/students?select=id,full_name,code,password&limit=3\" -H \"apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\" -H \"Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\")",
+      "Bash(curl -s \"https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/students?select=id,full_name,code,pin&limit=3\" -H \"apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\" -H \"Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\")",
+      "Bash(curl -s \"https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/students?select=*&limit=1\" -H \"apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\" -H \"Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>console.log\\(Object.keys\\(JSON.parse\\(d\\)[0]\\)\\)\\)\")",
+      "Bash(curl -s \"https://cjgnbkbvbwrgtrlxcphb.supabase.co/rest/v1/students?select=id,code,full_name,is_active&limit=10\" -H \"apikey: sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\" -H \"Authorization: Bearer sb_publishable_wyspXqRiIDerzcKYPT572A_RjRM6WxQ\")",
+      "Bash(node qa-no-ai.mjs)",
+      "Bash(node qa-vision-upload.mjs)"
     ],
     "additionalDirectories": [
       "c:\\Users\\incek\\Desktop"

@@ -37,6 +37,8 @@ export interface Student {
   gymShareOverrideValue?: number | null;
   /** Ders bilgilendirme kartını (süre, iptal kuralı vb.) onayladı mı — default: false */
   rulesAccepted?: boolean;
+  /** Kedi AI Ultra tanıtım ekranını (tek seferlik "Başlayalım" karşılama) gördü mü — default: false */
+  kediIntroSeen?: boolean;
 }
 
 /* ── Salon Gelir Paylaşımı ────────────────────────────────────────── */
@@ -221,6 +223,92 @@ export interface Notification {
 }
 
 export interface BlockedDate { id: string; date: string; reason: string; createdAt: string; }
+
+/** Kedi AI Ultra — kalıcı sohbet mesajı */
+export type KediAiActorType = "student" | "admin";
+export type KediAiRole      = "user" | "assistant";
+export interface KediAiMessage {
+  id: string; actorType: KediAiActorType; studentId?: string;
+  role: KediAiRole; content: string; mood?: string; createdAt: string;
+}
+
+/** Kedi AI Ultra — derin hafıza: uzun vadeli, kalıcı tek bir "gerçek" */
+export interface KediAiMemory {
+  id: string; actorType: KediAiActorType; studentId?: string;
+  fact: string; createdAt: string;
+}
+
+/** Kedi AI Ultra — yapılandırılmış antrenman + beslenme programı (madde: gerçek LLM ile üretilen premium program) */
+export type KediSport = "kickboks" | "muaythai" | "boks" | "fitness";
+export type KediProgramGoal = "kilo-verme" | "kilo-alma" | "kas-kazanma" | "yag-yakma" | "kondisyon";
+
+export interface KediProgramExercise {
+  name: string; sets?: string; reps?: string; duration?: string; notes?: string;
+}
+export interface KediProgramTrainingDay {
+  day: string; focus: string; exercises: KediProgramExercise[];
+}
+export interface KediProgramWeek {
+  weekNumber: number; focus: string; intensityNote: string;
+}
+export interface KediProgramMeal {
+  name: string; items: string[]; calories: number; protein: number; carbs: number; fat: number;
+}
+export interface KediProgramAnalysis {
+  attendanceSummary: string; performanceSummary: string; recommendations: string[];
+  /** Bu programın NEDEN bu şekilde oluşturulduğunu (yaş/boy/kilo/hedef/spor/devamlılık/
+   * performans/önceki programlar/gelişim/paket durumu üzerinden) kısaca açıklayan gerekçe —
+   * Koç Merkezi'nde antrenöre gösterilir. */
+  rationale?: string;
+}
+/** Sürüm geçmişi durumu — Koç Merkezi'ndeki taslak/onay/yayın akışı için. */
+export type KediProgramStatus = "draft" | "published" | "archived";
+export type KediProgramCreatedBy = "student" | "admin";
+
+export interface KediProgram {
+  id?: string; studentId: string;
+  sport: KediSport; goalType: KediProgramGoal;
+  dailyCalories: number; proteinG: number; carbsG: number; fatG: number;
+  trainingDays: KediProgramTrainingDay[];
+  monthlyProgression: KediProgramWeek[];
+  meals: KediProgramMeal[];
+  shoppingList: string[];
+  analysis: KediProgramAnalysis;
+  safetyNote: string;
+  version?: number; status?: KediProgramStatus; createdBy?: KediProgramCreatedBy;
+  isEdited?: boolean; changeNote?: string;
+  createdAt?: string; updatedAt?: string;
+}
+
+/** Kedi AI Vision — fotoğraf/video teknik analizi (madde: gard/ayak/yumruk/omuz/
+ * kalça rotasyonu/denge/vücut hizası analizi, video için teknik bazlı kare-kare
+ * inceleme, 0-100 teknik skor + kategori kırılımı + gelişim karşılaştırması). */
+export type KediVisionMediaType = "photo" | "video";
+
+export interface KediVisionCategoryScores {
+  gard: number; hiz: number; guc: number; denge: number;
+  ayakCalismasi: number; rotasyon: number; savunma: number;
+}
+export interface KediVisionDeficiency {
+  area: string; issue: string; fix: string;
+}
+export interface KediVisionCoachNotes {
+  strengths: string[]; improvements: string[]; homework: string[]; weeklyPlan: string[];
+}
+
+export interface KediVisionAnalysis {
+  id?: string; studentId: string;
+  mediaType: KediVisionMediaType; mediaUrl: string;
+  overallScore: number;
+  categories: KediVisionCategoryScores;
+  deficiencies: KediVisionDeficiency[];
+  coachNotes: KediVisionCoachNotes;
+  /** Önceki analizlerle karşılaştıran kısa not (örn. "3 hafta önce gardın daha açıktı, şimdi çok daha iyi.") — ilk analizde boş. */
+  progressNote?: string;
+  rawSummary: string;
+  createdBy: KediProgramCreatedBy;
+  createdAt?: string;
+}
 
 /** Öğrencinin satın aldığı/yenilediği paket kaydı */
 export interface PackagePurchase {

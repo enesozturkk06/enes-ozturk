@@ -8,8 +8,9 @@ import Logo from "@/app/components/shared/Logo";
 import { useUnreadNotifCount } from "@/hooks/useUnreadNotifCount";
 import {
   LayoutDashboard, Users, Calendar, CreditCard,
-  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell, ShoppingBag, Building2,
+  BookOpen, LogOut, Menu, X, ChevronRight, Package, Shield, Bell, ShoppingBag, Building2, Sparkles,
 } from "lucide-react";
+import { CatIcon } from "@/app/components/shared/BlackCatAI";
 
 const links = [
   { href: "/admin",                  label: "Bugünün Dersleri", icon: LayoutDashboard, exact: true },
@@ -19,6 +20,7 @@ const links = [
   { href: "/admin/odemeler",         label: "Finans Merkezi",   icon: CreditCard },
   { href: "/admin/salonlar",         label: "Salonlar",         icon: Building2 },
   { href: "/admin/dersler",          label: "Ders Notları",     icon: BookOpen },
+  { href: "/admin/kedi-koc",         label: "Kedi AI Koç Merkezi", icon: Sparkles },
   { href: "/admin/salon-sahipleri",  label: "Salon Sahipleri",  icon: Shield },
   { href: "/admin/bildirimler",      label: "Bildirimler",      icon: Bell },
   { href: "/admin/magaza",           label: "Online Mağaza",    icon: ShoppingBag },
@@ -90,6 +92,13 @@ export default function AdminSidebar() {
         </nav>
 
         <div className="p-3 space-y-1" style={{ borderTop: "1px solid rgba(139,92,246,0.12)" }}>
+          <button
+            onClick={() => window.dispatchEvent(new Event("kedi-admin-open"))}
+            className="flex items-center gap-3 w-full px-3 py-2.5 text-white/45 hover:text-white transition-colors duration-200 rounded-xl"
+          >
+            <span className="w-4 h-4 flex items-center justify-center flex-shrink-0"><CatIcon size={16} /></span>
+            <span className="text-sm tracking-wide" style={{ fontFamily: "var(--font-label)" }}>Kedi AI</span>
+          </button>
           <Link href="/" className="flex items-center gap-3 px-3 py-2 text-white/25 hover:text-white/50 transition-colors text-xs rounded-xl"
             style={{ fontFamily: "var(--font-label)" }}>
             Ana Sayfaya Dön
@@ -127,6 +136,19 @@ export default function AdminSidebar() {
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Kedi AI — mobil header */}
+          <button
+            onClick={() => window.dispatchEvent(new Event("kedi-admin-open"))}
+            className="relative flex items-center justify-center"
+            style={{ minWidth: 40, minHeight: 40 }}
+            aria-label="Kedi AI"
+          >
+            <span className="w-6 h-6 flex items-center justify-center rounded-full"
+              style={{ background: "rgba(255,255,255,0.9)" }}>
+              <CatIcon size={16} />
+            </span>
+          </button>
+
           {/* Bildirim zili — sağ üst */}
           <Link href="/admin/bildirimler"
             className="relative flex items-center justify-center"

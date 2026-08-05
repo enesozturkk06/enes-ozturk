@@ -4,6 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import AdminSidebar from "@/app/components/layout/AdminSidebar";
+import AdminKediAI from "@/app/components/shared/AdminKediAI";
+import KediIntroModal from "@/app/components/shared/KediIntroModal";
 
 const PUBLIC_PATHS = ["/admin/login", "/admin/giris"];
 
@@ -66,6 +68,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {children}
         </div>
       </motion.main>
+      <AdminKediAI />
+      <KediIntroModal actorType="admin" />
     </div>
   );
 }

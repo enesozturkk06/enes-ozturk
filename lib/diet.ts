@@ -52,7 +52,7 @@ export interface DietPlan {
 
 /* ─── Aktivite çarpanları ─────────────────────────────────────────── */
 
-const ACTIVITY_MULT: Record<ActivityLevel, number> = {
+export const ACTIVITY_MULT: Record<ActivityLevel, number> = {
   "sedentary":   1.2,
   "light":       1.375,
   "moderate":    1.55,
@@ -62,7 +62,7 @@ const ACTIVITY_MULT: Record<ActivityLevel, number> = {
 
 /* ─── Hedef kalori ayarı ──────────────────────────────────────────── */
 
-const GOAL_KCAL_DELTA: Record<GoalType, number> = {
+export const GOAL_KCAL_DELTA: Record<GoalType, number> = {
   "kilo-verme":    -500,
   "kilo-alma":     +500,
   "kas-kazanma":   +300,
@@ -72,7 +72,7 @@ const GOAL_KCAL_DELTA: Record<GoalType, number> = {
 
 /* ─── Makro oranları (protein/karb/yag %) ────────────────────────── */
 
-const GOAL_MACROS: Record<GoalType, [number, number, number]> = {
+export const GOAL_MACROS: Record<GoalType, [number, number, number]> = {
   // [protein%, carbs%, fat%]
   "kilo-verme":  [30, 40, 30],
   "kilo-alma":   [25, 50, 25],
@@ -228,7 +228,7 @@ function pick<T>(arr: T[]): T {
 
 /* ─── Makro hesapla (kcal → gram) ────────────────────────────────── */
 
-function macrosFromCalories(
+export function macrosFromCalories(
   kcal: number,
   [pPct, cPct, fPct]: [number, number, number]
 ): { protein: number; carbs: number; fat: number } {

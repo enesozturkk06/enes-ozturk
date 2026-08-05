@@ -9,7 +9,8 @@ import type {
   PackagePurchase, PackageType, PaymentStatus, ArenaDuel,
   Gym, GymShareType, IncomeMovement, IncomeMovementType, PaymentRecordStatus,
   GroupLesson, GroupShareType, GroupLessonMember, GroupLessonPayment, GroupLessonSession,
-  OtherIncome, OtherIncomeType,
+  OtherIncome, OtherIncomeType, KediAiMessage, KediAiActorType, KediAiMemory,
+  KediProgram, KediVisionAnalysis,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { isPackageExpired, getDaysRemaining } from "./packageDuration";
@@ -67,6 +68,7 @@ const ms = (r: any): Student => ({
   gymShareOverrideType: r.gym_share_override_type ?? undefined,
   gymShareOverrideValue: r.gym_share_override_value != null ? Number(r.gym_share_override_value) : undefined,
   rulesAccepted: r.rules_accepted ?? false,
+  kediIntroSeen: r.kedi_intro_seen ?? false,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,6 +187,7 @@ function sRow(s: Partial<Student>): Record<string, unknown> {
   if (s.gymShareOverrideType   !== undefined) r.gym_share_override_type   = s.gymShareOverrideType || null;
   if (s.gymShareOverrideValue  !== undefined) r.gym_share_override_value  = s.gymShareOverrideValue ?? null;
   if (s.rulesAccepted          !== undefined) r.rules_accepted            = s.rulesAccepted;
+  if (s.kediIntroSeen          !== undefined) r.kedi_intro_seen           = s.kediIntroSeen;
   return r;
 }
 
@@ -1193,6 +1196,264 @@ export async function markNotificationRead(id: string): Promise<void> {
 export async function markAllAdminNotificationsRead(): Promise<void> {
   await db().from("notifications").update({ is_read: true })
     .is("student_id", null).eq("is_read", false);
+}
+
+/* ── Kedi AI Ultra — kalıcı sohbet hafızası ────────────────────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mKedi = (r: any): KediAiMessage => ({
+  id: r.id, actorType: r.actor_type, studentId: r.student_id ?? undefined,
+  role: r.role, content: r.content, mood: r.mood ?? undefined, createdAt: r.created_at,
+});
+
+/** Bir öğrenci (actorType="student") ya da admin (actorType="admin") sohbetinin geçmişini döner. */
+export async function getKediMessages(actorType: KediAiActorType, studentId?: string, limit = 40): Promise<KediAiMessage[]> {
+  let q = db().from("kedi_ai_messages").select("*").eq("actor_type", actorType);
+  q = actorType === "student" && studentId ? q.eq("student_id", studentId) : q.is("student_id", null);
+  const { data, error } = await q.order("created_at", { ascending: true }).limit(limit);
+  if (error) { console.error("getKediMessages:", error.message); return []; }
+  return (data ?? []).map(mKedi);
+}
+
+export async function saveKediMessage(params: {
+  actorType: KediAiActorType; studentId?: string; role: "user" | "assistant"; content: string; mood?: string;
+}): Promise<void> {
+  const { error } = await db().from("kedi_ai_messages").insert({
+    actor_type: params.actorType,
+    student_id: params.actorType === "student" ? (params.studentId ?? null) : null,
+    role: params.role, content: params.content, mood: params.mood ?? null,
+  });
+  if (error) console.error("saveKediMessage:", error.message);
+}
+
+/* ── Kedi AI Ultra — derin hafıza (uzun vadeli gerçekler) ──────── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mKediMemory = (r: any): KediAiMemory => ({
+  id: r.id, actorType: r.actor_type, studentId: r.student_id ?? undefined,
+  fact: r.fact, createdAt: r.created_at,
+});
+
+export async function getKediMemories(actorType: KediAiActorType, studentId?: string, limit = 30): Promise<KediAiMemory[]> {
+  let q = db().from("kedi_ai_memories").select("*").eq("actor_type", actorType);
+  q = actorType === "student" && studentId ? q.eq("student_id", studentId) : q.is("student_id", null);
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(limit);
+  if (error) { console.error("getKediMemories:", error.message); return []; }
+  return (data ?? []).map(mKediMemory);
+}
+
+export async function saveKediMemories(actorType: KediAiActorType, studentId: string | undefined, facts: string[]): Promise<void> {
+  if (facts.length === 0) return;
+  const { error } = await db().from("kedi_ai_memories").insert(
+    facts.map(fact => ({
+      actor_type: actorType,
+      student_id: actorType === "student" ? (studentId ?? null) : null,
+      fact,
+    }))
+  );
+  if (error) console.error("saveKediMemories:", error.message);
+}
+
+export async function deleteKediMemories(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await db().from("kedi_ai_memories").delete().in("id", ids);
+  if (error) console.error("deleteKediMemories:", error.message);
+}
+
+/* ── Kedi AI Ultra — yapılandırılmış antrenman + beslenme programı ───
+ * Sürüm geçmişi modeli: her satır bir SÜRÜM (student_id + version).
+ * status: draft (antrenör onayı bekliyor) / published (öğrencinin gördüğü
+ * tek aktif sürüm) / archived (eski, geçmişte kalmış yayın). Bkz.
+ * supabase-kedi-ai-programs-history.sql. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mKediProgram = (r: any): KediProgram => ({
+  id: r.id, studentId: r.student_id, sport: r.sport, goalType: r.goal_type,
+  dailyCalories: r.daily_calories, proteinG: r.protein_g, carbsG: r.carbs_g, fatG: r.fat_g,
+  trainingDays: r.program_json?.trainingDays ?? [],
+  monthlyProgression: r.program_json?.monthlyProgression ?? [],
+  meals: r.program_json?.meals ?? [],
+  shoppingList: r.program_json?.shoppingList ?? [],
+  analysis: r.program_json?.analysis ?? { attendanceSummary: "", performanceSummary: "", recommendations: [] },
+  safetyNote: r.program_json?.safetyNote ?? "",
+  version: r.version, status: r.status, createdBy: r.created_by,
+  isEdited: r.is_edited, changeNote: r.change_note ?? undefined,
+  createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+function kediProgramJson(program: KediProgram) {
+  return {
+    trainingDays: program.trainingDays, monthlyProgression: program.monthlyProgression,
+    meals: program.meals, shoppingList: program.shoppingList,
+    analysis: program.analysis, safetyNote: program.safetyNote,
+  };
+}
+
+/** Öğrencinin şu an YAYINDA olan (öğrencinin gördüğü) tek sürümü — yoksa null. */
+export async function getPublishedKediProgram(studentId: string): Promise<KediProgram | null> {
+  const { data, error } = await db()
+    .from("kedi_ai_programs").select("*")
+    .eq("student_id", studentId).eq("status", "published")
+    .order("version", { ascending: false }).limit(1).maybeSingle();
+  if (error) {
+    if (isSchemaError(error)) { console.warn("getPublishedKediProgram: kedi_ai_programs tablosu hazır değil"); return null; }
+    console.error("getPublishedKediProgram:", error.message);
+    return null;
+  }
+  return data ? mKediProgram(data) : null;
+}
+
+/** Öğrencinin TÜM program sürümleri (taslak/yayında/arşiv), en yeniden eskiye — Koç Merkezi geçmiş/karşılaştırma görünümü için. */
+export async function getKediProgramHistory(studentId: string): Promise<KediProgram[]> {
+  const { data, error } = await db()
+    .from("kedi_ai_programs").select("*")
+    .eq("student_id", studentId).order("version", { ascending: false });
+  if (error) {
+    if (isSchemaError(error)) return [];
+    console.error("getKediProgramHistory:", error.message);
+    return [];
+  }
+  return (data ?? []).map(mKediProgram);
+}
+
+export async function getKediProgramById(id: string): Promise<KediProgram | null> {
+  const { data, error } = await db().from("kedi_ai_programs").select("*").eq("id", id).maybeSingle();
+  if (error) { console.error("getKediProgramById:", error.message); return null; }
+  return data ? mKediProgram(data) : null;
+}
+
+/**
+ * YENİ bir sürüm satırı oluşturur (asla mevcut satırı ezmez — geçmiş korunur).
+ * `status:"published"` verilirse (öğrencinin kendi ürettiği program akışı),
+ * bu öğrencinin önceki yayındaki sürümü otomatik "archived"e düşürülür —
+ * her zaman tam olarak tek bir "published" sürüm garantisi.
+ */
+export async function insertKediProgramVersion(
+  program: KediProgram, opts: { status: "draft" | "published"; createdBy: "student" | "admin" },
+): Promise<KediProgram> {
+  const { data: existing, error: verErr } = await db()
+    .from("kedi_ai_programs").select("version")
+    .eq("student_id", program.studentId).order("version", { ascending: false }).limit(1).maybeSingle();
+  if (verErr) fail("insertKediProgramVersion", verErr);
+  const nextVersion = (existing?.version ?? 0) + 1;
+
+  const row = {
+    student_id: program.studentId, sport: program.sport, goal_type: program.goalType,
+    daily_calories: program.dailyCalories, protein_g: program.proteinG,
+    carbs_g: program.carbsG, fat_g: program.fatG,
+    program_json: kediProgramJson(program),
+    version: nextVersion, status: opts.status, created_by: opts.createdBy,
+  };
+  const { data, error } = await db().from("kedi_ai_programs").insert(row).select().single();
+  if (error) fail("insertKediProgramVersion", error);
+
+  if (opts.status === "published") {
+    await db().from("kedi_ai_programs").update({ status: "archived" })
+      .eq("student_id", program.studentId).eq("status", "published").neq("id", data.id);
+  }
+  return mKediProgram(data);
+}
+
+/** Antrenörün bir taslağı elle düzenlemesi — aynı satır güncellenir, yeni sürüm oluşmaz. */
+export async function updateKediProgramContent(id: string, program: KediProgram, changeNote?: string): Promise<KediProgram> {
+  const row = {
+    sport: program.sport, goal_type: program.goalType,
+    daily_calories: program.dailyCalories, protein_g: program.proteinG,
+    carbs_g: program.carbsG, fat_g: program.fatG,
+    program_json: kediProgramJson(program),
+    is_edited: true, change_note: changeNote ?? null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await db().from("kedi_ai_programs").update(row).eq("id", id).select().single();
+  if (error) fail("updateKediProgramContent", error);
+  return mKediProgram(data);
+}
+
+/** Tüm öğrencilerin yayındaki program özeti (tek sorgu) — Koç Merkezi öğrenci listesinde N+1'den kaçınmak için. */
+export async function getPublishedProgramSummaries(): Promise<Record<string, { sport: string; goalType: string; version: number; updatedAt: string }>> {
+  const { data, error } = await db()
+    .from("kedi_ai_programs").select("student_id, sport, goal_type, version, updated_at")
+    .eq("status", "published");
+  if (error) { if (!isSchemaError(error)) console.error("getPublishedProgramSummaries:", error.message); return {}; }
+  const out: Record<string, { sport: string; goalType: string; version: number; updatedAt: string }> = {};
+  for (const r of data ?? []) {
+    out[r.student_id] = { sport: r.sport, goalType: r.goal_type, version: r.version, updatedAt: r.updated_at };
+  }
+  return out;
+}
+
+/** Bir taslağı onaylayıp öğrenciye yayınlar — önceki yayındaki sürüm arşive düşer. */
+export async function publishKediProgram(id: string, studentId: string): Promise<KediProgram> {
+  await db().from("kedi_ai_programs").update({ status: "archived" })
+    .eq("student_id", studentId).eq("status", "published");
+  const { data, error } = await db()
+    .from("kedi_ai_programs").update({ status: "published", updated_at: new Date().toISOString() })
+    .eq("id", id).select().single();
+  if (error) fail("publishKediProgram", error);
+  return mKediProgram(data);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Kedi AI Vision — fotoğraf/video teknik analizi
+   ═══════════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mKediVisionAnalysis = (r: any): KediVisionAnalysis => ({
+  id: r.id, studentId: r.student_id, mediaType: r.media_type, mediaUrl: r.media_url,
+  overallScore: r.overall_score, categories: r.categories_json, deficiencies: r.deficiencies_json,
+  coachNotes: r.coach_notes_json, progressNote: r.progress_note ?? undefined,
+  rawSummary: r.raw_summary, createdBy: r.created_by, createdAt: r.created_at,
+});
+
+/** Öğrencinin TÜM geçmiş analizleri, en yeniden eskiye — gelişim karşılaştırması ve geçmiş görünümü için. */
+export async function getKediVisionAnalyses(studentId: string): Promise<KediVisionAnalysis[]> {
+  const { data, error } = await db()
+    .from("kedi_ai_vision_analyses").select("*")
+    .eq("student_id", studentId).order("created_at", { ascending: false });
+  if (error) {
+    if (isSchemaError(error)) return [];
+    console.error("getKediVisionAnalyses:", error.message);
+    return [];
+  }
+  return (data ?? []).map(mKediVisionAnalysis);
+}
+
+/** Aynı görsel (aynı hash) bu öğrenci için daha önce analiz edildiyse döner —
+ * çağıran taraf (lib/kediVision.ts) bunu bulursa AI'yı TEKRAR ÇAĞIRMAZ,
+ * doğrudan önceki sonucu kullanır (ücretsiz günlük istek kotasını gereksiz
+ * tekrar analizlerden korumak için). */
+export async function getKediVisionAnalysisByHash(studentId: string, mediaHash: string): Promise<KediVisionAnalysis | null> {
+  const { data, error } = await db()
+    .from("kedi_ai_vision_analyses").select("*")
+    .eq("student_id", studentId).eq("media_hash", mediaHash)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) {
+    if (isSchemaError(error)) return null;
+    console.error("getKediVisionAnalysisByHash:", error.message);
+    return null;
+  }
+  return data ? mKediVisionAnalysis(data) : null;
+}
+
+export async function insertKediVisionAnalysis(a: KediVisionAnalysis, mediaHash?: string): Promise<KediVisionAnalysis> {
+  const row = {
+    student_id: a.studentId, media_type: a.mediaType, media_url: a.mediaUrl,
+    media_hash: mediaHash ?? null,
+    overall_score: a.overallScore, categories_json: a.categories, deficiencies_json: a.deficiencies,
+    coach_notes_json: a.coachNotes, progress_note: a.progressNote ?? null, raw_summary: a.rawSummary,
+    created_by: a.createdBy,
+  };
+  const { data, error } = await db().from("kedi_ai_vision_analyses").insert(row).select().single();
+  if (error) fail("insertKediVisionAnalysis", error);
+  return mKediVisionAnalysis(data);
+}
+
+/** Analiz edilen görseli (fotoğraf ya da video için temsili bir kare) Supabase
+ * Storage'a yükler — profil fotoğrafıyla AYNI desen (bkz. uploadStudentAvatar). */
+export async function uploadKediVisionMedia(studentId: string, file: Blob, contentType: string): Promise<string | null> {
+  const client = db();
+  const path = `${studentId}/${Date.now()}.jpg`;
+  const { error } = await client.storage.from("kedi-vision").upload(path, file, { contentType });
+  if (error) { console.error("[uploadKediVisionMedia]", error.message); return null; }
+  const { data } = client.storage.from("kedi-vision").getPublicUrl(path);
+  return data.publicUrl;
 }
 
 const PACKAGE_EXPIRED_NOTIF_TITLE = "Paket Süresi Doldu";
