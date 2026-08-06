@@ -7,9 +7,9 @@ import {
   getPendingInvites, respondToInvite, cancelAppointment, createAdminNotification,
   checkPackageExpiryNotification, checkPackageWarningNotification,
   getStudentXPAdjustments, getStudentMissionCompletions, getKediMissions,
-  getGyms,
+  getGyms, getStudentAvatar,
 } from "@/lib/db";
-import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, StudentMission, Gym } from "@/lib/types";
+import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, StudentMission, Gym, StudentAvatarConfig } from "@/lib/types";
 import { Badge, ProgressBar } from "@/app/components/ui";
 import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT } from "@/lib/constants";
 import { getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
@@ -79,6 +79,7 @@ export default function OgrenciDashboard() {
   const [waterGlasses, setWaterGlasses]   = useState(0);
   const [dietPlan, setDietPlan]           = useState<DietPlan | null>(null);
   const [gyms, setGyms]                   = useState<Gym[]>([]);
+  const [avatarConfig, setAvatarConfig]   = useState<StudentAvatarConfig | null>(null);
   const [loading, setLoading]             = useState(true);
   const [inviteLoading, setInviteLoading] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget]   = useState<Appointment | null>(null);
@@ -91,7 +92,7 @@ export default function OgrenciDashboard() {
     await checkPackageExpiryNotification(student).catch(() => {});
     await checkPackageWarningNotification(student).catch(() => {});
     const today = todayDate();
-    const [apts, recs, notifs, invites, xpAdjs, completions, missions, healthProf, wLogs, cLogs, wLog, diet, gymList] = await Promise.all([
+    const [apts, recs, notifs, invites, xpAdjs, completions, missions, healthProf, wLogs, cLogs, wLog, diet, gymList, avatarCfg] = await Promise.all([
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
       getStudentNotifications(student.id),
@@ -105,6 +106,7 @@ export default function OgrenciDashboard() {
       getWaterLog(student.id, today).catch(() => null),
       getDietPlan(student.id).catch(() => null),
       getGyms().catch(() => []),
+      getStudentAvatar(student.id).catch(() => null),
     ]);
     setAppointments(apts);
     setRecords(recs);
@@ -119,6 +121,7 @@ export default function OgrenciDashboard() {
     setWaterGlasses(wLog?.glasses ?? 0);
     setDietPlan(diet);
     setGyms(gymList);
+    setAvatarConfig(avatarCfg);
     setLoading(false);
   };
 
@@ -260,6 +263,7 @@ export default function OgrenciDashboard() {
           student={student} xpResult={lifetimeXP} packageLabel={packageLabel}
           dateLabel={format(new Date(), "dd MMMM yyyy, EEEE", { locale: tr })}
           aiTip={heroAiTip}
+          avatarConfig={avatarConfig}
         />
       </motion.div>
 

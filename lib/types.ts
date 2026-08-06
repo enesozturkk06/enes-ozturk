@@ -310,6 +310,40 @@ export interface KediVisionAnalysis {
   createdAt?: string;
 }
 
+/** Kedi Avatar Sistemi — öğrencinin kişiselleştirilebilir 2D karakteri.
+ * Evrim kademesi (XP'ye göre) ve kozmetik açılımlar (rozetlere göre) burada
+ * SAKLANMAZ — lib/avatarEvolution.ts tarafından mevcut lib/xp.ts/lib/badges.ts
+ * verisinden her seferinde türetilir. Bu tip sadece kullanıcının KENDİ SEÇTİĞİ
+ * kişiselleştirme değerlerini tutar. */
+export type AvatarGender = "male" | "female";
+export type AvatarBodyType = "slim" | "athletic" | "heavy";
+
+/** Kedi Life — avatarın Dijital Salon'da döngüsel olarak yaptığı aktivite.
+ * Bu, render katmanından (2D SVG şimdi, ileride 3D/GLB) BAĞIMSIZ bir veri
+ * kavramı — hangi render motoru kullanılırsa kullanılsın aynı aktivite
+ * isimleri geçerli olmalı (bkz. StudentAvatar.tsx'in bu tipin 2D yorumu). */
+export type AvatarActivity = "idle" | "guard" | "shadowbox" | "jumprope" | "bagwork" | "stretch" | "drink" | "phone";
+
+export interface StudentAvatarConfig {
+  studentId: string;
+  gender: AvatarGender;
+  skinTone: string;
+  eyeColor: string;
+  hairStyle: string;
+  hairColor: string;
+  eyebrowStyle: string;
+  beardStyle: string;
+  bodyType: AvatarBodyType;
+  outfitId: string;
+  gloveColor: string;
+  shoeId: string;
+  tattooId?: string;
+  /** Kullanıcının ekipmanladığı (kuşandığı) kozmetikler — sadece açık olanlar arasından seçilebilir. */
+  equippedCosmetics: { aura?: string; background?: string; belt?: string };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** Öğrencinin satın aldığı/yenilediği paket kaydı */
 export interface PackagePurchase {
   id:            string;

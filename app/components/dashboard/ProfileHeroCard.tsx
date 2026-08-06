@@ -1,7 +1,9 @@
 "use client";
 import { motion, useReducedMotion } from "framer-motion";
-import type { Student } from "@/lib/types";
+import type { Student, StudentAvatarConfig } from "@/lib/types";
 import type { XPResult } from "@/lib/xp";
+import { getEvolutionTier } from "@/lib/avatarEvolution";
+import LazyStudentAvatar from "@/app/components/shared/LazyStudentAvatar";
 
 interface Props {
   student: Student;
@@ -9,12 +11,15 @@ interface Props {
   packageLabel: string;
   dateLabel?: string;
   aiTip?: string;
+  /** Kedi Avatar Sistemi — null ise (henüz oluşturulmadıysa) mevcut foto/baş harf kutusuna geri düşer. */
+  avatarConfig?: StudentAvatarConfig | null;
 }
 
-export default function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip }: Props) {
+export default function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, avatarConfig }: Props) {
   const reduced = useReducedMotion();
   const { current, next, progressPct, xpInLevel, xpToNext } = xpResult.level;
   const initials = student.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+  const evolutionTier = getEvolutionTier(xpResult.breakdown.total);
 
   return (
     <motion.div
@@ -38,6 +43,18 @@ export default function ProfileHeroCard({ student, xpResult, packageLabel, dateL
               <span className="text-xl sm:text-2xl text-white" style={{ fontFamily: "var(--font-display)" }}>{initials}</span>
             )}
           </div>
+
+          {/* Kedi Avatar Sistemi — kişiselleştirilebilir karakter (foto/baş harf kutusunun AYRISI, biri diğerini silmez) */}
+          {avatarConfig ? (
+            <div className="flex-shrink-0 -my-2">
+              <LazyStudentAvatar config={avatarConfig} tier={evolutionTier} size={64} />
+            </div>
+          ) : (
+            <a href="/ogrenci/avatar" className="flex-shrink-0 text-[11px] px-3 py-2 rounded-lg text-gold-bright/80 hover:text-gold-bright transition-colors"
+              style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", fontFamily: "var(--font-label)" }}>
+              🐈 Avatarını Oluştur →
+            </a>
+          )}
 
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl text-white tracking-wide truncate" style={{ fontFamily: "var(--font-display)" }}>

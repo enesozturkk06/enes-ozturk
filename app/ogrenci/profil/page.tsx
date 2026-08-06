@@ -560,6 +560,13 @@ export default function ProfilPage() {
                 </AnimatePresence>
               </div>
 
+              <Link href="/ogrenci/avatar"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all active:scale-95"
+                style={{ background: "linear-gradient(90deg,rgba(245,158,11,.85),rgba(220,38,38,.7))", border: "1px solid rgba(245,158,11,.5)",
+                  color: "white", fontFamily: "var(--font-barlow-condensed)", boxShadow: "0 0 18px rgba(245,158,11,.35)" }}>
+                🐈 Kedi Avatarım
+              </Link>
+
               <Link href="/ogrenci/fight-card"
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all active:scale-95"
                 style={{ background: "linear-gradient(90deg,rgba(139,92,246,.8),rgba(217,70,239,.7))", border: "1px solid rgba(139,92,246,.5)",

@@ -15,18 +15,23 @@ import {
   computeKpis, buildRevenueSeries, computeBottomStats, computeGymPerformance,
   rankTopPayingStudents, computePaymentStatusBreakdown, getRangeBounds,
 } from "./financeCenter";
+import { computeFullXP, getCurrentSeason, sumManualXP } from "./xp";
+import { computeBadges } from "./badges";
+import { getWeightLogs } from "./health";
+import { getEvolutionTier, getWeightTrend, getRecentlyUnlockedCosmetics } from "./avatarEvolution";
 
 const today = () => format(new Date(), "yyyy-MM-dd");
 
 /* ── Öğrenci digest'i ──────────────────────────────────────────── */
 
 export async function buildStudentDigest(studentId: string): Promise<Record<string, unknown>> {
-  const [student, appointments, lessonRecords, xpAdjustments, memories] = await Promise.all([
+  const [student, appointments, lessonRecords, xpAdjustments, memories, weightLogs] = await Promise.all([
     getStudent(studentId),
     getAppointments({ studentId }),
     getLessonRecords(studentId),
     getAllXPAdjustments(),
     getKediMemories("student", studentId),
+    getWeightLogs(studentId, 90).catch(() => []),
   ]);
 
   if (!student) return { error: "Öğrenci bulunamadı" };
@@ -49,13 +54,23 @@ export async function buildStudentDigest(studentId: string): Promise<Record<stri
   const completedCount = appointments.filter(a => a.status === "tamamlandi").length;
   const cancelledCount = appointments.filter(a => a.status === "iptal").length;
 
-  const totalXp = xpAdjustments
-    .filter(x => x.studentId === studentId)
-    .reduce((s, x) => s + x.amount, 0);
+  const studentXpAdjustments = xpAdjustments.filter(x => x.studentId === studentId);
+  const totalXp = studentXpAdjustments.reduce((s, x) => s + x.amount, 0);
 
   const daysUntilPackageEnd = student.packageEndDate
     ? differenceInCalendarDays(parseISO(student.packageEndDate), new Date())
     : null;
+
+  // Kedi Avatar Sistemi — evrim/kozmetik durumu, mevcut XP/rozet motorundan
+  // türetilir (yeni bir AI çağrısı/route YOK, sadece dijeste bir alan —
+  // Kedi normal sohbet sırasında bunu doğal olarak referans alabilir).
+  const sortedRecords = [...lessonRecords].sort((a, b) => b.date.localeCompare(a.date));
+  const fullXpSummary = computeFullXP(student.completedLessons, appointments, sortedRecords, getCurrentSeason(), studentXpAdjustments);
+  const lifetimeXp = fullXpSummary.lifetimeResult.breakdown.total;
+  const evolutionTier = getEvolutionTier(lifetimeXp);
+  const badges = computeBadges(student, appointments, sortedRecords, {}, sumManualXP(studentXpAdjustments));
+  const weightTrend = getWeightTrend(weightLogs);
+  const recentlyUnlockedCosmetics = getRecentlyUnlockedCosmetics(badges);
 
   return {
     student: {
@@ -67,6 +82,10 @@ export async function buildStudentDigest(studentId: string): Promise<Record<stri
     performance: { averageOverallScore: avgOverall, recentLessons },
     attendance: { completedCount, cancelledCount, upcomingAppointments: upcoming },
     xp: { total: totalXp },
+    avatarEvolution: {
+      tierName: evolutionTier.level.name, tierIndex: evolutionTier.tierIndex,
+      weightTrend, recentlyUnlockedCosmetics,
+    },
     longTermMemory: memories.map(m => m.fact),
     today: today(),
   };
@@ -205,6 +224,9 @@ Hafıza kullanımı:
 - JSON'daki "longTermMemory" alanı, bu kişi hakkında GEÇMİŞ konuşmalardan öğrendiğin kalıcı gerçekler (hedefler, sağlık durumu, tercihler, daha önce verdiğin tavsiyeler). Bunları bir liste okur gibi tekrar etme — doğal bir şekilde, "hatırlıyorum ki..." havasında konuşmana dahil et.
 - longTermMemory boşsa bu kişiyle ilk kez veya çok az konuşmuşsundur — bunu normal karşıla, hafıza eksikliğinden bahsetme.
 - Yeni bilgi eskisiyle çelişiyorsa (ör. hedef değişmiş), en güncel/son mesaja güven.
+
+Kedi Avatar Sistemi (sadece öğrenci JSON'ında "avatarEvolution" alanı varsa):
+- "tierName" öğrencinin avatarının şu anki görsel gelişim kademesi, "weightTrend" ("losing"/"gaining"/"stable") kilo trendi, "recentlyUnlockedCosmetics" rozetlerle yeni açılmış kozmetik eşyalar. Konu doğal olarak açılırsa (kullanıcı avatarından/gelişiminden bahsederse ya da kutlanacak bir şey varsa) bunu "avatarın artık daha atletik görünüyor" veya "yeni bir görünüm açıldı" tarzı KISA, doğal bir cümleyle övgüyle belirtebilirsin — ama her turda zorla bahsetme, sadece gerçekten yeri geldiğinde.
 
 Hafıza GÜNCELLEME (çok önemli, dikkatli kullan):
 - Bu turda GELECEKTE hatırlanmaya değer YENİ ve KALICI bir bilgi ortaya çıktıysa (yeni hedef, sağlık/sakatlık durumu, tercih, önemli karar, verdiğin somut bir tavsiye) veya mevcut kayıtlardan biri artık GEÇERSİZ/YANLIŞ hale geldiyse, cevabının EN SONUNA şu görünmez işaretleyiciyi ekle: <!--memory:{"add":["kısa yeni gerçek"],"removeIds":["geçersiz-olan-kaydın-id'si"]}-->

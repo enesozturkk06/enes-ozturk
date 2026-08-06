@@ -10,7 +10,7 @@ import type {
   Gym, GymShareType, IncomeMovement, IncomeMovementType, PaymentRecordStatus,
   GroupLesson, GroupShareType, GroupLessonMember, GroupLessonPayment, GroupLessonSession,
   OtherIncome, OtherIncomeType, KediAiMessage, KediAiActorType, KediAiMemory,
-  KediProgram, KediVisionAnalysis,
+  KediProgram, KediVisionAnalysis, StudentAvatarConfig,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { isPackageExpired, getDaysRemaining } from "./packageDuration";
@@ -2589,6 +2589,51 @@ export async function deleteStudentAvatar(studentId: string): Promise<void> {
   const client = db();
   await client.storage.from("avatars").remove([`${studentId}/avatar.jpg`]);
   await client.from("students").update({ avatar_url: null }).eq("id", studentId);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Kedi Avatar Sistemi — kişiselleştirilebilir 2D karakter
+   (uploadStudentAvatar/deleteStudentAvatar YUKARIDA — o YÜKLENEN FOTOĞRAF,
+   bu ise ayrı, stilize bir karakterdir; ikisi birbirini ETKİLEMEZ.)
+   ═══════════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mStudentAvatar = (r: any): StudentAvatarConfig => ({
+  studentId: r.student_id, gender: r.gender, skinTone: r.skin_tone,
+  eyeColor: r.eye_color, hairStyle: r.hair_style, hairColor: r.hair_color,
+  eyebrowStyle: r.eyebrow_style, beardStyle: r.beard_style, bodyType: r.body_type,
+  outfitId: r.outfit_id, gloveColor: r.glove_color, shoeId: r.shoe_id,
+  tattooId: r.tattoo_id ?? undefined,
+  equippedCosmetics: r.equipped_cosmetics ?? {},
+  createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+export async function getStudentAvatar(studentId: string): Promise<StudentAvatarConfig | null> {
+  const { data, error } = await db()
+    .from("student_avatars").select("*").eq("student_id", studentId).maybeSingle();
+  if (error) {
+    if (isSchemaError(error)) { console.warn("getStudentAvatar: student_avatars tablosu hazır değil"); return null; }
+    console.error("getStudentAvatar:", error.message);
+    return null;
+  }
+  return data ? mStudentAvatar(data) : null;
+}
+
+/** Avatar kişiselleştirmesini kaydet/güncelle (upsert — bkz. lib/health.ts saveHealthProfile ile aynı desen). */
+export async function saveStudentAvatar(config: StudentAvatarConfig): Promise<StudentAvatarConfig> {
+  const row = {
+    student_id: config.studentId, gender: config.gender, skin_tone: config.skinTone,
+    eye_color: config.eyeColor, hair_style: config.hairStyle, hair_color: config.hairColor,
+    eyebrow_style: config.eyebrowStyle, beard_style: config.beardStyle, body_type: config.bodyType,
+    outfit_id: config.outfitId, glove_color: config.gloveColor, shoe_id: config.shoeId,
+    tattoo_id: config.tattooId ?? null,
+    equipped_cosmetics: config.equippedCosmetics ?? {},
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await db()
+    .from("student_avatars").upsert(row, { onConflict: "student_id" }).select().single();
+  if (error) fail("saveStudentAvatar", error);
+  return mStudentAvatar(data);
 }
 
 /* ════════════════════════════════════════════════════════════════════
