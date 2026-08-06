@@ -22,6 +22,7 @@ function mapStudent(row: any): Student {
     weight: row.weight ?? undefined, age: row.age ?? undefined, createdAt: row.created_at ?? "",
     avatarUrl: row.avatar_url ?? undefined,
     rulesAccepted: row.rules_accepted ?? false,
+    kediIntroSeen: row.kedi_intro_seen ?? false,
   };
 }
 
