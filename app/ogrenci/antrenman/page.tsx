@@ -1,13 +1,20 @@
 "use client";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import { generateWorkout } from "@/lib/workout-generator";
 import type { WorkoutInput, WorkoutPlan } from "@/lib/types";
 import { Card, Button, Select, PageHeader } from "@/app/components/ui";
-import KediAiProgramPanel from "@/app/components/shared/KediAiProgramPanel";
-import KediVisionPanel from "@/app/components/shared/KediVisionPanel";
 import { Dumbbell, Zap, Target, RotateCcw, ChevronDown, ChevronUp, Sparkles, ScanEye } from "lucide-react";
+
+// Her ikisi de büyük, sekme-bazlı paneller — sadece kullanıcı o sekmeye
+// geçtiğinde (veya kedi-ai varsayılan sekme olduğu için ilk yüklemede)
+// kendi kod parçalarını (chunk) indirsinler, antrenman sayfasının ana
+// bundle'ına gömülmesinler.
+const KediAiProgramPanel = dynamic(() => import("@/app/components/shared/KediAiProgramPanel"), { ssr: false, loading: () => null });
+const KediVisionPanel = dynamic(() => import("@/app/components/shared/KediVisionPanel"), { ssr: false, loading: () => null });
 
 type Tab = "klasik" | "kedi-ai" | "vision";
 
@@ -72,7 +79,11 @@ function Section({ title, icon, children, color = "red" }: { title: string; icon
 
 export default function AntrenmanPage() {
   const { student } = useAuth();
-  const [tab, setTab] = useState<Tab>("kedi-ai");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(
+    initialTab === "vision" ? "vision" : initialTab === "klasik" ? "klasik" : "kedi-ai",
+  );
   const [input, setInput] = useState<WorkoutInput>({
     level: student?.level ?? "baslangic",
     goal: "kondisyon",

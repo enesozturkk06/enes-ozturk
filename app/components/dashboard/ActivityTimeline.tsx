@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, Bell, Zap, type LucideIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -20,7 +21,7 @@ const ICONS: Record<TimelineItem["type"], { icon: LucideIcon; color: string }> =
 
 interface Props { items: TimelineItem[] }
 
-export default function ActivityTimeline({ items }: Props) {
+function ActivityTimeline({ items }: Props) {
   return (
     <div className="glass-strong rounded-2xl p-5 sm:p-6">
       <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily: "var(--font-display)" }}>SON AKTİVİTELER</h3>
@@ -66,3 +67,5 @@ export default function ActivityTimeline({ items }: Props) {
     </div>
   );
 }
+
+export default memo(ActivityTimeline);

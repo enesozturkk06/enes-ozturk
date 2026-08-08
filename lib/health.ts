@@ -117,6 +117,22 @@ export async function getWaterLog(studentId: string, date: string): Promise<Wate
   return data ? { date: data.date, glasses: data.glasses ?? 0 } : null;
 }
 
+/** Son N günün su kayıtları — lib/health.ts'teki getWeightLogs/getCalorieLogs
+ * ile AYNI desen (aynı tablo aralığı sorgusu), Kedi AI Smart Notification
+ * Center'ın "su hedefi sürekli tutturulamıyor" tespiti için eklendi. */
+export async function getWaterLogRange(studentId: string, days = 7): Promise<WaterEntry[]> {
+  const from = new Date();
+  from.setDate(from.getDate() - days);
+  const { data, error } = await db()
+    .from("water_logs")
+    .select("date, glasses")
+    .eq("student_id", studentId)
+    .gte("date", from.toISOString().split("T")[0])
+    .order("date", { ascending: true });
+  if (error) { console.error("[getWaterLogRange]", error.message); return []; }
+  return (data ?? []).map(r => ({ date: r.date, glasses: r.glasses ?? 0 }));
+}
+
 export async function setWaterGlasses(studentId: string, date: string, glasses: number): Promise<void> {
   const { error } = await db().from("water_logs").upsert(
     { student_id: studentId, date, glasses },

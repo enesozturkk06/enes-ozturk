@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
@@ -19,7 +20,12 @@ import {
   computeTechnicalAverages, compute30DayImprovement, countEarnedBadges,
   type HallEntry,
 } from "@/lib/hallOfFame";
-import { HallOfFamePremium } from "@/app/components/shared/HallOfFame";
+// Büyük (500+ satır), sadece hallEntries doluyken render edilen blok —
+// sayfanın ana bundle'ına gömülmesin, sadece gerçekten gösterilecekse yüklensin.
+const HallOfFamePremium = dynamic(
+  () => import("@/app/components/shared/HallOfFame").then(m => m.HallOfFamePremium),
+  { ssr: false, loading: () => null },
+);
 import CircularXP from "@/app/components/shared/CircularXP";
 import { PageHeader } from "@/app/components/ui";
 import { Zap, Crown, Trophy, Gift, Clock, ChevronRight, ChevronDown } from "lucide-react";

@@ -14,12 +14,12 @@ import { getStudent, getKediProgramHistory } from "./db";
 import { buildStudentDigest } from "./kediAi";
 import { getHealthProfile, calcTDEE, type HealthProfile } from "./health";
 import { GOAL_KCAL_DELTA, GOAL_MACROS, macrosFromCalories } from "./diet";
-import { callOpenRouter } from "./openrouter";
+import { callOpenRouter, extractJsonResponse } from "./openrouter";
 import { KEDI_AI_PROGRAM_MAX_TOKENS, OPENROUTER_TEXT_MODELS } from "./kediAiConfig";
 import { SPORT_LABELS, GOAL_LABELS } from "./kediProgramLabels";
 import type {
   KediSport, KediProgramGoal, KediProgram,
-  KediProgramTrainingDay, KediProgramWeek, KediProgramMeal, KediProgramAnalysis,
+  KediProgramTrainingDay, KediProgramWeek, KediProgramMeal, KediProgramDayMeals, KediProgramAnalysis,
 } from "./types";
 
 export class KediProgramError extends Error {}
@@ -57,27 +57,10 @@ export function computeNutritionBaseline(profile: HealthProfile, goal: KediProgr
   return { tdee, dailyCalories, ...macros };
 }
 
-/* ── JSON çıkarma + doğrulama (ortak, güvenli) ───────────────────── */
+/* ── JSON çıkarma + doğrulama (paylaşılan — bkz. lib/openrouter.ts) ─── */
 
 function extractJson<T>(raw: string, truncated: boolean, requiredKeys: (keyof T)[]): T {
-  if (truncated) {
-    console.error("[kediPrograms] truncated response, raw length:", raw.length, "tail:", raw.slice(-200));
-    throw new KediProgramError("Model yanıtı yarıda kesildi (token bütçesi yetersiz) — lütfen tekrar deneyin.");
-  }
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) {
-    console.error("[kediPrograms] no JSON found, raw length:", raw.length, "content:", raw.slice(0, 500));
-    throw new KediProgramError("Model geçerli bir JSON üretemedi.");
-  }
-  let parsed: T;
-  try { parsed = JSON.parse(match[0]) as T; }
-  catch { throw new KediProgramError("Model çıktısı geçerli JSON değil."); }
-  for (const key of requiredKeys) {
-    if (!(key in (parsed as object))) {
-      throw new KediProgramError(`Model çıktısında beklenen alan eksik: ${String(key)}`);
-    }
-  }
-  return parsed;
+  return extractJsonResponse(raw, truncated, requiredKeys, "kediPrograms", (msg) => new KediProgramError(msg));
 }
 
 /* ── Antrenman + beslenme programı üretimi — TEK istekte birleşik ────
@@ -92,6 +75,7 @@ interface ProgramResponse {
   monthlyProgression: KediProgramWeek[];
   analysis: KediProgramAnalysis;
   meals: KediProgramMeal[];
+  weeklyMeals: KediProgramDayMeals[];
   shoppingList: string[];
 }
 
@@ -134,10 +118,19 @@ SADECE şu JSON formatında cevap ver, başka HİÇBİR metin yazma (açıklama,
   "meals": [
     {"name": "Kahvaltı", "items": ["besin 1", "besin 2"], "calories": 0, "protein": 0, "carbs": 0, "fat": 0}
   ],
+  "weeklyMeals": [
+    {"day": "Pazartesi", "meals": [{"name": "Kahvaltı", "items": ["besin 1", "besin 2"], "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "alternative": ["benzer makrolu alternatif besin 1", "alternatif besin 2"]}]}
+  ],
   "shoppingList": ["madde 1", "madde 2"]
 }
 
-trainingDays dizisinde TAM OLARAK ${daysPerWeek} gün olsun (haftanın günlerini kullan). monthlyProgression'da tam olarak 4 hafta olsun (weekNumber 1-4). Her günde 4-6 egzersiz olsun, spora ve hedefe uygun, gerçekçi ve uygulanabilir. meals dizisinde 3-5 öğün olsun (Kahvaltı/Öğle/Akşam + varsa ara öğünler), her öğünün calories/protein/carbs/fat TOPLAMI verilen günlük hedeflere yakın olmalı (öğünlere makul dağıt, toplamı hedeften %10'dan fazla sapmasın). shoppingList 10-20 madde, gruplu/kısa.`;
+trainingDays dizisinde TAM OLARAK ${daysPerWeek} gün olsun (haftanın günlerini kullan). monthlyProgression'da tam olarak 4 hafta olsun (weekNumber 1-4). Her günde 4-6 egzersiz olsun, spora ve hedefe uygun, gerçekçi ve uygulanabilir.
+
+"meals": TEK, temsili bir günün öğün planı (3-5 öğün: Kahvaltı/Öğle/Akşam + varsa ara öğünler) — geriye dönük uyumluluk için var, "weeklyMeals"in İLK gününün BİREBİR AYNISI olsun.
+
+"weeklyMeals": haftanın TAM 7 GÜNÜ için AYRI öğün planı (Pazartesi'den Pazar'a, gerçek gün isimleriyle). Her gün 3-5 öğün, her öğünün calories/protein/carbs/fat'ı olsun. GÜNLER ARASINDA GERÇEK ÇEŞİTLİLİK olsun (aynı öğünü 7 kez tekrarlama — farklı Türk mutfağı yemekleri/kahvaltılık seçenekleri kullan) ama HER GÜNÜN toplam kalori/makro'su verilen günlük hedeflere yakın kalsın (hedeften %10'dan fazla sapma). Her öğüne, o öğünle YAKLAŞIK AYNI makroyu veren 1-2 alternatif besin seçeneği ekle ("alternative" alanı) — öğrencinin elinde o malzeme yoksa veya sevmiyorsa değiştirebileceği gerçekçi bir seçenek.
+
+shoppingList: weeklyMeals'daki TÜM 7 günün malzemelerini kapsayan, gruplu (ör. "Protein: ...", "Sebze: ...") ve tekrar etmeyen 15-25 maddelik bir market listesi olsun — sadece tek bir günün değil, haftanın tamamının alışverişi.`;
 }
 
 async function generateProgram(
@@ -149,7 +142,7 @@ async function generateProgram(
     [{ role: "user", content: prompt }], { maxTokens: KEDI_AI_PROGRAM_MAX_TOKENS, model: OPENROUTER_TEXT_MODELS },
   );
   return extractJson<ProgramResponse>(
-    content, truncated, ["trainingDays", "monthlyProgression", "analysis", "meals", "shoppingList"],
+    content, truncated, ["trainingDays", "monthlyProgression", "analysis", "meals", "weeklyMeals", "shoppingList"],
   );
 }
 
@@ -204,6 +197,7 @@ export async function generateKediProgram(opts: GenerateProgramOptions): Promise
     monthlyProgression: result.monthlyProgression,
     analysis: result.analysis,
     meals: result.meals,
+    weeklyMeals: result.weeklyMeals,
     shoppingList: result.shoppingList,
     safetyNote: DEFAULT_SAFETY_NOTE,
   };

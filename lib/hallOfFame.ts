@@ -19,12 +19,16 @@ export interface TechnicalAverages {
   sampleSize: number;   // ortalamanın hesaplandığı ders kaydı sayısı
 }
 
-const TECH_SAMPLE = 10; // son N ders kaydı üzerinden ortalama al
+const TECH_SAMPLE = 10; // varsayılan: son N ders kaydı üzerinden ortalama al
 
-/** Son derslerden teknik puan ortalamalarını hesapla (yeterli veri yoksa null) */
-export function computeTechnicalAverages(records: LessonRecord[]): TechnicalAverages | null {
+/** Son derslerden teknik puan ortalamalarını hesapla (yeterli veri yoksa null).
+ * `sampleSize` opsiyonel — varsayılan 10 (mevcut tüm çağıranların beklediği
+ * davranış, DEĞİŞMEDİ). Kedi AI'nin "son 5 ders / son 10 ders" karşılaştırması
+ * (bkz. lib/kediAi.ts) AYNI fonksiyonu farklı pencere boyutlarıyla çağırır —
+ * ayrı bir "son5Ortalama" fonksiyonu YAZILMADI, kod tekrarı olmasın diye. */
+export function computeTechnicalAverages(records: LessonRecord[], sampleSize: number = TECH_SAMPLE): TechnicalAverages | null {
   if (records.length === 0) return null;
-  const sample = [...records].sort((a, b) => b.date.localeCompare(a.date)).slice(0, TECH_SAMPLE);
+  const sample = [...records].sort((a, b) => b.date.localeCompare(a.date)).slice(0, sampleSize);
   const n = sample.length;
   const punch        = sample.reduce((s, r) => s + r.punch, 0) / n;
   const kick         = sample.reduce((s, r) => s + r.kick, 0) / n;

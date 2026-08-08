@@ -119,25 +119,59 @@ export default function KediProgramCards({ program, headerActions }: { program: 
         </div>
       </Card>
 
-      {/* Meals */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Apple size={16} className="text-white" />
-          <span className="text-sm font-semibold text-white tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Öğün Planı</span>
-        </div>
-        <div className="space-y-2">
-          {program.meals.map((meal, i) => (
-            <div key={i} className="p-3 bg-steel/30 border border-white/5">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{meal.name}</span>
-                <span className="text-xs text-gold/70">{meal.calories} kcal</span>
+      {/* Weekly meals — varsa (yeni programlar), yoksa (eski kaydedilmiş
+          programlar) tek günlük "meals" özetine geri düşülür. */}
+      {program.weeklyMeals && program.weeklyMeals.length > 0 ? (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Apple size={16} className="text-white" />
+            <span className="text-sm font-semibold text-white tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Haftalık Öğün Planı</span>
+          </div>
+          <div className="space-y-4">
+            {program.weeklyMeals.map((dayMeals, i) => (
+              <div key={i}>
+                <div className="text-xs text-gold tracking-widest uppercase mb-2" style={{ fontFamily: "var(--font-label)" }}>{dayMeals.day}</div>
+                <div className="space-y-2">
+                  {dayMeals.meals.map((meal, j) => (
+                    <div key={j} className="p-3 bg-steel/30 border border-white/5">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{meal.name}</span>
+                        <span className="text-xs text-gold/70">{meal.calories} kcal</span>
+                      </div>
+                      <p className="text-xs text-white/50" style={{ fontFamily: "var(--font-inter)" }}>{meal.items.join(", ")}</p>
+                      <div className="text-[10px] text-white/25 mt-1">P:{meal.protein}g K:{meal.carbs}g Y:{meal.fat}g</div>
+                      {meal.alternative && meal.alternative.length > 0 && (
+                        <p className="text-[10px] text-white/30 mt-1.5 italic" style={{ fontFamily: "var(--font-inter)" }}>
+                          Alternatif: {meal.alternative.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="text-xs text-white/50" style={{ fontFamily: "var(--font-inter)" }}>{meal.items.join(", ")}</p>
-              <div className="text-[10px] text-white/25 mt-1">P:{meal.protein}g K:{meal.carbs}g Y:{meal.fat}g</div>
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Apple size={16} className="text-white" />
+            <span className="text-sm font-semibold text-white tracking-wider" style={{ fontFamily: "var(--font-barlow-condensed)" }}>Öğün Planı</span>
+          </div>
+          <div className="space-y-2">
+            {program.meals.map((meal, i) => (
+              <div key={i} className="p-3 bg-steel/30 border border-white/5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-white font-semibold" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{meal.name}</span>
+                  <span className="text-xs text-gold/70">{meal.calories} kcal</span>
+                </div>
+                <p className="text-xs text-white/50" style={{ fontFamily: "var(--font-inter)" }}>{meal.items.join(", ")}</p>
+                <div className="text-[10px] text-white/25 mt-1">P:{meal.protein}g K:{meal.carbs}g Y:{meal.fat}g</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Shopping list */}
       <Card className="p-4">

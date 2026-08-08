@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
@@ -18,15 +19,18 @@ import {
   type DietInput, type DietPlan, type GoalType, type ActivityLevel,
 } from "@/lib/diet";
 import { PageHeader } from "@/app/components/ui";
+import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
+import { getActiveCharacterPack } from "@/lib/avatarPack";
 import {
   Scale, Droplets, Flame, Activity, TrendingUp, Plus, Save,
   Utensils, RefreshCw, ChevronDown, ChevronUp, Sparkles,
 } from "lucide-react";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
 import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
+
+// recharts (ağır bağımlılık) sadece bu kart gerçekten render edilecekse
+// (weightLogs.length >= 2) indirilsin — bkz. WeightChart.tsx.
+const WeightChart = dynamic(() => import("@/app/components/shared/WeightChart"), { ssr: false, loading: () => null });
 
 /* ─── Sabitler ─────────────────────────────────────────────────── */
 
@@ -368,7 +372,19 @@ export default function SaglikPage() {
                 <motion.div variants={fadeUp} className="grid lg:grid-cols-3 gap-5">
                   {/* Su */}
                   <div className="glass-strong rounded-2xl p-5">
-                    <h3 className="text-base text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Su Tüketimi</h3>
+                    <div className="flex items-center gap-2 mb-4">
+                      {/* Su önerisinde (günlük hedefin altındayken) DrinkWater
+                          activity'si — hedefe ulaşınca Idle'a döner. */}
+                      <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ background: "#0a0a0c" }}>
+                        <LazyAvatarEngine3D
+                          pack={getActiveCharacterPack()}
+                          activity={waterGlasses < 8 ? "drink" : "idle"}
+                          width={40}
+                          height={40}
+                        />
+                      </div>
+                      <h3 className="text-base text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Su Tüketimi</h3>
+                    </div>
                     <div className="flex items-center justify-center gap-3 mb-4">
                       <button onClick={() => changeWater(-1)} disabled={savingWater || waterGlasses===0}
                         className="glass w-8 h-8 rounded-full hover:text-white text-white/40 text-xl flex items-center justify-center transition-all disabled:opacity-30">−</button>
@@ -443,15 +459,7 @@ export default function SaglikPage() {
                 {weightLogs.length >= 2 && (
                   <motion.div variants={fadeUp} className="glass-strong rounded-2xl p-6">
                     <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily:"var(--font-display)" }}>Kilo Değişim Grafiği (30 Gün)</h3>
-                    <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
-                      <LineChart data={weightLogs.map(e=>({ tarih:format(parseISO(e.date),"dd MMM",{locale:tr}), kilo:e.weight }))}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="tarih" tick={{ fill:"rgba(255,255,255,0.3)",fontSize:10 }} />
-                        <YAxis domain={["auto","auto"]} tick={{ fill:"rgba(255,255,255,0.25)",fontSize:10 }} />
-                        <Tooltip contentStyle={{ background:"rgba(20,14,35,0.95)", backdropFilter: "blur(8px)", border:"1px solid rgba(139,92,246,0.35)", borderRadius:10 }} labelStyle={{ color:"#fff" }} />
-                        <Line type="monotone" dataKey="kilo" stroke="#22c55e" strokeWidth={2} dot={{ fill:"#22c55e",r:3 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <WeightChart weightLogs={weightLogs} />
                   </motion.div>
                 )}
 

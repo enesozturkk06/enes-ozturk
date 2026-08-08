@@ -48,8 +48,11 @@ export default function StudentNav() {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 min-h-screen glass-strong fixed left-0 top-0 z-40" style={{ borderRadius: 0, border: "none" }}>
+      {/* Desktop sidebar — h-screen (min-h-screen DEĞİL) + flex column: menü öğe
+          sayısı ekran yüksekliğini aşınca `<aside>` kendisi büyümesin, sadece
+          içindeki <nav> kayıtsın (aşağıda). Logo/kullanıcı kartı ve çıkış
+          butonu flex-shrink olmadığı için sabit kalır. */}
+      <aside className="hidden lg:flex flex-col w-64 h-screen glass-strong fixed left-0 top-0 z-40" style={{ borderRadius: 0, border: "none" }}>
         <div className="absolute top-0 right-0 bottom-0 w-px gradient-animated gradient-slow gradient-violet-pink-orange" />
 
         {/* Logo */}
@@ -83,8 +86,14 @@ export default function StudentNav() {
           </div>
         )}
 
-        {/* Nav */}
-        <nav className="flex-1 p-3 space-y-0.5 mt-3">
+        {/* Nav — TEK kaydırılabilir bölge. min-h-0 ZORUNLU: flex item'lar
+            varsayılan olarak `min-height: auto` taşır (kendi içeriği kadar
+            büyümek ister), bu da flex-1 + overflow-y:auto'yu etkisiz
+            bırakır — min-h-0 olmadan scroll asla tetiklenmez. */}
+        <nav
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 space-y-0.5 mt-3"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
           {links.map(({ href, label, icon: Icon, exact }) => {
             const active = isActive(href, exact);
             return (

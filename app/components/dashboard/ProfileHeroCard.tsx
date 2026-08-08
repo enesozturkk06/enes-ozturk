@@ -1,9 +1,11 @@
 "use client";
+import { memo } from "react";
+import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
-import type { Student, StudentAvatarConfig } from "@/lib/types";
+import type { Student, StudentAvatarConfig, AvatarAction } from "@/lib/types";
 import type { XPResult } from "@/lib/xp";
-import { getEvolutionTier } from "@/lib/avatarEvolution";
-import LazyStudentAvatar from "@/app/components/shared/LazyStudentAvatar";
+import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
+import { getActiveCharacterPack } from "@/lib/avatarPack";
 
 interface Props {
   student: Student;
@@ -13,13 +15,15 @@ interface Props {
   aiTip?: string;
   /** Kedi Avatar Sistemi — null ise (henüz oluşturulmadıysa) mevcut foto/baş harf kutusuna geri düşer. */
   avatarConfig?: StudentAvatarConfig | null;
+  /** "XP kazandı → Victory" gibi olay bağlantıları için — bkz. app/ogrenci/page.tsx. */
+  avatarAction?: AvatarAction | null;
+  onAvatarActionEnd?: () => void;
 }
 
-export default function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, avatarConfig }: Props) {
+function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, avatarConfig, avatarAction, onAvatarActionEnd }: Props) {
   const reduced = useReducedMotion();
   const { current, next, progressPct, xpInLevel, xpToNext } = xpResult.level;
   const initials = student.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-  const evolutionTier = getEvolutionTier(xpResult.breakdown.total);
 
   return (
     <motion.div
@@ -30,24 +34,32 @@ export default function ProfileHeroCard({ student, xpResult, packageLabel, dateL
       <div className="relative p-6 sm:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center gap-5 mb-6">
           {/* Avatar */}
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex-shrink-0 flex items-center justify-center overflow-hidden"
+          <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex-shrink-0 flex items-center justify-center overflow-hidden"
             style={{
               background: `radial-gradient(circle, ${current.gradFrom}55, ${current.gradTo}22)`,
               border: `2px solid ${current.borderColor}`,
               boxShadow: `0 0 24px ${current.glowColor}`,
             }}>
             {student.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={student.avatarUrl} alt={student.fullName} className="w-full h-full object-cover" />
+              <Image src={student.avatarUrl} alt={student.fullName} fill sizes="80px" className="object-cover" />
             ) : (
               <span className="text-xl sm:text-2xl text-white" style={{ fontFamily: "var(--font-display)" }}>{initials}</span>
             )}
           </div>
 
-          {/* Kedi Avatar Sistemi — kişiselleştirilebilir karakter (foto/baş harf kutusunun AYRISI, biri diğerini silmez) */}
+          {/* Kedi Avatar Sistemi — kişiselleştirilebilir karakter (foto/baş harf kutusunun AYRISI, biri diğerini silmez).
+              3D (dev-human-rig, geçici) — avatarConfig'in kendisi 3D motoruna henüz bağlı değil, sadece
+              "öğrenci avatar oluşturdu mu" göstergesi olarak kullanılıyor (mevcut davranış korunuyor). */}
           {avatarConfig ? (
-            <div className="flex-shrink-0 -my-2">
-              <LazyStudentAvatar config={avatarConfig} tier={evolutionTier} size={64} />
+            <div className="flex-shrink-0 -my-2 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden" style={{ background: "#0a0a0c" }}>
+              <LazyAvatarEngine3D
+                pack={getActiveCharacterPack()}
+                activity="idle"
+                action={avatarAction}
+                onActionEnd={onAvatarActionEnd}
+                width={80}
+                height={80}
+              />
             </div>
           ) : (
             <a href="/ogrenci/avatar" className="flex-shrink-0 text-[11px] px-3 py-2 rounded-lg text-gold-bright/80 hover:text-gold-bright transition-colors"
@@ -111,3 +123,5 @@ export default function ProfileHeroCard({ student, xpResult, packageLabel, dateL
     </motion.div>
   );
 }
+
+export default memo(ProfileHeroCard);

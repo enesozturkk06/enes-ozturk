@@ -75,8 +75,13 @@ export const KEDI_AI_BRIEF_MAX_TOKENS = 900;
  * "tek istekte birleştirilebilecek analizleri birleştir" kuralına uymak
  * için birleştirildi). Tek çağrıda iki bölüm birden üretileceği için bütçe
  * cömert tutuluyor (maliyet $0, ücretsiz katmandayız).
+ * 8000 → 12000: "weeklyMeals" (7 GÜNÜN AYRI öğün planı, önceden tek temsili
+ * gündü) eklenince çıktı boyutu belirgin arttı — bütçe artırılmazsa
+ * "reasoning" modelinin düşünme+JSON çıktısı budanma (truncated) riski
+ * yükselir (bkz. yukarıdaki KEDI_AI_BRIEF_MAX_TOKENS yorumundaki ölçülmüş
+ * örnek — düşük bütçe düşünmeye gidip asıl cevaba hiç ulaşamayabiliyor).
  */
-export const KEDI_AI_PROGRAM_MAX_TOKENS = 8000;
+export const KEDI_AI_PROGRAM_MAX_TOKENS = 12000;
 
 /**
  * Kedi AI Vision — fotoğraf/video teknik analizi için AYRI bir model listesi.

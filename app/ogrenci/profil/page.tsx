@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import NextImage from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import { refreshStudent } from "@/lib/auth";
@@ -413,8 +414,7 @@ export default function ProfilPage() {
                     textShadow: `0 0 20px ${gc}88`,
                   }}>
                   {photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photoUrl} alt="Profil" className="w-full h-full object-cover" />
+                    <NextImage src={photoUrl} alt="Profil" fill sizes="140px" className="object-cover" />
                   ) : uploading ? (
                     <div className="w-7 h-7 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : initials}

@@ -9,20 +9,21 @@ import {
   getStudentGiftClaimsForSeason, getStudentXPAdjustments,
   getStudents, getAllXPAdjustments,
   getStudentMissionCompletions, recordMissionCompletion, getKediMissions,
-  createXPAdjustment, getKediMessages,
+  createXPAdjustment, getKediMessages, getKediVisionAnalyses, getPublishedKediProgram,
 } from "@/lib/db";
 import {
   computeStudentMissions, getWeekKey, nearestMission,
   totalMissionXP, type StudentMission, type MissionComputeInput,
 } from "@/lib/kediTasks";
-import { getWaterLog, getHealthProfile, todayDate } from "@/lib/health";
-import type { Appointment, LessonRecord, GiftLessonRequest } from "@/lib/types";
+import { getWaterLog, getWaterLogRange, getHealthProfile, todayDate, type WaterEntry } from "@/lib/health";
+import type { Appointment, LessonRecord, GiftLessonRequest, KediVisionAnalysis, KediProgram, SubscriptionType } from "@/lib/types";
 import {
   computeFullXP, getCurrentSeason, getSeasonLabel, getDaysUntilSeasonEnd,
   sumManualXP, type XPResult, type SeasonXPSummary,
 } from "@/lib/xp";
 import { computeBadges, type Badge } from "@/lib/badges";
-import { getDaysRemaining } from "@/lib/packageDuration";
+import { getDaysRemaining, isPackageExpired, computePackagePaceProjection } from "@/lib/packageDuration";
+import { SPORT_LABELS, GOAL_LABELS } from "@/lib/kediProgramLabels";
 import { X, Send, ChevronDown, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -101,7 +102,7 @@ interface StudentContext {
   records:          LessonRecord[];
   waterGlasses:     number;
   waterTarget:      number;
-  subscriptionType?: string;
+  subscriptionType?: SubscriptionType;
   packageStartDate?: string;
   packageEndDate?: string;
   packageDaysRemaining: number | null;
@@ -134,6 +135,10 @@ interface StudentContext {
   lastNutritionPlan?:{ date: string; summary: string };
   /* Görevler */
   missions:         StudentMission[];
+  /* Smart Notification Center (V5) — bkz. pickSmartNotification */
+  visionAnalyses:   KediVisionAnalysis[]; // en yeniden en eskiye
+  publishedProgram: KediProgram | null;
+  recentWaterLogs:  WaterEntry[];         // son 7 gün, tarihe göre artan
 }
 
 /* ── Yardımcılar ─────────────────────────────────────────────────── */
@@ -276,6 +281,250 @@ function buildContext(ctx: StudentContext): string {
 
   lines.push(`\nNe hakkında konuşmak istersin?`);
   return lines.join(" \n");
+}
+
+/* ── Smart Notification Center (V5) ──────────────────────────────────
+ * Gerçek olaylara bağlı, tek seferlik, YENİ bir OpenRouter çağrısı YAPMAYAN
+ * (buildContext ile AYNI felsefe — anında, yerel, deterministik) bildirimler.
+ * Her olay türü kendi "kimliğini" localStorage'da saklar; aynı kimlik
+ * tekrar gösterilmez, YENİ bir kimlik (yeni ders notu/rozet/seviye/vision/
+ * program) ortaya çıkarsa yeniden aktif olur — bkz. pickSmartNotification. */
+
+interface SmartNotifSeenState {
+  lastLessonId?: string;
+  lastBadgeIds?: string[];
+  lastLevelId?: string;
+  lastVisionId?: string;
+  lastProgramId?: string;
+  packageEmptyActive?: boolean;
+  packageExpiredActive?: boolean;
+  oneLessonLeftActive?: boolean;
+  inactiveForLessonDate?: string;
+  waterGoalShownDate?: string;
+  packagePaceShownDate?: string;
+}
+
+function smartNotifSeenKey(studentId: string): string {
+  return `kedi_smart_notif_seen_${studentId}`;
+}
+function loadSeenState(studentId: string): SmartNotifSeenState {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(smartNotifSeenKey(studentId));
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function saveSeenState(studentId: string, state: SmartNotifSeenState) {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(smartNotifSeenKey(studentId), JSON.stringify(state)); } catch { /* sessizce geç */ }
+}
+
+/** "Aktif" durum bayraklarını (paket bitti/süresi doldu/son ders) mevcut
+ * duruma göre sıfırlar — koşul artık geçerli değilse bayrak temizlenir,
+ * böylece YENİ bir oluşumda (ör. yenileme sonrası tekrar 0'a düşerse)
+ * bildirim yeniden aktif olabilir ("yeni olay oluşursa tekrar aktif olsun"). */
+function reconcileSeenState(ctx: StudentContext, seen: SmartNotifSeenState): SmartNotifSeenState {
+  const next = { ...seen };
+  if (ctx.remainingLessons !== 0) next.packageEmptyActive = false;
+  if (!isPackageExpired(ctx.packageEndDate)) next.packageExpiredActive = false;
+  if (ctx.remainingLessons !== 1) next.oneLessonLeftActive = false;
+  return next;
+}
+
+interface SmartNotifCandidate {
+  priority: number; // düşük numara = önce gösterilir
+  text: string;
+  links: ActionLink[];
+  markSeen: (state: SmartNotifSeenState) => SmartNotifSeenState;
+}
+
+/** Son ders kaydından güçlü/zayıf yön + kısa motivasyon üretir — tamamen
+ * deterministik (gerçek punch/kick/defense/conditioning/combination/
+ * sparring sayılarından), AI çağrısı YOK. */
+function buildLastLessonAnalysis(record: LessonRecord, firstName: string): string {
+  const categories: [string, number][] = [
+    ["Yumruk", record.punch], ["Tekme", record.kick], ["Savunma", record.defense],
+    ["Kondisyon", record.conditioning], ["Kombinasyon", record.combination], ["Serbest Çalışma", record.sparring],
+  ];
+  const sorted = [...categories].sort((a, b) => b[1] - a[1]);
+  const strongest = sorted[0];
+  const weakest = sorted[sorted.length - 1];
+  const lines = [
+    `Tebrikler ${firstName}.`,
+    `Son antrenmanında ortalama ${record.overall}/10 performans gösterdin.`,
+    `${strongest[0]} çok başarılıydı.`,
+    weakest[1] < strongest[1]
+      ? `${weakest[0]} konusuna biraz daha odaklanmanı öneriyorum.`
+      : `Bu seviyeni korumanı öneriyorum.`,
+  ];
+  return lines.join(" \n");
+}
+
+/** Tüm aday bildirimleri hesaplar, henüz GÖRÜLMEMİŞ olanları filtreler,
+ * en yüksek öncelikli TEK adayı döner (bir kerede tek mesaj — kullanıcıyı
+ * bir mesaj yığınıyla karşılamamak için). null ise gösterilecek yeni bir
+ * şey yok. */
+function pickSmartNotification(ctx: StudentContext, seen: SmartNotifSeenState): SmartNotifCandidate | null {
+  const firstName = ctx.name.split(" ")[0];
+  const candidates: SmartNotifCandidate[] = [];
+
+  if (ctx.subscriptionType !== "monthly" && ctx.remainingLessons === 0 && !seen.packageEmptyActive) {
+    candidates.push({
+      priority: 1,
+      text: "Ders paketindeki tüm haklarını kullandın. \nYeni randevu oluşturabilmek için lütfen ders paketini yenile.",
+      links: [{ label: "Paketleri Gör", href: "/ogrenci#paket-kartı" }],
+      markSeen: s => ({ ...s, packageEmptyActive: true }),
+    });
+  }
+
+  if (isPackageExpired(ctx.packageEndDate) && !seen.packageExpiredActive) {
+    candidates.push({
+      priority: 2,
+      text: "Kullanım süresi içerisinde ders paketini tamamlayamadığın için kalan ders hakların sona ermiştir. \nYeni ders planlayabilmek için lütfen yeni paketini yenileyin.",
+      links: [{ label: "Paketleri Gör", href: "/ogrenci#paket-kartı" }],
+      markSeen: s => ({ ...s, packageExpiredActive: true }),
+    });
+  }
+
+  if (ctx.subscriptionType !== "monthly" && ctx.remainingLessons === 1 && !seen.oneLessonLeftActive) {
+    candidates.push({
+      priority: 3,
+      text: "Paketinde yalnızca 1 ders kaldı. \nAntrenmanlarına ara vermemek için yeni paketini planlamanı öneriyorum.",
+      links: [{ label: "Paketleri Gör", href: "/ogrenci#paket-kartı" }],
+      markSeen: s => ({ ...s, oneLessonLeftActive: true }),
+    });
+  }
+
+  // Yeni rozet — ilk yüklemede (seen.lastBadgeIds hiç yoksa) sessizce
+  // kaydedilir, ESKİ rozetler "yeni kazanıldı" diye kutlanmaz (bkz. effect).
+  if (seen.lastBadgeIds !== undefined) {
+    const newBadges = ctx.earnedBadges.filter(b => !seen.lastBadgeIds!.includes(b.id));
+    if (newBadges.length > 0) {
+      const b = newBadges[0];
+      candidates.push({
+        priority: 4,
+        text: `Tebrikler ${firstName}! Yeni bir rozet kazandın: ${b.icon} ${b.name}. \n${b.description}`,
+        links: [{ label: "Rozetlerim", href: "/ogrenci/rozetler" }],
+        markSeen: s => ({ ...s, lastBadgeIds: ctx.earnedBadges.map(x => x.id) }),
+      });
+    }
+  }
+
+  // Seviye atlama — ilk yüklemede sessizce kaydedilir, ESKİ seviye "yeni
+  // atlandı" diye kutlanmaz. lib/xp.ts XPLevel.notifMsg ZATEN bu tam amaç
+  // için yazılmış hazır bir metin — burada YENİDEN YAZMIYORUZ.
+  if (seen.lastLevelId !== undefined && seen.lastLevelId !== ctx.xp.level.current.id) {
+    const msg = ctx.xp.level.current.notifMsg || `Tebrikler ${firstName}! Artık ${ctx.xp.level.current.name} seviyesindesin.`;
+    candidates.push({
+      priority: 5,
+      text: msg,
+      links: [{ label: "Seviye Merkezi", href: "/ogrenci/seviye" }],
+      markSeen: s => ({ ...s, lastLevelId: ctx.xp.level.current.id }),
+    });
+  }
+
+  // Son ders analizi — antrenör yeni bir ders notu girdiyse (kayıt kimliği
+  // değiştiyse), ilk girişte dahil göster (bu, "yeni veri" bildirimi —
+  // eski bir başarıyı YANLIŞLIKLA kutlamıyor, sadece gerçek en son notu
+  // bildiriyor, bu yüzden badge/level'daki bootstrap-sessizliği burada YOK).
+  const lastRecord = ctx.records[0];
+  if (lastRecord && lastRecord.id !== seen.lastLessonId) {
+    candidates.push({
+      priority: 6,
+      text: buildLastLessonAnalysis(lastRecord, firstName),
+      links: [{ label: "Detayları Gör", href: "/ogrenci/gelisim" }],
+      markSeen: s => ({ ...s, lastLessonId: lastRecord.id }),
+    });
+  }
+
+  // Vision — önceki analizle karşılaştırır, gelişim/gerileme + en önemli öneri.
+  const lastVision = ctx.visionAnalyses[0];
+  if (lastVision) {
+    const visionId = lastVision.id ?? lastVision.createdAt ?? "";
+    if (visionId && visionId !== seen.lastVisionId) {
+      const parts = [`Yeni Vision analizin tamamlandı. Genel skor: ${lastVision.overallScore}/100.`];
+      const prevVision = ctx.visionAnalyses[1];
+      if (prevVision) {
+        const diff = lastVision.overallScore - prevVision.overallScore;
+        if (diff > 0) parts.push(`Önceki analize göre ${diff} puan gelişim var.`);
+        else if (diff < 0) parts.push(`Önceki analize göre ${Math.abs(diff)} puan gerileme var.`);
+        else parts.push(`Önceki analizle aynı seviyedesin.`);
+      }
+      if (lastVision.deficiencies[0]) parts.push(`En önemli öneri: ${lastVision.deficiencies[0].fix}`);
+      candidates.push({
+        priority: 7,
+        text: parts.join(" \n"),
+        links: [{ label: "Analizi Aç", href: "/ogrenci/antrenman?tab=vision" }],
+        markSeen: s => ({ ...s, lastVisionId: visionId }),
+      });
+    }
+  }
+
+  // Yeni program — çok kısa özet.
+  if (ctx.publishedProgram) {
+    const programId = ctx.publishedProgram.id ?? String(ctx.publishedProgram.version ?? "");
+    if (programId && programId !== seen.lastProgramId) {
+      const p = ctx.publishedProgram;
+      candidates.push({
+        priority: 8,
+        text: `Yeni antrenman ve beslenme programın hazır: ${SPORT_LABELS[p.sport]} · ${GOAL_LABELS[p.goalType]}, günlük ${p.dailyCalories} kcal hedefiyle.`,
+        links: [{ label: "Programı Gör", href: "/ogrenci/antrenman?tab=kedi-ai" }],
+        markSeen: s => ({ ...s, lastProgramId: programId }),
+      });
+    }
+  }
+
+  // Uzun süredir gelmedi (10-14 gün) — "streak kimliği" son tamamlanan ders
+  // tarihi: aynı boşluk için tekrar gösterilmez, YENİ bir ders + YENİ bir
+  // boşluk oluşursa tekrar aktif olur.
+  const lastCompleted = ctx.appointments.filter(a => a.status === "tamamlandi")[0];
+  if (lastCompleted) {
+    const daysSince = differenceInDays(new Date(), parseISO(lastCompleted.date));
+    if (daysSince >= 10 && daysSince <= 14 && seen.inactiveForLessonDate !== lastCompleted.date) {
+      candidates.push({
+        priority: 9,
+        text: "Seni bir süredir antrenmanda göremedik. \nHazırsan kaldığımız yerden devam edelim.",
+        links: [{ label: "Randevu Al", href: "/ogrenci/randevu" }],
+        markSeen: s => ({ ...s, inactiveForLessonDate: lastCompleted.date }),
+      });
+    }
+  }
+
+  // Paket analizi (tempo bazlı) — spam olmasın diye 7 günde bir gösterilir.
+  const pace = computePackagePaceProjection(ctx.appointments, ctx.remainingLessons, ctx.subscriptionType);
+  if (pace && pace.estimatedDaysUntilLessonsRunOut <= 14) {
+    const lastShown = seen.packagePaceShownDate ? parseISO(seen.packagePaceShownDate) : null;
+    const cooldownOk = !lastShown || differenceInDays(new Date(), lastShown) >= 7;
+    if (cooldownOk) {
+      candidates.push({
+        priority: 10,
+        text: `Bu tempoyla yaklaşık ${pace.estimatedDaysUntilLessonsRunOut} gün sonra ders paketin bitecek. \nŞimdiden yenilemeyi planlayabilirsin.`,
+        links: [{ label: "Paketleri Gör", href: "/ogrenci#paket-kartı" }],
+        markSeen: s => ({ ...s, packagePaceShownDate: todayStr() }),
+      });
+    }
+  }
+
+  // Su hedefi — son günlerin en az 3'ü loglanmış VE hepsi hedefin altındaysa,
+  // 7 günde bir hatırlat (her gün tekrar etmesin).
+  const recentDays = ctx.recentWaterLogs.slice(-4);
+  const waterGoalMissed = recentDays.length >= 3 && recentDays.every(w => w.glasses < ctx.waterTarget);
+  if (waterGoalMissed) {
+    const lastShown = seen.waterGoalShownDate ? parseISO(seen.waterGoalShownDate) : null;
+    const cooldownOk = !lastShown || differenceInDays(new Date(), lastShown) >= 7;
+    if (cooldownOk) {
+      candidates.push({
+        priority: 11,
+        text: "Son günlerde su hedefini tutturamıyorsun. \nToparlanma ve performans için su tüketimine dikkat etmeni öneririm.",
+        links: [{ label: "Sağlık", href: "/ogrenci/saglik" }],
+        markSeen: s => ({ ...s, waterGoalShownDate: todayStr() }),
+      });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.priority - b.priority);
+  return candidates[0];
 }
 
 /* ── Mesaj bubble ─────────────────────────────────────────────────── */
@@ -438,6 +687,16 @@ export default function BlackCatAI() {
   /* Avatar durumu — LLM yanıtı beklenirken/konuşurken/dinlerken değişir */
   const [avatarState, setAvatarState] = useState<KediAvatarState>("idle");
   const [mood, setMood] = useState<KediMood>(null);
+  // NOT: Öğrencinin kendi 3D avatarını (Thinking/Talking/Happy) burada da
+  // göstermek denendi, ama BlackCatAI SAYFA-BAĞIMSIZ bir floating overlay —
+  // herhangi bir avatar-gösteren sayfanın (Dashboard/Sağlık/Randevu/Fight
+  // Card) ÜZERİNDE açılabiliyor, bu da AYNI ANDA 2 canvas'ın birlikte render
+  // olmasına yol açtı. Ölçüldü: heap ~2x (21MB→47MB), FPS ~14 (ölü sabit,
+  // 4sn yerleşme sonrası bile) — "Aynı anda yalnızca görünür avatar render
+  // edilsin" ve "mobil performans kesinlikle düşmemeli" kurallarını gerçek
+  // ölçümle ihlal ettiği için GERİ ALINDI. Thinking/Talking zaten mevcut 2D
+  // KediAvatar maskotu (aşağıdaki avatarState) üzerinden görünüyor; Happy
+  // zaten var olan sunucu-güdümlü `mood` mekanizmasıyla kapsanıyor.
   /* Proaktif günlük özet — günde en fazla 1 kez, chat açık olmasa bile */
   const [brief, setBrief] = useState<{ text: string; mood: KediMood } | null>(null);
   const briefTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -549,7 +808,10 @@ export default function BlackCatAI() {
       getAllXPAdjustments().catch(() => []),
       getStudentMissionCompletions(student.id).catch(() => new Set<string>()),
       getKediMissions(student.id).catch(() => []),
-    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments, allStudents, allAdjustments, completions, customMissions]) => {
+      getKediVisionAnalyses(student.id).catch(() => []),
+      getPublishedKediProgram(student.id).catch(() => null),
+      getWaterLogRange(student.id, 7).catch(() => []),
+    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments, allStudents, allAdjustments, completions, customMissions, visionAnalyses, publishedProgram, recentWaterLogs]) => {
       const sorted      = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const sortedApts  = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
       const summary     = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
@@ -662,6 +924,9 @@ export default function BlackCatAI() {
         lastTrainingPlan:  loadAIPlan("training"),
         lastNutritionPlan: loadAIPlan("nutrition"),
         missions,
+        visionAnalyses,
+        publishedProgram,
+        recentWaterLogs,
       };
 
       setCtx(ctx);
@@ -680,6 +945,47 @@ export default function BlackCatAI() {
       }
     }).catch(() => setLoaded(true));
   }, [student, loaded]);
+
+  /* Smart Notification Center (V5) — uygulama açıldıktan ~1sn sonra kontrol
+     eder; gösterilecek GERÇEK bir olay varsa paneli KENDİSİ açar, mesajı
+     Kedi AI'nin konuşma balonu olarak enjekte eder ve avatarı "speaking"
+     durumuna geçirir. Panel zaten kullanıcı tarafından açıksa (open=true)
+     araya girmez — bir sonraki uygun kontrolde (ör. başka bir sayfaya geçiş)
+     tekrar denenir, olay "görülmüş" işaretlenmediği için kaybolmaz. */
+  useEffect(() => {
+    if (!ctx || !student || open || !historyLoaded) return;
+    const timer = setTimeout(() => {
+      const seen = loadSeenState(student.id);
+      let bootstrapped = reconcileSeenState(ctx, seen);
+      // İlk yüklemede rozet/seviye kimliklerini SESSİZCE kaydet — eski
+      // başarıları "yeni kazanıldı" diye yanlışlıkla kutlamamak için.
+      if (bootstrapped.lastBadgeIds === undefined) {
+        bootstrapped = { ...bootstrapped, lastBadgeIds: ctx.earnedBadges.map(b => b.id) };
+      }
+      if (bootstrapped.lastLevelId === undefined) {
+        bootstrapped = { ...bootstrapped, lastLevelId: ctx.xp.level.current.id };
+      }
+      saveSeenState(student.id, bootstrapped);
+
+      const candidate = pickSmartNotification(ctx, bootstrapped);
+      if (!candidate) return;
+      saveSeenState(student.id, candidate.markSeen(bootstrapped));
+
+      setOpen(true);
+      setMin(false);
+      setAvatarState("speaking");
+      setMsgs(prev => [...prev, { id: `smart-${Date.now()}`, role: "ai", text: candidate.text, ts: Date.now(), links: candidate.links }]);
+      if (voice.voiceOut) voice.speak(candidate.text);
+      else setTimeout(() => setAvatarState("idle"), 3000);
+    }, 1000);
+    return () => clearTimeout(timer);
+    // `voice` BİLEREK deps dışında — useKediVoice her render'da YENİ bir
+    // obje referansı döndürüyor (memoize edilmemiş), deps'e eklenirse bu
+    // effect her render'da yeniden çalışır ve panel zaten "open" olduğu
+    // ANDA bile tekrar tetiklenip İKİNCİ bir bildirimi art arda gösterirdi
+    // (canlı testte gözlemlendi, bu düzeltmeyle giderildi).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx, student, open, historyLoaded]);
 
   /* İlk açılışta karşılama — kalıcı geçmiş varsa atlanır (madde 10) */
   useEffect(() => {

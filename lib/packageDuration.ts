@@ -1,4 +1,4 @@
-import type { SubscriptionType } from "./types";
+import type { SubscriptionType, Appointment } from "./types";
 import {
   LESSON_DURATIONS, MONTHLY_DURATION_DAYS, DEFAULT_DURATION_DAYS,
   PACKAGE_WARNING_DAYS, PACKAGE_URGENT_DAYS, PACKAGE_CRITICAL_DAYS,
@@ -62,4 +62,40 @@ export function getPackageUrgency(daysRemaining: number | null): PackageUrgencyI
 export function isPackageExpired(endDate?: string): boolean {
   const days = getDaysRemaining(endDate);
   return days !== null && days < 0;
+}
+
+export interface PackagePaceProjection {
+  avgLessonsPerWeek: number;
+  estimatedDaysUntilLessonsRunOut: number;
+}
+
+/**
+ * Kalan ders hakkının GERÇEK ders temposuna göre kaç günde tükeneceğini
+ * hesaplar (son 4 haftadaki tamamlanan ders sayısından ortalama haftalık
+ * tempo çıkarılır). `getDaysRemaining` (paketin TAKVİM bitişi) ile
+ * KARIŞTIRILMASIN — bu ayrı, tempo-bazlı bir sinyal.
+ *
+ * Aylık üyelikte (sınırsız ders) veya son 4 haftada hiç tamamlanan ders
+ * yoksa (tempo hesaplanamaz) null döner — çağıran taraf bunu "yeterli veri
+ * yok" olarak ele almalı, sayı uydurmamalı. Hem lib/kediAi.ts (buildStudentDigest)
+ * HEM app/components/shared/BlackCatAI.tsx (Smart Notification) BURADAN
+ * çağırır — aynı hesaplamanın iki yerde bağımsız yazılmasını önlemek için.
+ */
+export function computePackagePaceProjection(
+  appointments: Appointment[], remainingLessons: number, subscriptionType?: SubscriptionType,
+): PackagePaceProjection | null {
+  if (subscriptionType === "monthly" || remainingLessons <= 0) return null;
+  const fourWeeksAgo = new Date();
+  fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+  const recentCompletedCount = appointments.filter(a => {
+    if (a.status !== "tamamlandi") return false;
+    const d = new Date(a.date);
+    return !isNaN(d.getTime()) && d >= fourWeeksAgo;
+  }).length;
+  const avgLessonsPerWeek = recentCompletedCount / 4;
+  if (avgLessonsPerWeek <= 0) return null;
+  return {
+    avgLessonsPerWeek: Math.round(avgLessonsPerWeek * 10) / 10,
+    estimatedDaysUntilLessonsRunOut: Math.round((remainingLessons / avgLessonsPerWeek) * 7),
+  };
 }

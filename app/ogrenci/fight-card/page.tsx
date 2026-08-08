@@ -11,6 +11,8 @@ import { computeFullXP, getCurrentSeason, sumManualXP } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
 import { computeTechnicalAverages, countEarnedBadges } from "@/lib/hallOfFame";
 import { PageHeader } from "@/app/components/ui";
+import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
+import { getActiveCharacterPack } from "@/lib/avatarPack";
 import {
   Camera, Award, Trophy, Flame, Share2, CheckCircle2, AlertTriangle, ShieldCheck,
 } from "lucide-react";
@@ -706,6 +708,14 @@ export default function FightCardPage() {
   const theme = FIGHT_CARD_THEMES[stats!.levelId] ?? FIGHT_CARD_THEMES.starter;
   const isLegend = stats!.levelId === "legend";
 
+  // Fotoğraf yerine 3D avatar (varsayılan Guard pozu) — Instagram Story paylaşım
+  // görselinde (drawFightStoryCard) HALA gerçek photoUrl kullanılıyor, bilinçli
+  // olarak dokunulmadı (WebGL canvas'ı preserveDrawingBuffer olmadan statik bir
+  // paylaşım görseline aktarmak ekstra GPU maliyeti + risk gerektirir).
+  const fighterAvatar = (
+    <LazyAvatarEngine3D pack={getActiveCharacterPack()} activity="guard" width="100%" height="100%" />
+  );
+
   /* ── EA FC Ultimate Team tarzı kart gövdesi ── */
   const cardBody = (
     <div className="relative overflow-hidden p-3 sm:p-4 pt-6 sm:pt-7 pb-7 sm:pb-8"
@@ -784,8 +794,7 @@ export default function FightCardPage() {
             animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
             transition={{ duration: 5, repeat: Infinity, ease: "linear" }}>
             <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
+              {fighterAvatar}
             </div>
           </motion.div>
         ) : theme.effect === "neon" ? (
@@ -794,8 +803,7 @@ export default function FightCardPage() {
             animate={{ boxShadow: [`0 0 20px ${theme.glow}88`, `0 0 48px ${theme.glow}`, `0 0 20px ${theme.glow}88`] }}
             transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}>
             <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
+              {fighterAvatar}
             </div>
           </motion.div>
         ) : theme.effect === "gold" ? (
@@ -804,15 +812,13 @@ export default function FightCardPage() {
             animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
             transition={{ duration: 4, repeat: Infinity, ease: "linear" }}>
             <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
+              {fighterAvatar}
             </div>
           </motion.div>
         ) : (
           <div className="rounded-full p-[4px]" style={{ background: `linear-gradient(135deg, ${theme.ringFrom}, ${theme.ringTo})`, boxShadow: `0 0 24px ${theme.glow}66` }}>
             <div className="rounded-full overflow-hidden bg-black" style={{ width: "min(336px,82vw)", height: "min(336px,82vw)" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
+              {fighterAvatar}
             </div>
           </div>
         )}

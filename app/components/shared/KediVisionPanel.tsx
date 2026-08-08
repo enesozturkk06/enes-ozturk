@@ -6,9 +6,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import { getKediVisionAnalyses } from "@/lib/db";
 import { compressImageToDataUrl, extractVideoFrames } from "@/lib/kediVisionClient";
-import type { KediVisionAnalysis, KediVisionCategoryScores } from "@/lib/types";
+import type { KediVisionAnalysis, KediVisionCategoryScores, AvatarExpression } from "@/lib/types";
 import { Card, Button, ProgressBar } from "@/app/components/ui";
 import KediAvatar from "./KediAvatar";
+import LazyAvatarEngine3D from "./LazyAvatarEngine3D";
+import { getActiveCharacterPack } from "@/lib/avatarPack";
 import {
   Camera, Video, AlertTriangle, TrendingUp, CheckCircle2,
   ListChecks, CalendarDays, ClipboardList, Sparkles,
@@ -46,6 +48,10 @@ export default function KediVisionPanel() {
   const [stepIndex, setStepIndex] = useState(0);
   const [steps, setSteps] = useState<string[]>(STEPS_PHOTO);
   const [result, setResult] = useState<KediVisionAnalysis | null>(null);
+  // Analiz YENİ tamamlandığında bir kerelik "happy" — geçmişten eski bir
+  // analiz görüntülemek (history listesinden tıklama) bunu TETİKLEMEZ, sadece
+  // gerçek submit() başarıyla bittiğinde ateşlenir.
+  const [resultExpression, setResultExpression] = useState<AvatarExpression | null>(null);
   const [error, setError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +81,7 @@ export default function KediVisionPanel() {
     if (!res.ok) throw new Error(data.error || "Analiz oluşturulamadı");
     const analysis = data.analysis as KediVisionAnalysis;
     setResult(analysis);
+    setResultExpression("happy");
     setHistory(h => [analysis, ...h]);
   };
 
@@ -153,7 +160,14 @@ export default function KediVisionPanel() {
       <AnimatePresence>
         {analyzing && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center py-10">
+            {/* Kedi AI maskotu (KediAvatar) — Kedi AI'nin kendisi, öğrencinin
+                kişisel avatarı DEĞİL. Öğrencinin kendi 3D avatarı ("Vision
+                analiz ediyor → Thinking" olay bağlantısı) yanına EKLENDİ,
+                mevcut maskot yerine geçmedi — ikisi farklı karakterleri temsil ediyor. */}
             <KediAvatar size={56} state="thinking" />
+            <div className="w-24 h-24 mx-auto rounded-2xl overflow-hidden mt-2" style={{ background: "#0a0a0c" }}>
+              <LazyAvatarEngine3D pack={getActiveCharacterPack()} activity="idle" expression="thinking" width={96} height={96} />
+            </div>
             <AnimatePresence mode="wait">
               <motion.p
                 key={stepIndex}
@@ -174,7 +188,19 @@ export default function KediVisionPanel() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h4 className="text-white font-display tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>Teknik Skor</h4>
+                <div className="flex items-center gap-2">
+                  <div className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0" style={{ background: "#0a0a0c" }}>
+                    <LazyAvatarEngine3D
+                      pack={getActiveCharacterPack()}
+                      activity="idle"
+                      expression={resultExpression}
+                      onExpressionEnd={() => setResultExpression(null)}
+                      width={44}
+                      height={44}
+                    />
+                  </div>
+                  <h4 className="text-white font-display tracking-wider" style={{ fontFamily: "var(--font-bebas)" }}>Teknik Skor</h4>
+                </div>
                 <span className={`text-3xl font-bold ${scoreColor(result.overallScore) === "green" ? "text-green-400" : scoreColor(result.overallScore) === "gold" ? "text-gold-bright" : "text-crimson"}`}
                   style={{ fontFamily: "var(--font-bebas)" }}>
                   {result.overallScore}

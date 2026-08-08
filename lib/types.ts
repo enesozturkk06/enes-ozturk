@@ -253,6 +253,13 @@ export interface KediProgramWeek {
 }
 export interface KediProgramMeal {
   name: string; items: string[]; calories: number; protein: number; carbs: number; fat: number;
+  /** Benzer makrolu, yerine geçebilecek alternatif besin seçenekleri (opsiyonel). */
+  alternative?: string[];
+}
+/** Haftanın bir gününe ait tam öğün listesi — `KediProgram.meals` (tek,
+ * temsili gün) ile KARIŞTIRILMASIN: bu, gerçek 7 GÜNLÜK çeşitlilik için. */
+export interface KediProgramDayMeals {
+  day: string; meals: KediProgramMeal[];
 }
 export interface KediProgramAnalysis {
   attendanceSummary: string; performanceSummary: string; recommendations: string[];
@@ -271,7 +278,13 @@ export interface KediProgram {
   dailyCalories: number; proteinG: number; carbsG: number; fatG: number;
   trainingDays: KediProgramTrainingDay[];
   monthlyProgression: KediProgramWeek[];
+  /** Temsili/örnek TEK gün öğün planı — geriye dönük uyumluluk için korunuyor
+   * (eski kaydedilmiş programlarda sadece bu var). Gerçek 7 günlük çeşitlilik
+   * için `weeklyMeals`'a bak. */
   meals: KediProgramMeal[];
+  /** Haftanın 7 günü için AYRI öğün planı — eski (weeklyMeals'sız) kaydedilmiş
+   * programlarda bu alan YOK, UI/PDF bunu opsiyonel olarak ele almalı. */
+  weeklyMeals?: KediProgramDayMeals[];
   shoppingList: string[];
   analysis: KediProgramAnalysis;
   safetyNote: string;
@@ -323,6 +336,26 @@ export type AvatarBodyType = "slim" | "athletic" | "heavy";
  * kavramı — hangi render motoru kullanılırsa kullanılsın aynı aktivite
  * isimleri geçerli olmalı (bkz. StudentAvatar.tsx'in bu tipin 2D yorumu). */
 export type AvatarActivity = "idle" | "guard" | "shadowbox" | "jumprope" | "bagwork" | "stretch" | "drink" | "phone";
+
+/** Kedi Life — bir AvatarActivity LOOP'u üzerine binen TEK SEFERLİK aksiyon
+ * (jab/cross/hook gibi darbeler, victory/defeat/celebration gibi sonuçlar).
+ * AvatarActivity'DEN BİLEREK AYRI bir tip: activity "hangi döngüde
+ * duruyorum" sorusuna, action "şu an hangi tek seferlik hareketi
+ * oynatıyorum" sorusuna cevap verir — action bitince avatar geçerli
+ * activity'sine geri döner. İkisinin karışmaması (loop'a "tek seferlik"
+ * bir hareket sokmamak) render katmanını temiz tutar ve gelecekte kombo
+ * sistemleri (Idle→Jab→Cross→Idle) eklemeyi kolaylaştırır. */
+export type AvatarAction =
+  | "jab" | "cross" | "hook" | "uppercut" | "lowKick" | "highKick" | "frontKick" | "knee" | "slip" | "duck"
+  | "victory" | "defeat" | "celebration";
+
+/** Kedi Life — Expression System. Yüz/duygu durumu, activity/action'DAN AYRI
+ * bir üçüncü katman: activity "hangi döngüdeyim", action "hangi tek seferlik
+ * hareketi yapıyorum", expression "şu an ne HİSSEDİYORUM" sorusuna cevap
+ * verir — üçü aynı anda, birbirinden bağımsız olarak aktif olabilir (ör.
+ * activity="bagwork" + expression="focus" aynı anda). Hangi uygulama
+ * olayının hangi expression'ı tetiklediği lib/kediExpression.ts'te. */
+export type AvatarExpression = "greet" | "happy" | "proud" | "sad" | "focus" | "tired" | "thinking" | "talking";
 
 export interface StudentAvatarConfig {
   studentId: string;

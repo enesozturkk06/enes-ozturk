@@ -110,6 +110,39 @@ export async function streamOpenRouterChat(
   throw lastErr instanceof Error ? lastErr : new Error("Tüm ücretsiz modeller başarısız oldu.");
 }
 
+/**
+ * Tek-seferlik (streaming olmayan) bir model yanıtından JSON çıkarır +
+ * doğrular. Önceden lib/kediVision.ts VE lib/kediPrograms.ts'te BAĞIMSIZ
+ * olarak iki kez (neredeyse birebir aynı) yazılmıştı — buraya taşındı.
+ * Her çağıran kendi hata sınıfını (`makeError`) ve log önekini (`logPrefix`)
+ * geçirerek KENDİ spesifik error tipini fırlatmaya devam ediyor — API
+ * route'lar `instanceof KediVisionError`/`KediProgramError` ile ayırt
+ * ettiği için davranış birebir korunuyor, sadece kopya kod kaldırıldı.
+ */
+export function extractJsonResponse<T>(
+  raw: string, truncated: boolean, requiredKeys: (keyof T)[],
+  logPrefix: string, makeError: (message: string) => Error,
+): T {
+  if (truncated) {
+    console.error(`[${logPrefix}] truncated response, raw length:`, raw.length, "tail:", raw.slice(-200));
+    throw makeError("Model yanıtı yarıda kesildi (token bütçesi yetersiz) — lütfen tekrar deneyin.");
+  }
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) {
+    console.error(`[${logPrefix}] no JSON found, raw length:`, raw.length, "content:", raw.slice(0, 500));
+    throw makeError("Model geçerli bir JSON üretemedi.");
+  }
+  let parsed: T;
+  try { parsed = JSON.parse(match[0]) as T; }
+  catch { throw makeError("Model çıktısı geçerli JSON değil."); }
+  for (const key of requiredKeys) {
+    if (!(key in (parsed as object))) {
+      throw makeError(`Model çıktısında beklenen alan eksik: ${String(key)}`);
+    }
+  }
+  return parsed;
+}
+
 export interface OpenRouterCompletion {
   content: string;
   /** true ise model max_tokens'a çarpıp yarıda kesildi — reasoning-üreten

@@ -19,7 +19,8 @@ import {
   type CatalogOption,
 } from "@/lib/avatarEvolution";
 import { PageHeader, Card, Button } from "@/app/components/ui";
-import LazyStudentAvatar from "@/app/components/shared/LazyStudentAvatar";
+import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
+import { getActiveCharacterPack } from "@/lib/avatarPack";
 import { Lock, Save, Check } from "lucide-react";
 
 const DEFAULT_CONFIG = (studentId: string): StudentAvatarConfig => ({
@@ -153,7 +154,12 @@ export default function AvatarPage() {
         {/* Canlı önizleme */}
         <div className="lg:sticky lg:top-6 lg:self-start">
           <Card className="p-6 flex flex-col items-center gap-4">
-            <LazyStudentAvatar config={config} tier={tier} size={160} />
+            <div className="w-full rounded-2xl overflow-hidden" style={{ background: "#0a0a0c" }}>
+              <LazyAvatarEngine3D pack={getActiveCharacterPack()} activity="idle" height={220} />
+            </div>
+            <p className="text-[10px] text-white/30 text-center -mt-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
+              3D önizleme (geliştirme aşaması) — aşağıdaki kozmetik seçimler kaydediliyor ama henüz bu 3D modele yansımıyor.
+            </p>
             <div className="text-center">
               <p className="text-white font-semibold text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{tier.level.name}</p>
               <p className="text-white/40 text-xs mt-0.5">{xp.toLocaleString("tr-TR")} XP</p>

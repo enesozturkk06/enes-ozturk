@@ -1270,6 +1270,7 @@ const mKediProgram = (r: any): KediProgram => ({
   trainingDays: r.program_json?.trainingDays ?? [],
   monthlyProgression: r.program_json?.monthlyProgression ?? [],
   meals: r.program_json?.meals ?? [],
+  weeklyMeals: r.program_json?.weeklyMeals ?? undefined,
   shoppingList: r.program_json?.shoppingList ?? [],
   analysis: r.program_json?.analysis ?? { attendanceSummary: "", performanceSummary: "", recommendations: [] },
   safetyNote: r.program_json?.safetyNote ?? "",
@@ -1281,7 +1282,8 @@ const mKediProgram = (r: any): KediProgram => ({
 function kediProgramJson(program: KediProgram) {
   return {
     trainingDays: program.trainingDays, monthlyProgression: program.monthlyProgression,
-    meals: program.meals, shoppingList: program.shoppingList,
+    meals: program.meals, weeklyMeals: program.weeklyMeals,
+    shoppingList: program.shoppingList,
     analysis: program.analysis, safetyNote: program.safetyNote,
   };
 }

@@ -8,8 +8,10 @@ import {
   cancelAppointment, getDuetPartner, getPendingInvites, respondToInvite,
   joinWaitlist, leaveWaitlist, getStudentWaitlist, updateStudent,
 } from "@/lib/db";
-import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry } from "@/lib/types";
+import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry, AvatarAction } from "@/lib/types";
 import { PageHeader } from "@/app/components/ui";
+import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
+import { getActiveCharacterPack } from "@/lib/avatarPack";
 import {
   TRAINER_NAME, TRAINER_WHATSAPP, TRAINER_LOCATION, CANCEL_LIMIT_HOURS,
   LESSON_DURATION_MINUTES, PACKAGE_EXPIRED_BOOKING_TEXT,
@@ -48,6 +50,59 @@ function Card({ children, className = "", style = {}, glass = "glass" }: {
     >
       {children}
     </div>
+  );
+}
+
+/* ── Avatar — "ders aktifken Guard / ders bitince Victory" ─────────
+ * KENDİ bileşeninde izole edildi çünkü 30sn'lik interval'i (bkz. aşağıda)
+ * sadece BU küçük kart yeniden render etsin diye — üst RandevuPage'in tamamı
+ * (randevu formu, takvim, saat listesi) 30 saniyede bir GEREKSİZ yeniden
+ * render OLMASIN. appointments referansı değiştiğinde (reload()) doğal
+ * olarak yeniden render olur, aradaki 30sn'lerde SADECE bu kart tikler. */
+function LessonStatusAvatarCard({ appointments }: { appointments: Appointment[] }) {
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const [lessonAction, setLessonAction] = useState<AvatarAction | null>(null);
+  const [prevActiveApptId, setPrevActiveApptId] = useState<string | null>(null);
+
+  // "Ders aktifken Guard / ders bitince Victory" — appointment status
+  // modelinde "şu an aktif" diye bir alan YOK (sadece onaylandi/iptal/
+  // tamamlandi/gelmedi), bu yüzden date+startTime/endTime'dan TÜRETİLİYOR.
+  const now = new Date(nowTick);
+  const activeAppointment = appointments.find(a =>
+    a.status === "onaylandi" &&
+    parseISO(`${a.date}T${a.startTime}`) <= now &&
+    now < parseISO(`${a.date}T${a.endTime}`)
+  ) ?? null;
+
+  // Effect yerine render-sırasında türetme (react-hooks/set-state-in-effect kuralı).
+  const currActiveApptId = activeAppointment?.id ?? null;
+  if (currActiveApptId !== prevActiveApptId) {
+    if (prevActiveApptId && !currActiveApptId) setLessonAction("victory"); // ders az önce bitti
+    setPrevActiveApptId(currActiveApptId);
+  }
+
+  return (
+    <Card>
+      <div className="p-4 flex items-center gap-3">
+        <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0" style={{ background: "#0a0a0c" }}>
+          <LazyAvatarEngine3D
+            pack={getActiveCharacterPack()}
+            activity={activeAppointment ? "guard" : "idle"}
+            action={lessonAction}
+            onActionEnd={() => setLessonAction(null)}
+            width={56}
+            height={56}
+          />
+        </div>
+        <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
+          {activeAppointment ? "Ders şu an aktif — gard pozunda 🥊" : "Bir sonraki dersini bekliyor"}
+        </p>
+      </div>
+    </Card>
   );
 }
 
@@ -642,6 +697,9 @@ export default function RandevuPage() {
 
         {/* ── Sağ sidebar ──────────────────────────────────── */}
         <div className="flex flex-col gap-4 min-w-0">
+
+          {/* Avatar — ders aktifken Guard, ders bitince tek seferlik Victory */}
+          <LessonStatusAvatarCard appointments={appointments} />
 
           {/* Bekleme Listesi */}
           {waitlist.length > 0 && (

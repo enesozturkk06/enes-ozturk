@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   getAllXPAdjustments, getAllGiftLessonRequests, getAppSetting,
 } from "@/lib/db";
@@ -66,7 +66,7 @@ function buildItems(
   return items;
 }
 
-export default function ActivityFeed() {
+function ActivityFeed() {
   const [items, setItems] = useState<string[]>([]);
 
   useEffect(() => {
@@ -171,3 +171,5 @@ export default function ActivityFeed() {
     </div>
   );
 }
+
+export default memo(ActivityFeed);

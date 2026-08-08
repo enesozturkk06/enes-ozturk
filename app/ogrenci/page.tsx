@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
@@ -9,7 +9,7 @@ import {
   getStudentXPAdjustments, getStudentMissionCompletions, getKediMissions,
   getGyms, getStudentAvatar,
 } from "@/lib/db";
-import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, StudentMission, Gym, StudentAvatarConfig } from "@/lib/types";
+import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, Gym, StudentAvatarConfig, AvatarAction } from "@/lib/types";
 import { Badge, ProgressBar } from "@/app/components/ui";
 import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT } from "@/lib/constants";
 import { getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
@@ -81,11 +81,78 @@ export default function OgrenciDashboard() {
   const [gyms, setGyms]                   = useState<Gym[]>([]);
   const [avatarConfig, setAvatarConfig]   = useState<StudentAvatarConfig | null>(null);
   const [loading, setLoading]             = useState(true);
+  // "XP kazandı → Victory" (bkz. Kedi Life event bağlantıları) — bu sayfanın
+  // KENDİ verisi yeniden çekildiğinde (reload()) toplam XP arttıysa avatar
+  // kısa süreliğine Victory oynatır. Not: BlackCatAI'nin global görev-XP
+  // ödülü bu sayfayı OTOMATİK yeniden çekmiyor (ayrı, bağlantısız bileşenler
+  // — bu haliyle sadece BU sayfanın kendi reload() çağrılarında XP artışı
+  // olursa tetiklenir, örn. randevu iptal/davet yanıtı sonrası).
+  const [heroAction, setHeroAction] = useState<AvatarAction | null>(null);
+  const prevXPRef = useRef<number | null>(null);
+
+  // ── Pahalı, saf hesaplamalar — Guard'dan (aşağıdaki "if (!student ||
+  // loading) return") ÖNCE, hook kuralları gereği. useMemo sayesinde SADECE
+  // gerçek girdileri (appointments/records/xpAdjustments/vb.) değiştiğinde
+  // yeniden hesaplanır — inviteLoading/cancelTarget gibi ilgisiz state
+  // değişimlerinde (modal aç/kapa, davet yanıtlama) TEKRAR ÇALIŞMAZ.
+  const shadowFan = typeof window !== "undefined"
+    && (localStorage.getItem("kedi_ai_used") === "1" || localStorage.getItem("kara_ai_used") === "1");
+
+  const xpSummary = useMemo(
+    () => student ? computeFullXP(student.completedLessons, appointments, records, getCurrentSeason(), xpAdjustments) : null,
+    [student, appointments, records, xpAdjustments],
+  );
+  const manualXP = useMemo(() => sumManualXP(xpAdjustments), [xpAdjustments]);
+  const badges = useMemo(
+    () => student ? computeBadges(student, appointments, records, { "shadow-fan": shadowFan }, manualXP) : [],
+    [student, appointments, records, shadowFan, manualXP],
+  );
+  const missions = useMemo(() => {
+    if (!student || !xpSummary) return [];
+    const missionInput: MissionComputeInput = {
+      appointments, records,
+      totalXP: xpSummary.lifetimeResult.breakdown.total,
+      lastTrainingPlan: loadAIPlan("training"),
+      lastNutritionPlan: loadAIPlan("nutrition"),
+    };
+    return computeStudentMissions(missionInput, missionCompletions, getWeekKey(), customMissions);
+  }, [student, appointments, records, xpSummary, missionCompletions, customMissions]);
+  const timelineItems: TimelineItem[] = useMemo(() => [
+    ...records.map(r => ({
+      id: `record-${r.id}`, type: "record" as const, date: r.createdAt,
+      title: `Ders notu eklendi — Genel ${r.overall}/10`,
+      subtitle: (() => { try { return format(parseISO(r.date), "dd MMMM yyyy", { locale: tr }); } catch { return undefined; } })(),
+    })),
+    ...notifications.map(n => ({
+      id: `notif-${n.id}`, type: "notification" as const, date: n.createdAt,
+      title: n.title, subtitle: n.message,
+    })),
+    ...xpAdjustments.filter(x => x.amount > 0).map(x => ({
+      id: `xp-${x.id}`, type: "xp" as const, date: x.createdAt,
+      title: `+${x.amount} XP — ${x.reason}`, subtitle: x.note || undefined,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8), [records, notifications, xpAdjustments]);
+
+  // "XP kazandı → Victory" (bkz. Kedi Life event bağlantıları) — bu sayfanın
+  // KENDİ verisi yeniden çekildiğinde (reload()) toplam XP arttıysa avatar
+  // kısa süreliğine Victory oynatır. Not: BlackCatAI'nin global görev-XP
+  // ödülü bu sayfayı OTOMATİK yeniden çekmiyor (ayrı, bağlantısız bileşenler
+  // — bu haliyle sadece BU sayfanın kendi reload() çağrılarında XP artışı
+  // olursa tetiklenir, örn. randevu iptal/davet yanıtı sonrası). Artık
+  // computeFullXP'yi BAĞIMSIZ tekrar ÇAĞIRMIYOR — yukarıdaki memoized
+  // xpSummary'yi okuyor (aynı sonuç, tekrar hesaplama yok).
+  useEffect(() => {
+    if (!student || loading || !xpSummary) return;
+    const total = xpSummary.lifetimeResult.breakdown.total;
+    if (prevXPRef.current !== null && total > prevXPRef.current) setHeroAction("victory");
+    prevXPRef.current = total;
+  }, [student, loading, xpSummary]);
+  const onHeroActionEnd = useCallback(() => setHeroAction(null), []);
   const [inviteLoading, setInviteLoading] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget]   = useState<Appointment | null>(null);
   const [cancelBusy, setCancelBusy]       = useState(false);
   const [cancelBlocked, setCancelBlocked] = useState<Appointment | null>(null); // 18h engel modal
-  const [isAndroid, setIsAndroid] = useState(false); // Hızlı Erişim Android'de scroll glitch'ine sebep oluyor — Android'de tamamen kaldırılıyor
+  const [isAndroid] = useState(isAndroidDevice); // Hızlı Erişim Android'de scroll glitch'ine sebep oluyor — Android'de tamamen kaldırılıyor. SSR'da false, client'ta lazy init ile doğru değer (isAndroidDevice zaten SSR-safe).
 
   const reload = async () => {
     if (!student) return;
@@ -126,7 +193,6 @@ export default function OgrenciDashboard() {
   };
 
   useEffect(() => { reload(); }, [student]); // eslint-disable-line
-  useEffect(() => { setIsAndroid(isAndroidDevice()); }, []);
 
   const handleInviteResponse = async (invite: PendingInvite, accept: boolean) => {
     if (!student) return;
@@ -184,42 +250,11 @@ export default function OgrenciDashboard() {
   const progressPct  = Math.round((student.completedLessons / totalLessons) * 100);
   const packageLabel = student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name ?? ""} Paketi`;
 
-  // ── XP / Rozet / Görev — salt-okunur türetilmiş değerler ──────────
-  // Aynı formül BlackCatAI.tsx'te ve app/ogrenci/seviye|rozetler sayfalarında
-  // kullanılıyor; burada SADECE görüntüleniyor, hiçbir XP/DB yazma işlemi yok.
-  const season      = getCurrentSeason();
-  const xpSummary   = computeFullXP(student.completedLessons, appointments, records, season, xpAdjustments);
-  const lifetimeXP  = xpSummary.lifetimeResult;
-  const manualXP    = sumManualXP(xpAdjustments);
-  const extraFlags: Record<string, boolean> = {};
-  if (typeof window !== "undefined") {
-    extraFlags["shadow-fan"] = localStorage.getItem("kedi_ai_used") === "1" || localStorage.getItem("kara_ai_used") === "1";
-  }
-  const badges      = computeBadges(student, appointments, records, extraFlags, manualXP);
-  const missionInput: MissionComputeInput = {
-    appointments, records,
-    totalXP:          lifetimeXP.breakdown.total,
-    lastTrainingPlan: loadAIPlan("training"),
-    lastNutritionPlan:loadAIPlan("nutrition"),
-  };
-  const missions: StudentMission[] = computeStudentMissions(missionInput, missionCompletions, getWeekKey(), customMissions);
-
-  // ── Son Aktiviteler — ders notu + bildirim + pozitif XP kaydı birleşimi ──
-  const timelineItems: TimelineItem[] = [
-    ...records.map(r => ({
-      id: `record-${r.id}`, type: "record" as const, date: r.createdAt,
-      title: `Ders notu eklendi — Genel ${r.overall}/10`,
-      subtitle: (() => { try { return format(parseISO(r.date), "dd MMMM yyyy", { locale: tr }); } catch { return undefined; } })(),
-    })),
-    ...notifications.map(n => ({
-      id: `notif-${n.id}`, type: "notification" as const, date: n.createdAt,
-      title: n.title, subtitle: n.message,
-    })),
-    ...xpAdjustments.filter(x => x.amount > 0).map(x => ({
-      id: `xp-${x.id}`, type: "xp" as const, date: x.createdAt,
-      title: `+${x.amount} XP — ${x.reason}`, subtitle: x.note || undefined,
-    })),
-  ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+  // xpSummary/badges/missions/timelineItems artık yukarıda (guard'dan ÖNCE)
+  // useMemo ile hesaplanıyor — burada sadece okunuyor. `student` bu satırdan
+  // sonra garantili non-null olduğu için xpSummary de garantili non-null
+  // (useMemo'nun kendi guard'ı `student ? ... : null` şeklindeydi).
+  const lifetimeXP = xpSummary!.lifetimeResult;
 
   // ── Yaklaşan Randevu (tekil) — salt-okunur türetilmiş değerler ──────
   const nextAppointment = upcoming[0] ?? null;
@@ -264,6 +299,8 @@ export default function OgrenciDashboard() {
           dateLabel={format(new Date(), "dd MMMM yyyy, EEEE", { locale: tr })}
           aiTip={heroAiTip}
           avatarConfig={avatarConfig}
+          avatarAction={heroAction}
+          onAvatarActionEnd={onHeroActionEnd}
         />
       </motion.div>
 

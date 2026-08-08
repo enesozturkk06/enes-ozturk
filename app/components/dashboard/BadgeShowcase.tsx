@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -8,7 +9,7 @@ const RARITY_ORDER: Record<Rarity, number> = { legendary: 3, epic: 2, rare: 1, c
 
 interface Props { badges: BadgeData[] }
 
-export default function BadgeShowcase({ badges }: Props) {
+function BadgeShowcase({ badges }: Props) {
   const earnedAll = badges.filter(b => b.earned);
   const earned = [...earnedAll].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]).slice(0, 8);
 
@@ -59,3 +60,5 @@ export default function BadgeShowcase({ badges }: Props) {
     </div>
   );
 }
+
+export default memo(BadgeShowcase);

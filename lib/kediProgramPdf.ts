@@ -48,10 +48,24 @@ export async function exportKediProgramPdf(program: KediProgram, student: { full
   }
   y += 4;
 
-  addLine("Beslenme Planı", 13);
-  for (const meal of program.meals) {
-    addLine(`${meal.name} (${meal.calories} kcal, P:${meal.protein}g K:${meal.carbs}g Y:${meal.fat}g)`, 10);
-    addLine(`  ${meal.items.join(", ")}`, 9);
+  // weeklyMeals varsa (yeni programlar) 7 günü ayrı ayrı yazdır, yoksa
+  // (eski kaydedilmiş programlar) tek günlük "meals" özetine geri düş.
+  if (program.weeklyMeals && program.weeklyMeals.length > 0) {
+    addLine("Haftalık Öğün Planı", 13);
+    for (const dayMeals of program.weeklyMeals) {
+      addLine(dayMeals.day, 11);
+      for (const meal of dayMeals.meals) {
+        addLine(`${meal.name} (${meal.calories} kcal, P:${meal.protein}g K:${meal.carbs}g Y:${meal.fat}g)`, 9);
+        addLine(`  ${meal.items.join(", ")}`, 8);
+        if (meal.alternative && meal.alternative.length > 0) addLine(`  Alternatif: ${meal.alternative.join(", ")}`, 8);
+      }
+    }
+  } else {
+    addLine("Beslenme Planı", 13);
+    for (const meal of program.meals) {
+      addLine(`${meal.name} (${meal.calories} kcal, P:${meal.protein}g K:${meal.carbs}g Y:${meal.fat}g)`, 10);
+      addLine(`  ${meal.items.join(", ")}`, 9);
+    }
   }
   y += 4;
 

@@ -1,11 +1,12 @@
 "use client";
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Circle } from "lucide-react";
 import type { StudentMission } from "@/lib/types";
 
 interface Props { missions: StudentMission[] }
 
-export default function DailyMissionsCard({ missions }: Props) {
+function DailyMissionsCard({ missions }: Props) {
   const completedCount = missions.filter(m => m.completed).length;
 
   return (
@@ -63,3 +64,5 @@ export default function DailyMissionsCard({ missions }: Props) {
     </div>
   );
 }
+
+export default memo(DailyMissionsCard);

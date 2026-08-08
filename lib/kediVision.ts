@@ -17,7 +17,7 @@
  */
 import { createHash } from "crypto";
 import { getStudent, getKediVisionAnalyses, getKediVisionAnalysisByHash } from "./db";
-import { callOpenRouter, type OpenRouterContentPart } from "./openrouter";
+import { callOpenRouter, extractJsonResponse, type OpenRouterContentPart } from "./openrouter";
 import { OPENROUTER_VISION_MODELS, KEDI_VISION_PHOTO_MAX_TOKENS, KEDI_VISION_VIDEO_MAX_TOKENS } from "./kediAiConfig";
 import type {
   KediVisionAnalysis, KediVisionMediaType, KediVisionCategoryScores,
@@ -34,27 +34,10 @@ const SAFETY_RULES_VISION = `GÜVENLİK KURALLARI — KESİNLİKLE UYULACAK:
 const DEFAULT_VISION_SAFETY_NOTE =
   "Bu analiz bir antrenör asistanı tarafından bilgilendirme amacıyla oluşturulmuştur; profesyonel bir antrenörün gözlemlerinin veya tıbbi değerlendirmenin yerine geçmez.";
 
-/* ── JSON çıkarma + doğrulama (lib/kediPrograms.ts ile aynı desen) ──── */
+/* ── JSON çıkarma + doğrulama (paylaşılan — bkz. lib/openrouter.ts) ──── */
 
 function extractJson<T>(raw: string, truncated: boolean, requiredKeys: (keyof T)[]): T {
-  if (truncated) {
-    console.error("[kediVision] truncated response, raw length:", raw.length, "tail:", raw.slice(-200));
-    throw new KediVisionError("Model yanıtı yarıda kesildi (token bütçesi yetersiz) — lütfen tekrar deneyin.");
-  }
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) {
-    console.error("[kediVision] no JSON found, raw length:", raw.length, "content:", raw.slice(0, 500));
-    throw new KediVisionError("Model geçerli bir JSON üretemedi.");
-  }
-  let parsed: T;
-  try { parsed = JSON.parse(match[0]) as T; }
-  catch { throw new KediVisionError("Model çıktısı geçerli JSON değil."); }
-  for (const key of requiredKeys) {
-    if (!(key in (parsed as object))) {
-      throw new KediVisionError(`Model çıktısında beklenen alan eksik: ${String(key)}`);
-    }
-  }
-  return parsed;
+  return extractJsonResponse(raw, truncated, requiredKeys, "kediVision", (msg) => new KediVisionError(msg));
 }
 
 interface VisionResponse {
