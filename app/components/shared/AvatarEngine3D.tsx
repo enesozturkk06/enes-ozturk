@@ -22,13 +22,21 @@ import type { CharacterPackManifest, AvatarCameraPreset, AvatarLightingPreset, A
 
 export interface AvatarEngine3DProps {
   pack: CharacterPackManifest;
-  activity: AvatarActivity;
+  /** Öğrenci avatarı için AvatarActivity (workout durumları) — ama motor
+   * pack-agnostik olduğu için (bkz. dosya başı yorumu) tip BİLEREK
+   * `AvatarActivity | string`e genişletildi: başka bir karakter ailesi
+   * (ör. Kedi AI mascot'u, bkz. lib/kediMascotState.ts) KENDİ activity
+   * sözlüğünü (idle/listening/thinking/speaking) kullanabilsin diye.
+   * Motor zaten `pack.animations[activity]` ile SAF STRING anahtarla
+   * okuyordu — bu genişletme ÇALIŞMA ZAMANI davranışını değiştirmez. */
+  activity: AvatarActivity | (string & {});
   /** Belirtilirse TEK SEFERLİK oynar (pack.actions'tan), bitince otomatik
    * olarak güncel `activity`'ye geri döner — HİÇBİR ZAMAN loop olmaz
    * (Idle→Jab→Idle). `action` ve `expression` AYNI ANDA verilirse `action`
    * öncelikli. Pack bu action'ı desteklemiyorsa (veya clip GLB'de yoksa)
-   * sessizce hiçbir şey oynatmadan `onActionEnd` hemen çağrılır. */
-  action?: AvatarAction | null;
+   * sessizce hiçbir şey oynatmadan `onActionEnd` hemen çağrılır. Tip
+   * `activity` ile AYNI sebeple genişletildi (bkz. yukarıdaki not). */
+  action?: (AvatarAction | (string & {})) | null;
   /** Bitince çağrılır — çağıran taraf kendi `action` state'ini bu callback
    * içinde null'a çekmeli (aksi halde aynı action'ı art arda iki kez
    * tetiklemek prop değişmediği için ikinci seferde çalışmaz). */
@@ -53,6 +61,23 @@ export interface AvatarEngine3DProps {
    * çalıştığını doğrulamak için var (bkz. CharacterModel içindeki attach
    * effect'i). */
   testCosmetics?: boolean;
+  /** true ise OrbitControls kullanıcı etkileşimini (rotate/zoom/pan)
+   * TAMAMEN kapatır — sabit, "yaşayan bir karakter" hissi istenen
+   * sunumlar için (ör. Kedi AI mascot sahnesi). Varsayılan false —
+   * mevcut TÜM çağıranlar (öğrenci avatarı sayfaları) bu prop'u hiç
+   * vermiyor, yani davranışları AYNEN korunur (serbest orbit). */
+  lockCamera?: boolean;
+  /** PERF (Faz 6/7 profillemesinde bulundu): "full" (varsayılan) mevcut
+   * davranışın AYNISI — `<Environment>` (HDRI indirme + PMREM üretimi)
+   * render edilir. "light", sadece küçük (40-80px) dekoratif önizlemeler
+   * için — `<Environment>`'ı TAMAMEN atlar (bu, production profiling'de
+   * ~1.4-1.8sn'lik long task'ın ~%90+'ını oluşturan tek kalemdi), yerine
+   * mevcut ambientLight+directionalLight'lar (zaten kodda var) kullanılır.
+   * GLB/SkeletonUtils.clone/AnimationMixer'a DOKUNULMAZ (profiling'de bu
+   * üçü toplam maliyetin sadece ~%2-7'siydi, kaldırmak riske değmezdi —
+   * bkz. Faz 7 mimari analizi). `quality` (ayrı, dinamik/FPS-tepkili bir
+   * kavram) İLE KARIŞTIRILMASIN — ikisi bağımsız, üst üste biner. */
+  renderMode?: "full" | "light";
 }
 
 const CROSSFADE_SECONDS = 0.4;
@@ -176,7 +201,7 @@ function CharacterModel({ pack, activity, action, expression, onActionEnd, onExp
 
     const isAction = !!action;
     const clipName = isAction
-      ? pack.actions?.[action as AvatarAction]
+      ? pack.actions?.[action]
       : pack.facialAnimations?.[expression as AvatarExpression];
     const notifyDone = () => { if (isAction) onActionEnd?.(); else onExpressionEnd?.(); };
 
@@ -219,17 +244,24 @@ function CharacterModel({ pack, activity, action, expression, onActionEnd, onExp
 }
 
 export default function AvatarEngine3D({
-  pack, activity, action, onActionEnd, expression, onExpressionEnd, animate, quality = "full", testCosmetics,
+  pack, activity, action, onActionEnd, expression, onExpressionEnd, animate, quality = "full", testCosmetics, lockCamera = false,
+  renderMode = "full",
 }: AvatarEngine3DProps) {
   const cam = pack.cameraPreset ?? DEFAULT_CAMERA;
   const light = pack.lightingPreset ?? DEFAULT_LIGHTING;
+  // `renderMode` (statik, çağıran taraf tarafından deklare edilir) `quality`
+  // (dinamik/FPS-tepkili) İLE BİLEREK AYRI tutuluyor — bkz. prop yorumu.
+  // `renderMode` verilmediğinde (TÜM mevcut çağıranlar: avatar/page.tsx,
+  // fight-card, randevu, KediMascotStage) isLight her zaman false —
+  // aşağıdaki üç satırın hiçbiri önceki davranışı DEĞİŞTİRMEZ.
+  const isLight = renderMode === "light";
 
   return (
     <Canvas
       frameloop={animate ? "always" : "demand"}
       camera={{ position: cam.position, fov: cam.fov }}
-      dpr={quality === "reduced" ? 1 : [1, 2]}
-      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
+      dpr={isLight ? 1 : (quality === "reduced" ? 1 : [1, 2])}
+      gl={{ antialias: !isLight, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
     >
       <Suspense fallback={null}>
         <CharacterModel
@@ -241,14 +273,21 @@ export default function AvatarEngine3D({
           onExpressionEnd={onExpressionEnd}
           testCosmetics={testCosmetics}
         />
-        <Environment preset={light.environmentPreset as PresetsType} />
+        {/* LIGHT MODE: Environment (HDRI indirme + PMREM üretimi) atlanır —
+            profiling'de ~1.4-1.8sn'lik long task'ın dominant kaynağıydı.
+            Aşağıdaki 3 nokta ışık (satır ~281-284) HER İKİ modda da aynen
+            çalışır, light modda karakterin TEK ışık kaynağı bu olur. */}
+        {!isLight && <Environment preset={light.environmentPreset as PresetsType} />}
       </Suspense>
       {/* 3 nokta ışık — pack'in kendi ışık ayarı yoksa altın-siyah premium varsayılan */}
       <directionalLight position={[3, 5, 2]} intensity={light.keyLight.intensity} color={light.keyLight.color} />
       <directionalLight position={[-3, 2, -2]} intensity={light.fillLight.intensity} color={light.fillLight.color} />
       <ambientLight intensity={light.ambientIntensity} />
       <OrbitControls
+        enabled={!lockCamera}
         enablePan={false}
+        enableRotate={!lockCamera}
+        enableZoom={!lockCamera}
         enableDamping
         dampingFactor={0.08}
         minDistance={1.6}

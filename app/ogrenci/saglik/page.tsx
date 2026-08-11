@@ -19,8 +19,6 @@ import {
   type DietInput, type DietPlan, type GoalType, type ActivityLevel,
 } from "@/lib/diet";
 import { PageHeader } from "@/app/components/ui";
-import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
-import { getActiveCharacterPack } from "@/lib/avatarPack";
 import {
   Scale, Droplets, Flame, Activity, TrendingUp, Plus, Save,
   Utensils, RefreshCw, ChevronDown, ChevronUp, Sparkles,
@@ -373,15 +371,11 @@ export default function SaglikPage() {
                   {/* Su */}
                   <div className="glass-strong rounded-2xl p-5">
                     <div className="flex items-center gap-2 mb-4">
-                      {/* Su önerisinde (günlük hedefin altındayken) DrinkWater
-                          activity'si — hedefe ulaşınca Idle'a döner. */}
-                      <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ background: "#0a0a0c" }}>
-                        <LazyAvatarEngine3D
-                          pack={getActiveCharacterPack()}
-                          activity={waterGlasses < 8 ? "drink" : "idle"}
-                          width={40}
-                          height={40}
-                        />
+                      {/* 3D avatar önizlemesi kaldırıldı ("3D Avatar Temizliği" turu) —
+                          yerine su temalı basit bir ikon rozeti. */}
+                      <div className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center"
+                        style={{ background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)" }}>
+                        <Droplets size={18} style={{ color: "#38BDF8" }} />
                       </div>
                       <h3 className="text-base text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Su Tüketimi</h3>
                     </div>

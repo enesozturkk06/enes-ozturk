@@ -44,7 +44,7 @@ export default function PackageExpiryBanner({ endDate }: { endDate?: string }) {
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
             <motion.div
               initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-              className="relative z-10 w-full max-w-sm glass-strong rounded-2xl border border-white/10 p-6"
+              className="relative z-10 w-full max-w-sm card-neon-strong rounded-2xl p-6"
               onClick={e => e.stopPropagation()}
             >
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-crimson" />

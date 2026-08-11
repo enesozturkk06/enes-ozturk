@@ -2,10 +2,11 @@
 import { memo } from "react";
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
-import type { Student, StudentAvatarConfig, AvatarAction } from "@/lib/types";
+import { CreditCard, CalendarRange } from "lucide-react";
+import type { Student, StudentAvatarConfig } from "@/lib/types";
 import type { XPResult } from "@/lib/xp";
-import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
-import { getActiveCharacterPack } from "@/lib/avatarPack";
+import { PAYMENT_LABELS } from "@/lib/constants";
+import { GOLD_BRIGHT, GOLD_BORDER_SOFT, GOLD_BG_SOFT, TEXT_SECONDARY } from "./theme";
 
 interface Props {
   student: Student;
@@ -13,14 +14,22 @@ interface Props {
   packageLabel: string;
   dateLabel?: string;
   aiTip?: string;
-  /** Kedi Avatar Sistemi — null ise (henüz oluşturulmadıysa) mevcut foto/baş harf kutusuna geri düşer. */
+  /** Kedi Avatar Sistemi (2D Dijital Salon) — null ise (henüz oluşturulmadıysa)
+   * "Avatarını Oluştur" CTA'sı, doluysa "Düzenle" bağlantısı gösterilir. */
   avatarConfig?: StudentAvatarConfig | null;
-  /** "XP kazandı → Victory" gibi olay bağlantıları için — bkz. app/ogrenci/page.tsx. */
-  avatarAction?: AvatarAction | null;
-  onAvatarActionEnd?: () => void;
+  /** Faz 1 — sezon özeti, page.tsx'te ZATEN hesaplanmış xpSummary.seasonResult'tan
+   * geliyor, burada yeni bir hesap yapılmıyor (sadece görüntüleme). */
+  seasonXP?: number;
+  seasonDaysLeft?: number;
 }
 
-function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, avatarConfig, avatarAction, onAvatarActionEnd }: Props) {
+/** Ödeme durumuna göre membership rozetinin rengi — Paket kartındaki
+ * (page.tsx) AYNI ternary'nin bire bir kopyası, mantık değişmedi. */
+function paymentColor(status: Student["paymentStatus"]): string {
+  return status === "odendi" ? "#22c55e" : status === "kismi" ? GOLD_BRIGHT : "#ef4444";
+}
+
+function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, avatarConfig, seasonXP, seasonDaysLeft }: Props) {
   const reduced = useReducedMotion();
   const { current, next, progressPct, xpInLevel, xpToNext } = xpResult.level;
   const initials = student.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
@@ -29,7 +38,7 @@ function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, av
     <motion.div
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      className="glass-strong relative overflow-hidden rounded-3xl"
+      className="card-gold-hero relative overflow-hidden rounded-3xl"
     >
       <div className="relative p-6 sm:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center gap-5 mb-6">
@@ -47,26 +56,14 @@ function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, av
             )}
           </div>
 
-          {/* Kedi Avatar Sistemi — kişiselleştirilebilir karakter (foto/baş harf kutusunun AYRISI, biri diğerini silmez).
-              3D (dev-human-rig, geçici) — avatarConfig'in kendisi 3D motoruna henüz bağlı değil, sadece
-              "öğrenci avatar oluşturdu mu" göstergesi olarak kullanılıyor (mevcut davranış korunuyor). */}
-          {avatarConfig ? (
-            <div className="flex-shrink-0 -my-2 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden" style={{ background: "#0a0a0c" }}>
-              <LazyAvatarEngine3D
-                pack={getActiveCharacterPack()}
-                activity="idle"
-                action={avatarAction}
-                onActionEnd={onAvatarActionEnd}
-                width={80}
-                height={80}
-              />
-            </div>
-          ) : (
-            <a href="/ogrenci/avatar" className="flex-shrink-0 text-[11px] px-3 py-2 rounded-lg text-gold-bright/80 hover:text-gold-bright transition-colors"
-              style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", fontFamily: "var(--font-label)" }}>
-              🐈 Avatarını Oluştur →
-            </a>
-          )}
+          {/* Kedi Avatar Sistemi (2D Dijital Salon) — foto/baş harf kutusunun
+              AYRISI, biri diğerini silmez. 3D önizleme kaldırıldı ("3D Avatar
+              Temizliği" turu) — avatarConfig sadece "oluşturuldu mu" bayrağı
+              olarak kullanılıyor, CTA metni buna göre değişiyor. */}
+          <a href="/ogrenci/avatar" className="flex-shrink-0 text-[11px] px-3 py-2 rounded-lg text-gold-bright/80 hover:text-gold-bright transition-colors"
+            style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", fontFamily: "var(--font-label)" }}>
+            {avatarConfig ? "🐈 Avatarımı Düzenle →" : "🐈 Avatarını Oluştur →"}
+          </a>
 
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl text-white tracking-wide truncate" style={{ fontFamily: "var(--font-display)" }}>
@@ -85,6 +82,38 @@ function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, av
               {current.shortName}
             </span>
           </div>
+        </div>
+
+        {/* Üyelik + Sezon özet rozetleri — Faz 1: mevcut paket/ödeme/sezon
+            verisinin (page.tsx'te zaten hesaplanmış) kompakt önizlemesi.
+            Detaylı Paket kartı aşağıda AYNEN duruyor, bu sadece hero'daki
+            özet. Gerçek bir "VIP" sistemi yok — sadece mevcut paket adı +
+            ödeme durumu "üyelik" gibi giydiriliyor. */}
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+            style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER_SOFT}` }}>
+            <CreditCard size={12} style={{ color: paymentColor(student.paymentStatus) }} />
+            <span className="text-[11px] tracking-wide" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "var(--font-label)" }}>
+              {packageLabel}
+            </span>
+            <span className="text-[10px] uppercase tracking-wider" style={{ color: paymentColor(student.paymentStatus), fontFamily: "var(--font-label)" }}>
+              · {PAYMENT_LABELS[student.paymentStatus]}
+            </span>
+          </div>
+          {typeof seasonXP === "number" && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+              style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER_SOFT}` }}>
+              <CalendarRange size={12} style={{ color: GOLD_BRIGHT }} />
+              <span className="text-[11px] tracking-wide" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "var(--font-label)" }}>
+                Bu sezon {seasonXP.toLocaleString("tr-TR")} XP
+              </span>
+              {typeof seasonDaysLeft === "number" && (
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: TEXT_SECONDARY, fontFamily: "var(--font-label)" }}>
+                  · {seasonDaysLeft} gün kaldı
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* XP Bar */}
@@ -112,7 +141,7 @@ function ProfileHeroCard({ student, xpResult, packageLabel, dateLabel, aiTip, av
 
         {/* Kedi AI mini tavsiye — tam kart aşağıdaki Kedi AI bölümünde, burada sadece tek satır önizleme */}
         {aiTip && (
-          <div className="flex items-center gap-2 mt-5 pt-4 border-t border-white/8">
+          <div className="flex items-center gap-2 mt-5 pt-4" style={{ borderTop: `1px solid ${GOLD_BORDER_SOFT}` }}>
             <span className="text-base flex-shrink-0">🐾</span>
             <p className="text-xs sm:text-sm truncate" style={{ color: "rgba(255,255,255,0.72)", fontFamily: "var(--font-label)" }}>
               {aiTip}

@@ -75,6 +75,107 @@
   }
 }
 
+/* ── Kedi AI Premium Chat Panel ────────────────────────────────
+   Sadece BlackCatAI.tsx içinde kullanılır — mevcut paylaşılan
+   .glass/.glass-strong sınıflarına (diğer tüm sayfalarda kullanılıyor)
+   BİLEREK dokunulmadı, izole edildi (regresyon riski sıfır). Premium
+   kickboks atmosferi: siyah zemin + mor/kırmızı neon + ince altın detay,
+   glassmorphism (backdrop-blur) SADECE bu tek panelde — küçük, tek bir
+   yüzey olduğu için maliyeti ihmal edilebilir (uygulama genelinde
+   backdrop-filter kasıtlı olarak kapalı, bkz. .glass tanımı). */
+.kedi-panel-glass {
+  /* Arkadaki sayfa içeriği (ör. dashboard hero kartındaki metinler)
+     backdrop-blur'dan sonra bile okunabilir kalıyordu (canlı testte
+     görüldü) — glass yüzey %97+ opak tutuluyor, "cam" his blur+glow+ince
+     kenarlıktan geliyor, gerçek şeffaflıktan değil. */
+  background: linear-gradient(165deg, rgba(8,5,16,0.985) 0%, rgba(15,8,26,0.975) 55%, rgba(10,5,15,0.99) 100%);
+  border: 1px solid rgba(168,85,247,0.28);
+  border-radius: 20px;
+  backdrop-filter: blur(22px) saturate(130%);
+  -webkit-backdrop-filter: blur(22px) saturate(130%);
+  box-shadow:
+    0 24px 70px rgba(0,0,0,0.65),
+    0 0 0 1px rgba(245,158,11,0.10),
+    0 0 46px -12px rgba(139,92,246,0.35),
+    0 0 70px -20px rgba(220,38,38,0.18),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.kedi-msg-ai-glass {
+  background: linear-gradient(155deg, rgba(30,16,54,0.75), rgba(10,8,18,0.85));
+  border: 1px solid rgba(139,92,246,0.22);
+  box-shadow: 0 0 22px -10px rgba(139,92,246,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.kedi-msg-user-glass {
+  background: linear-gradient(135deg, rgba(153,27,27,0.55), rgba(88,28,135,0.55));
+  border: 1px solid rgba(239,68,68,0.32);
+  box-shadow: 0 0 20px -10px rgba(220,38,38,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.kedi-input-glass {
+  background: rgba(20,14,34,0.7);
+  border: 1px solid rgba(168,85,247,0.28);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.kedi-input-glass:focus-within {
+  border-color: rgba(196,181,253,0.55);
+  box-shadow: 0 0 0 3px rgba(139,92,246,0.15), 0 0 24px -8px rgba(139,92,246,0.5);
+}
+
+.kedi-chip-glass {
+  background: rgba(24,16,40,0.65);
+  border: 1px solid rgba(245,158,11,0.25);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.kedi-chip-glass:hover {
+  border-color: rgba(251,191,36,0.5);
+  box-shadow: 0 0 18px -6px rgba(245,158,11,0.4);
+}
+
+.kedi-stat-glass {
+  background: rgba(18,12,30,0.6);
+  border: 1px solid rgba(139,92,246,0.18);
+}
+
+/* Dekoratif kickboks ikonları — çok düşük opacity, SADECE CSS transform
+   (mevcut float-slow/medium/fast keyframe'leri reuse edilir, yeni bir
+   animasyon motoru icat edilmedi), WebGL/Canvas/rAF YOK. */
+.kedi-decor {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.07;
+  color: #C4B5FD;
+  z-index: -1;
+}
+.kedi-decor-gold    { color: #FBBF24; opacity: 0.055; }
+.kedi-decor-crimson { color: #F87171; opacity: 0.05; }
+
+@media (max-width: 639px) {
+  /* Mobilde dekoratif katman tamamen kaldırılır — panel zaten dar,
+     okunabilirlik ve mobil performans önceliği (kural 10/12). */
+  .kedi-decor { display: none; }
+}
+
+/* Genel amaçlı dekoratif spor ikon katmanı (V10 — app-genelinde redesign) —
+   .kedi-decor ile AYNI görsel dil/prensip (çok düşük opacity, sadece CSS
+   transform, WebGL/Canvas YOK), ama "Kedi" adına bağlı olmayan, herhangi bir
+   sayfada (SportDecor.tsx üzerinden) kullanılabilecek genel sınıf. */
+.sport-decor {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.06;
+  color: #C4B5FD;
+  z-index: 0;
+}
+.sport-decor-gold    { color: #FBBF24; opacity: 0.05; }
+.sport-decor-crimson { color: #F87171; opacity: 0.045; }
+@media (max-width: 639px) {
+  /* Mobilde varsayılan olarak yarıya indir (SportDecor "density=full" ile
+     zorlanmadıkça) — okunabilirlik/performans önceliği aynı prensip. */
+  .sport-decor-mobile-hide { display: none; }
+}
+
 /* ── Keyframes ─────────────────────────────────────────────── */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(36px); }
@@ -147,6 +248,7 @@
       0 22px 55px rgba(0,0,0,0.55),
       0 0 0 1px rgba(245,158,11,0.09),
       0 0 34px -10px rgba(220,38,38,0.13),
+      0 0 46px -18px rgba(139,92,246,0.16),
       inset 0 1px 0 rgba(255,255,255,0.08),
       inset 0 -26px 40px -30px rgba(0,0,0,0.5);
     backdrop-filter: none;
@@ -163,15 +265,99 @@
     box-shadow:
       0 28px 64px rgba(0,0,0,0.6),
       0 0 0 1px rgba(245,158,11,0.15),
+      0 0 54px -16px rgba(139,92,246,0.24),
       0 0 42px -8px rgba(220,38,38,0.19),
       inset 0 1px 0 rgba(255,255,255,0.12),
       inset 0 -26px 40px -30px rgba(0,0,0,0.45);
+  }
+
+  /* ── Dashboard Faz 1 — Premium Gold kart yüzeyi ───────────────────
+     SADECE /ogrenci (öğrenci dashboard) sayfasının kartları kullanır.
+     .glass/.glass-strong/.glass-dark'a HİÇ dokunulmadı — diğer 80+ sayfa
+     etkilenmez. Kontrollü: 2-3 katman shadow (Faz 2'nin mobil bütçesiyle
+     uyumlu, ayrı bir mobil override'a gerek yok), backdrop-filter yok. */
+  .card-gold {
+    background: linear-gradient(165deg, #131313 0%, #0e0e0f 100%);
+    border: 1px solid rgba(201,169,110,0.22);
+    border-radius: 20px;
+    box-shadow:
+      0 16px 40px rgba(0,0,0,0.5),
+      0 0 0 1px rgba(201,169,110,0.05),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: transform 0.25s cubic-bezier(0.22,1,0.36,1),
+                border-color 0.25s cubic-bezier(0.22,1,0.36,1),
+                box-shadow 0.25s cubic-bezier(0.22,1,0.36,1);
+  }
+  .card-gold:hover {
+    transform: translateY(-2px);
+    border-color: rgba(201,169,110,0.38);
+    box-shadow:
+      0 20px 48px rgba(0,0,0,0.55),
+      0 0 26px -12px rgba(201,169,110,0.28),
+      inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  /* Hero — biraz daha güçlü, tek kart olduğu için maliyeti ihmal edilebilir */
+  .card-gold-hero {
+    background: linear-gradient(160deg, #141412 0%, #0d0d0e 60%, #101010 100%);
+    border: 1px solid rgba(201,169,110,0.3);
+    box-shadow:
+      0 22px 54px rgba(0,0,0,0.55),
+      0 0 40px -16px rgba(201,169,110,0.22),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* ── Randevu Premium Redesign — koyu mor-neon kart yüzeyi ─────────
+     SADECE /ogrenci/randevu sayfasının kartları kullanır (Dashboard/
+     Profil/Seviye'nin .card-gold'una PARALEL ama mor-neon kimlik —
+     kullanıcı bu sayfanın kimliğinin gold değil mor-neon kalmasını
+     istedi). .glass/.glass-strong'a HİÇ dokunulmadı. Kontrollü: 2-3
+     katman shadow, backdrop-filter yok, statik (sürekli animasyon yok
+     — eskiden buradaki gradient-animated sınıfının yerini alıyor). */
+  .card-neon {
+    background: linear-gradient(165deg, #141225 0%, #0d0c14 100%);
+    border: 1px solid rgba(139,92,246,0.26);
+    border-radius: 20px;
+    box-shadow:
+      0 16px 40px rgba(0,0,0,0.5),
+      0 0 32px -16px rgba(139,92,246,0.28),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: transform 0.25s cubic-bezier(0.22,1,0.36,1),
+                border-color 0.25s cubic-bezier(0.22,1,0.36,1),
+                box-shadow 0.25s cubic-bezier(0.22,1,0.36,1);
+  }
+  .card-neon:hover {
+    transform: translateY(-2px);
+    border-color: rgba(139,92,246,0.45);
+    box-shadow:
+      0 20px 48px rgba(0,0,0,0.55),
+      0 0 44px -14px rgba(139,92,246,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  /* Güçlü varyant — tek/öne çıkan kartlar için biraz daha belirgin glow */
+  .card-neon-strong {
+    background: linear-gradient(160deg, #161328 0%, #0c0b13 60%, #100e1c 100%);
+    border: 1px solid rgba(139,92,246,0.34);
+    border-radius: 20px;
+    box-shadow:
+      0 22px 54px rgba(0,0,0,0.55),
+      0 0 46px -16px rgba(139,92,246,0.35),
+      0 0 70px -30px rgba(217,70,239,0.18),
+      inset 0 1px 0 rgba(255,255,255,0.06);
   }
 
   /* Neon glow efektleri */
   .glow-violet  { box-shadow: 0 0 20px rgba(139,92,246,0.5), 0 0 60px rgba(139,92,246,0.15); }
   .glow-magenta { box-shadow: 0 0 20px rgba(217,70,239,0.45), 0 0 60px rgba(217,70,239,0.12); }
   .glow-ring    { box-shadow: 0 0 0 1px rgba(139,92,246,0.4), 0 0 20px rgba(139,92,246,0.3); }
+
+  /* ── Premium ince divider ("MOR ÇİZGİ DAHA İNCE" prensibi) ───────
+     Proje genelinde ~35 yerde inline `borderBottom`/`border-b` olarak
+     tekrarlanan iki renk ailesini (nötr beyaz + mor-tonlu) TEK yerden
+     yöneten paylaşılan sınıf — her zaman 1px, kalın/dikkat dağıtıcı
+     olmayan bir çizgi. Mevcut inline kullanımlar BOZULMADI, bu sadece
+     YENİ kod için (ve bu turda dokunulan birkaç yer için) tek kaynak. */
+  .divider        { border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .divider-violet { border-bottom: 1px solid rgba(139,92,246,0.14); }
 
   .text-gradient-gold { background:linear-gradient(90deg,#8B5CF6,#D946EF,#8B5CF6); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:shimmer-violet 3s linear infinite; }
 
@@ -236,6 +422,54 @@
   .animate-float-slow   { animation-duration: 10s; }
   .animate-float-medium { animation-duration: 7s; }
   .animate-neon-pulse   { animation-duration: 5s; }
+
+  /* ── PERFORMANS AŞAMASI 2 (mobil grafik/animasyon denetimi) ──────
+     .glass/.glass-strong/.glass-dark masaüstünde (@layer utilities,
+     yukarıda) 6 katmanlı box-shadow kullanıyor: dış gölge + 1px altın
+     halka + 34px kırmızı ambient glow + 46px mor ambient glow + üst
+     inset highlight + alt inset vinyet. Bu blok BİLEREK @layer DIŞINDA
+     (Tailwind v4'te layer'sız kurallar her zaman @layer'lı kuralları
+     ezer, sıradan/specificity fark etmeksizin — dosyadaki .glow-violet
+     mobil override'ı da aynı tekniği zaten kullanıyor) — bu yüzden bu
+     kurallar EK bir sınıf/inline style olmadan otomatik olarak Card/
+     StatCard/Modal (app/components/ui/index.tsx, 84+ dosyada kullanılan
+     TEK kaynak) dahil HER .glass yüzeyine uygulanıyor; onlarca component
+     tek tek değiştirilmedi. Mobilde en pahalı iki katman (renkli ambient
+     glow'lar, küçük ekranda zaten güçlükle fark ediliyor) ve alt inset
+     vinyet kaldırıldı — 6 katmandan 3'e indi. Kenarlık/üst highlight/dış
+     gölge (küçültülmüş yarıçapla) kaldığı için kart hâlâ "premium koyu
+     cam" hissi veriyor, sadece düz/sıradan görünmüyor. */
+  .glass, .glass-strong, .glass-dark {
+    box-shadow:
+      0 14px 32px rgba(0,0,0,0.5),
+      0 0 0 1px rgba(245,158,11,0.10),
+      inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  .glass:hover, .glass-strong:hover, .glass-dark:hover {
+    box-shadow:
+      0 16px 36px rgba(0,0,0,0.55),
+      0 0 0 1px rgba(245,158,11,0.16),
+      inset 0 1px 0 rgba(255,255,255,0.10);
+  }
+
+  /* Kedi AI paneli (BlackCatAI + /ogrenci/kedi-ai) — masaüstünde
+     backdrop-filter: blur(22px) saturate(130%) + 5 katmanlı box-shadow.
+     Mobilde blur yarıçapı küçültüldü (GPU maliyeti blur yarıçapıyla
+     birlikte hızla artıyor) ve en pahalı/en az fark edilen kırmızı
+     ambient glow katmanı kaldırıldı — panel hâlâ net şekilde "buzlu cam"
+     görünüyor, Kedi AI'nin görsel kimliği (mor/altın/kırmızı neon)
+     bozulmadı. */
+  .kedi-panel-glass {
+    backdrop-filter: blur(13px) saturate(120%);
+    -webkit-backdrop-filter: blur(13px) saturate(120%);
+    box-shadow:
+      0 16px 40px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(245,158,11,0.10),
+      0 0 30px -14px rgba(139,92,246,0.32),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .kedi-msg-ai-glass   { box-shadow: 0 0 12px -8px rgba(139,92,246,0.32), inset 0 1px 0 rgba(255,255,255,0.05); }
+  .kedi-msg-user-glass { box-shadow: 0 0 12px -8px rgba(220,38,38,0.36), inset 0 1px 0 rgba(255,255,255,0.06); }
 
   /* Scroll sırasında smooth kalması için */
   * { -webkit-overflow-scrolling: touch; }
@@ -336,3 +570,4 @@ img, video, svg { max-width: 100%; height: auto; }
 ::-webkit-scrollbar-track { background: #18181B; }
 ::-webkit-scrollbar-thumb { background: #8B5CF6; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #A855F7; }
+

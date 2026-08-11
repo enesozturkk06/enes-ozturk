@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { RARITY_LABELS, type Badge as BadgeData, type Rarity } from "@/lib/badges";
+import { GOLD_BRIGHT } from "./theme";
 
 const RARITY_ORDER: Record<Rarity, number> = { legendary: 3, epic: 2, rare: 1, common: 0 };
 
@@ -14,7 +15,7 @@ function BadgeShowcase({ badges }: Props) {
   const earned = [...earnedAll].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]).slice(0, 8);
 
   return (
-    <div className="glass-strong rounded-2xl p-5 sm:p-6">
+    <div className="card-gold rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>ROZET VİTRİNİ</h3>
@@ -24,7 +25,7 @@ function BadgeShowcase({ badges }: Props) {
         </div>
         <Link href="/ogrenci/rozetler"
           className="flex items-center gap-1 text-xs tracking-wider transition-colors flex-shrink-0"
-          style={{ color: "rgba(139,92,246,0.6)", fontFamily: "var(--font-label)" }}>
+          style={{ color: GOLD_BRIGHT, fontFamily: "var(--font-label)" }}>
           Tümü <ChevronRight size={13} />
         </Link>
       </div>

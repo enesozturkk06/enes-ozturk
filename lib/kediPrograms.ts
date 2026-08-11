@@ -101,6 +101,8 @@ ${SAFETY_RULES}
 Öğrencinin devamsızlık, performans, seviye, hafıza (sağlık/tercih/alerji) ve önceki program verisi ("analysis" alanında ve beslenme tercihlerinde YORUMLA — devam durumu iyi/kötü mü, performans trendi nasıl, somut öneriler ver):
 ${JSON.stringify(digest)}
 
+Antrenman gün planını (trainingDays) kurarken digest içindeki performance.technicalAverages / last5TechnicalAverages / last30DaysTrend alanlarını MUTLAKA dikkate al: en düşük teknik kategoriye (punch/kick/defense/conditioning) haftalık planda NORMALDEN FAZLA gün/egzersiz zamanı ayır, ama en güçlü kategoriyi programdan TAMAMEN çıkarma (en azından bir günde kısa bir egzersizle koru). technicalAverages null ise (yeterli ders verisi yok) dengeli standart bir dağılım kullan — ağırlıklandırma için veri UYDURMA.
+
 SADECE şu JSON formatında cevap ver, başka HİÇBİR metin yazma (açıklama, giriş cümlesi, markdown kod bloğu işareti EKLEME):
 {
   "trainingDays": [

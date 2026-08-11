@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
   getStudentAppointments, getLessonRecords, createGiftLessonRequest,
   getStudentGiftClaimsForSeason, getStudentXPAdjustments,
-  getStudents, getAllXPAdjustments,
+  getHallOfFameAggregates,
   getStudentMissionCompletions, recordMissionCompletion, getKediMissions,
   createXPAdjustment, getKediMessages, getKediVisionAnalyses, getPublishedKediProgram,
 } from "@/lib/db";
 import {
-  computeStudentMissions, getWeekKey, nearestMission,
+  computeStudentMissions, getWeekKey, nearestMission, computeWeekOverWeekLessons,
   totalMissionXP, type StudentMission, type MissionComputeInput,
 } from "@/lib/kediTasks";
 import { getWaterLog, getWaterLogRange, getHealthProfile, todayDate, type WaterEntry } from "@/lib/health";
-import type { Appointment, LessonRecord, GiftLessonRequest, KediVisionAnalysis, KediProgram, SubscriptionType } from "@/lib/types";
+import { computeTechnicalAverages, compute30DayImprovement } from "@/lib/hallOfFame";
+import type { Appointment, LessonRecord, GiftLessonRequest, KediVisionAnalysis, KediProgram, SubscriptionType, XPAdjustment } from "@/lib/types";
 import {
   computeFullXP, getCurrentSeason, getSeasonLabel, getDaysUntilSeasonEnd,
   sumManualXP, type XPResult, type SeasonXPSummary,
@@ -24,6 +25,7 @@ import {
 import { computeBadges, type Badge } from "@/lib/badges";
 import { getDaysRemaining, isPackageExpired, computePackagePaceProjection } from "@/lib/packageDuration";
 import { SPORT_LABELS, GOAL_LABELS } from "@/lib/kediProgramLabels";
+import { KEDI_NAV_ACTIONS } from "@/lib/kediNavActions";
 import { X, Send, ChevronDown, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -139,6 +141,9 @@ interface StudentContext {
   visionAnalyses:   KediVisionAnalysis[]; // en yeniden en eskiye
   publishedProgram: KediProgram | null;
   recentWaterLogs:  WaterEntry[];         // son 7 gün, tarihe göre artan
+  /* Haftalık Koç Raporu (V6) — zaten Promise.all'da çekiliyordu, sadece
+     ctx'e EKLENDİ (yeni network request YOK), bkz. buildWeeklyCoachReport. */
+  xpAdjustments:    XPAdjustment[];
 }
 
 /* ── Yardımcılar ─────────────────────────────────────────────────── */
@@ -190,6 +195,25 @@ function isUpcomingApt(apt: Appointment): boolean {
   }
 }
 
+/** GERÇEKTEN gerçekleşmiş (status: "tamamlandi") EN SON randevu.
+ *
+ * BUG FIX (prod): `ctx.appointments` (sortedApts) KASITLI OLARAK ARTAN
+ * tarihe göre sıralı tutulur (yaklaşan randevuyu bulmak için "upcoming[0]
+ * = en yakın gelecek randevu" mantığı buna dayanıyor, bkz. buildContext
+ * içindeki `upcoming`). Önceden buradan "son tamamlanan randevu" bulmak
+ * için doğrudan `appointments.filter(status==="tamamlandi")[0]` kullanılıyordu
+ * — ARTAN sıralı bir dizide bu, öğrencinin İLK (en eski) tamamlanan
+ * randevusunu verir, EN SONuncusu değil. Gerçek örnek: öğrencinin ilk dersi
+ * 64 gün önceyse ve en son dersi 3 gün önce olsa bile "64 gündür
+ * gelmedin" gibi YANLIŞ bir bildirim üretiyordu. Bu fonksiyon KENDİ AÇIK
+ * AZALAN sıralamasını yapar — ctx.appointments'ın sıralama yönüne
+ * BAĞIMLI DEĞİLDİR, bu sınıf bug bir daha sessizce geri gelemez. */
+function findLastCompletedAppointment(appointments: Appointment[]): Appointment | undefined {
+  return [...appointments]
+    .filter(a => a.status === "tamamlandi")
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+
 /* ── Açılış karşılaması — anında, yerel olarak üretilir (LLM çağrısı yok) ── */
 
 function buildContext(ctx: StudentContext): string {
@@ -198,7 +222,7 @@ function buildContext(ctx: StudentContext): string {
   const upcoming   = ctx.appointments
     .filter(a => a.status === "onaylandi" && isUpcomingApt(a))
     .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
-  const lastApt    = ctx.appointments.filter(a => a.status === "tamamlandi")[0];
+  const lastApt    = findLastCompletedAppointment(ctx.appointments);
   const daysSince  = lastApt ? differenceInDays(new Date(), parseISO(lastApt.date)) : 999;
   const lowLessons = ctx.subscriptionType !== "monthly" && ctx.remainingLessons <= 4;
   const xp         = ctx.xp;
@@ -302,6 +326,10 @@ interface SmartNotifSeenState {
   inactiveForLessonDate?: string;
   waterGoalShownDate?: string;
   packagePaceShownDate?: string;
+  /* Haftalık Koç Raporu (V6) — ISO hafta anahtarı (getWeekKey()), o hafta
+     zaten gösterildiyse tekrar gösterilmez; yeni hafta başlayınca anahtar
+     değişir ve rapor kendiliğinden yeniden aktif olur. */
+  weeklyReportShownWeek?: string;
 }
 
 function smartNotifSeenKey(studentId: string): string {
@@ -358,6 +386,158 @@ function buildLastLessonAnalysis(record: LessonRecord, firstName: string): strin
       : `Bu seviyeni korumanı öneriyorum.`,
   ];
   return lines.join(" \n");
+}
+
+/* ── Haftalık Koç Raporu (V6) ─────────────────────────────────────────
+ * TAMAMEN deterministik — YENİ bir OpenRouter çağrısı YOK (buildContext/
+ * buildLastLessonAnalysis ile AYNI felsefe). Her bölüm SADECE gerçek veri
+ * varsa yazılır; veri yoksa o bölüm HİÇ görünmez (asla "0" ya da uydurma
+ * bir sayıyla doldurulmaz — madde 3/8). Mevcut paylaşılan fonksiyonlar
+ * (computeTechnicalAverages, compute30DayImprovement, computeWeekOverWeekLessons)
+ * REUSE edilir, hiçbiri burada yeniden yazılmadı — yeni network isteği de
+ * YOK, tamamı zaten ctx-yükleme effect'inde Promise.all ile çekilmiş veri
+ * üzerinde çalışır. */
+
+const TECH_CATEGORY_LABELS = ["Yumruk", "Tekme", "Savunma", "Kondisyon"] as const;
+function techCategoryPairs(t: { punch: number; kick: number; defense: number; conditioning: number }): [string, number][] {
+  return [["Yumruk", t.punch], ["Tekme", t.kick], ["Savunma", t.defense], ["Kondisyon", t.conditioning]];
+}
+// Türkçe iyelik eki doğru bağlanmıyor (naif "+n" yaklaşımı "Kondisyonn",
+// "Yumrukn" gibi hatalı çekimler üretiyordu — ünsüz yumuşaması/ünlü uyumu
+// kurallarına uymuyor). Sadece 4 SABİT kategori adı olduğu için genel bir
+// Türkçe morfoloji motoruna gerek yok — doğru çekimli halleri burada
+// SABİT bir tabloda tutuyoruz (tahmin değil, gerçek dilbilgisi kuralı).
+const TECH_POSSESSIVE: Record<string, string> = {
+  Yumruk: "yumruğun", Tekme: "tekmen", Savunma: "savunman", Kondisyon: "kondisyonun",
+};
+const TECH_POSSESSIVE_ACCUSATIVE: Record<string, string> = {
+  Yumruk: "yumruğunu", Tekme: "tekmeni", Savunma: "savunmanı", Kondisyon: "kondisyonunu",
+};
+
+function buildWeeklyCoachReport(ctx: StudentContext): string | null {
+  // Hiç ders geçmişi yoksa (yepyeni öğrenci) içeriksiz bir rapor göstermenin
+  // anlamı yok — bu durumda rapor adayı hiç oluşturulmaz (aşağıda
+  // pickSmartNotification'da da AYRICA kontrol edilir).
+  if (ctx.completedLessons <= 0 && ctx.records.length === 0) return null;
+
+  // Bu hafta / geçen hafta ders sayımı — paylaşılan fonksiyon (lib/kediAi.ts
+  // server-side digest'i de AYNI fonksiyonu kullanıyor, tek doğruluk kaynağı).
+  const { thisWeek: thisWeekCount, lastWeek: lastWeekCount, hasPriorHistory } = computeWeekOverWeekLessons(ctx.appointments);
+
+  const sections: string[] = ["🐾 **Kedi AI**\nHaftalık Koç Raporun"];
+
+  // 🥊 Antrenman — bu hafta kaç GERÇEK tamamlanan ders var (0 dahil gerçek).
+  let antrenman = `🥊 **Antrenman**\n${thisWeekCount} ders`;
+  if (hasPriorHistory) {
+    const diff = thisWeekCount - lastWeekCount;
+    if (diff > 0) antrenman += ` — geçen haftaya göre ${diff} ders daha fazla.`;
+    else if (diff < 0) antrenman += ` — geçen haftaya göre ${Math.abs(diff)} ders daha az.`;
+    else antrenman += ` — geçen haftayla aynı tempo.`;
+  }
+  sections.push(antrenman);
+
+  // Teknik ortalamalar (son 5) — en az 3 ders kaydı yoksa "güçlü/zayıf yön"
+  // gibi bir iddia istatistiksel olarak anlamsız kalır (madde 3).
+  const enoughTechData = ctx.records.length >= 3;
+  const last5 = enoughTechData ? computeTechnicalAverages(ctx.records, 5) : null;
+  const catPairs = last5 ? techCategoryPairs(last5) : [];
+
+  if (!enoughTechData) {
+    sections.push("Henüz yeterli geçmiş verisi oluşmadığı için uzun vadeli gelişimini değerlendiremiyorum.");
+  } else if (last5) {
+    // 📈 Gelişim — önce KATEGORİ bazlı 30 gün karşılaştırması dene (iki ayrı
+    // 30 günlük pencerede en az 1'er kayıt varsa, computeTechnicalAverages
+    // YİNE aynı fonksiyon, sadece iki farklı alt-kümede çağrılıyor — yeni
+    // bir hesaplama fonksiyonu YAZILMADI). Yeterli veri yoksa
+    // compute30DayImprovement'ın (zaten var olan, admin/profil/seviye
+    // sayfalarında kullanılan) AGREGE sonucuna düş.
+    const now = new Date();
+    const thirtyAgo = new Date(now); thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+    const sixtyAgo = new Date(now); sixtyAgo.setDate(sixtyAgo.getDate() - 60);
+    const inWin = (r: LessonRecord, from: Date, to: Date) => {
+      try { const d = parseISO(r.date); return d >= from && d < to; } catch { return false; }
+    };
+    const recentWin = ctx.records.filter(r => inWin(r, thirtyAgo, now));
+    const priorWin = ctx.records.filter(r => inWin(r, sixtyAgo, thirtyAgo));
+    const recentTech = recentWin.length > 0 ? computeTechnicalAverages(recentWin, recentWin.length) : null;
+    const priorTech = priorWin.length > 0 ? computeTechnicalAverages(priorWin, priorWin.length) : null;
+
+    let gelisimLine: string | null = null;
+    if (recentTech && priorTech) {
+      const deltas = TECH_CATEGORY_LABELS.map(label => {
+        const key = label === "Yumruk" ? "punch" : label === "Tekme" ? "kick" : label === "Savunma" ? "defense" : "conditioning";
+        return { label, delta: recentTech[key] - priorTech[key] };
+      });
+      const rising = [...deltas].filter(d => d.delta >= 1).sort((a, b) => b.delta - a.delta);
+      const falling = [...deltas].filter(d => d.delta <= -1).sort((a, b) => a.delta - b.delta);
+      const flat = deltas.filter(d => Math.abs(d.delta) < 1);
+      const parts: string[] = [];
+      if (rising[0]) parts.push(`son 30 günde ${TECH_POSSESSIVE[rising[0].label]} yükseliyor`);
+      if (falling[0]) parts.push(`${TECH_POSSESSIVE[falling[0].label]} geride kalıyor`);
+      else if (rising[0] && flat.some(f => f.label !== rising[0].label)) {
+        const flatOther = flat.find(f => f.label !== rising[0]!.label);
+        if (flatOther) parts.push(`${TECH_POSSESSIVE[flatOther.label]} aynı seviyede kaldı`);
+      }
+      if (parts.length > 0) gelisimLine = parts.join(", ") + ".";
+    }
+    if (!gelisimLine) {
+      const trend = compute30DayImprovement(ctx.records);
+      if (trend.available) {
+        const dir = trend.pct > 1 ? "yükseldi" : trend.pct < -1 ? "düştü" : "aynı kaldı";
+        gelisimLine = `Son 30 günde genel teknik ortalaman ${trend.pastAvg.toFixed(1)}/10 → ${trend.recentAvg.toFixed(1)}/10 (${dir}).`;
+      }
+    }
+    if (gelisimLine) sections.push(`📈 **Gelişim**\n${gelisimLine}`);
+
+    // 🏆 En güçlü yönün / 🎯 Öncelikli gelişim alanın (son 5 ders ortalaması)
+    const sortedCats = [...catPairs].sort((a, b) => b[1] - a[1]);
+    const strongest = sortedCats[0];
+    const weakest = sortedCats[sortedCats.length - 1];
+    sections.push(`🏆 **En güçlü yönün**\n${strongest[0]} (son ${last5.sampleSize} ders ortalaması ${strongest[1].toFixed(1)}/10).`);
+    if (weakest[1] < strongest[1]) {
+      sections.push(`🎯 **Öncelikli gelişim alanın**\n${weakest[0]} (${weakest[1].toFixed(1)}/10) — bu alana biraz daha zaman ayırmanı öneririm.`);
+    }
+  }
+
+  // 💧 Su — sadece gerçekten loglanmış gün varsa.
+  if (ctx.recentWaterLogs.length > 0) {
+    const avgGlasses = ctx.recentWaterLogs.reduce((s, w) => s + w.glasses, 0) / ctx.recentWaterLogs.length;
+    const daysGoalMet = ctx.recentWaterLogs.filter(w => w.glasses >= ctx.waterTarget).length;
+    sections.push(`💧 **Su**\nSon ${ctx.recentWaterLogs.length} günde ortalama ${avgGlasses.toFixed(1)}/${ctx.waterTarget} bardak — ${daysGoalMet} gün hedefi tuttun.`);
+  }
+
+  // 🔥 Bu haftanın değerlendirmesi — birden fazla GERÇEK sinyali birleştirir
+  // (teknik güçlü/zayıf yön + devamlılık) — sadece anlamlı bir şey varsa.
+  const evalParts: string[] = [];
+  if (enoughTechData && catPairs.length > 0) {
+    const sortedCats = [...catPairs].sort((a, b) => b[1] - a[1]);
+    const strongest = sortedCats[0];
+    const weakest = sortedCats[sortedCats.length - 1];
+    if (weakest[1] < strongest[1] - 1) {
+      evalParts.push(`${TECH_POSSESSIVE[strongest[0]]} güçlü ancak ${TECH_POSSESSIVE[weakest[0]]} geride kalıyor`);
+    }
+  }
+  if (hasPriorHistory) {
+    const diff = thisWeekCount - lastWeekCount;
+    if (diff > 0) evalParts.push(`bu hafta ${thisWeekCount} ders yaptın, geçen haftaya göre ${diff} ders daha fazla`);
+    else if (thisWeekCount === 0) evalParts.push(`bu hafta hiç ders yapmadın`);
+  }
+  if (evalParts.length > 0) {
+    sections.push(`🔥 **Bu haftanın değerlendirmesi**\n${evalParts.join(", ")}.`);
+  }
+
+  // 🎯 Gelecek haftanın hedefi — en zayıf kategoriden MANTIKLI, KESİN BAŞARI
+  // VAADİ OLMAYAN bir hedef (madde 5).
+  if (enoughTechData && catPairs.length > 0) {
+    const weakest = [...catPairs].sort((a, b) => a[1] - b[1])[0];
+    const target = Math.min(10, Math.round(weakest[1]) + 1);
+    sections.push(`🎯 **Gelecek haftanın hedefi**\nBu haftanın hedefi ${TECH_POSSESSIVE_ACCUSATIVE[weakest[0]]} ${target} seviyesine taşımaya çalışmak — küçük, istikrarlı adımlarla oraya yaklaşabilirsin.`);
+  }
+
+  // Sadece başlık + "Antrenman" varsa (hiçbir ek sinyal yoksa) rapor
+  // vermeye değmez — ama Antrenman HER ZAMAN gerçek olduğu için minimum
+  // 2 bölüm (başlık+antrenman) her zaman geçerli bir rapordur.
+  return sections.join("\n\n");
 }
 
 /** Tüm aday bildirimleri hesaplar, henüz GÖRÜLMEMİŞ olanları filtreler,
@@ -476,8 +656,10 @@ function pickSmartNotification(ctx: StudentContext, seen: SmartNotifSeenState): 
 
   // Uzun süredir gelmedi (10-14 gün) — "streak kimliği" son tamamlanan ders
   // tarihi: aynı boşluk için tekrar gösterilmez, YENİ bir ders + YENİ bir
-  // boşluk oluşursa tekrar aktif olur.
-  const lastCompleted = ctx.appointments.filter(a => a.status === "tamamlandi")[0];
+  // boşluk oluşursa tekrar aktif olur. Gelecekteki (onaylandi) ve iptal
+  // edilen (iptal) randevular BİLEREK hariç — sadece GERÇEKTEN gerçekleşmiş
+  // (tamamlandi) son ders sayılır (bkz. findLastCompletedAppointment).
+  const lastCompleted = findLastCompletedAppointment(ctx.appointments);
   if (lastCompleted) {
     const daysSince = differenceInDays(new Date(), parseISO(lastCompleted.date));
     if (daysSince >= 10 && daysSince <= 14 && seen.inactiveForLessonDate !== lastCompleted.date) {
@@ -522,6 +704,23 @@ function pickSmartNotification(ctx: StudentContext, seen: SmartNotifSeenState): 
     }
   }
 
+  // Haftalık Koç Raporu (V6) — bu hafta zaten gösterilmediyse VE öğrencinin
+  // gösterilecek gerçek bir geçmişi varsa. En düşük öncelik — daha acil
+  // (paket/rozet/seviye/vision/program/inaktif) olaylar varsa önce onlar
+  // gösterilir, kuyruk boşalınca rapor sırası gelir.
+  const weekKey = getWeekKey();
+  if (seen.weeklyReportShownWeek !== weekKey) {
+    const report = buildWeeklyCoachReport(ctx);
+    if (report) {
+      candidates.push({
+        priority: 12,
+        text: report,
+        links: [{ label: "Gelişim Raporu", href: "/ogrenci/gelisim" }],
+        markSeen: s => ({ ...s, weeklyReportShownWeek: weekKey }),
+      });
+    }
+  }
+
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => a.priority - b.priority);
   return candidates[0];
@@ -545,11 +744,11 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
         className="flex gap-2.5 items-end"
       >
         <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5"
-          style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)" }}>
+          style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)", boxShadow: "0 0 0 1px rgba(245,158,11,0.14)" }}>
           <KediAvatar size={20} />
         </div>
         <div className="max-w-[85%] flex flex-col gap-2 items-start">
-          <div className="glass px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
+          <div className="kedi-msg-ai-glass px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
             style={{ color: "rgba(255,255,255,0.88)", fontFamily: "var(--font-label)", borderRadius: "0 14px 14px 14px" }}>
             {parsed}
           </div>
@@ -641,7 +840,7 @@ function MsgBubble({ msg, onNavigate }: { msg: Msg; onNavigate: () => void }) {
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       className="flex justify-end"
     >
-      <div className="glass px-3.5 py-2.5 text-sm leading-relaxed"
+      <div className="kedi-msg-user-glass px-3.5 py-2.5 text-sm leading-relaxed"
         style={{ color: "rgba(255,255,255,0.9)", fontFamily: "var(--font-label)", borderRadius: "14px 0 14px 14px" }}>
         {msg.text}
       </div>
@@ -656,10 +855,11 @@ function TypingIndicator() {
     <motion.div initial={{ opacity:0, y:4 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:4 }}
       className="flex items-end gap-2.5">
       <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-        style={{ background:"rgba(139,92,246,0.15)", border:"1px solid rgba(139,92,246,0.35)" }}>
+        style={{ background:"rgba(139,92,246,0.15)", border:"1px solid rgba(139,92,246,0.35)", boxShadow: "0 0 0 1px rgba(245,158,11,0.14)" }}>
         <KediAvatar size={20} state="thinking" />
       </div>
-      <div className="glass px-4 py-3 flex items-center gap-1" style={{ borderRadius:"0 14px 14px 14px" }}>
+      <div className="kedi-msg-ai-glass px-4 py-3 flex items-center gap-1.5" style={{ borderRadius:"0 14px 14px 14px" }}>
+        <span className="text-[11px]" style={{ color: "rgba(196,181,253,0.6)" }}>🐾</span>
         {[0,1,2].map(i => (
           <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background:"var(--color-violet)" }}
             animate={{ y:[0,-4,0] }} transition={{ duration:0.7, repeat:Infinity, delay:i*0.15 }} />
@@ -669,12 +869,90 @@ function TypingIndicator() {
   );
 }
 
+/* ── Premium dekoratif arka plan (V9 UI) ─────────────────────────────
+ * Sadece CSS transform/opacity (mevcut animate-float-* keyframe'leri
+ * reuse edilir) — WebGL/Canvas/rAF YOK, tek bir absolute katman,
+ * pointer-events:none. Mobilde .kedi-decor CSS'te display:none olur
+ * (bkz. globals.css @media max-width:639px) — burada AYRICA JS ile
+ * cihaz kontrolü yapmaya gerek yok. */
+function KediPanelDecor() {
+  return (
+    <div aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden", borderRadius: "inherit" }}>
+      <svg className="kedi-decor animate-float-slow" style={{ top: "6%", left: "-6%", width: 64, height: 64 }}
+        viewBox="0 0 24 24" fill="currentColor">
+        <path d="M7 2a3 3 0 0 0-3 3v4.5A5.5 5.5 0 0 0 9.5 15H10v3a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-5a6 6 0 0 0-6-6h-1V5a3 3 0 0 0-3-3H7z" />
+      </svg>
+      <svg className="kedi-decor kedi-decor-crimson animate-float-medium delay-300" style={{ top: "26%", right: "-8%", width: 52, height: 52 }}
+        viewBox="0 0 24 24" fill="currentColor">
+        <rect x="9" y="2" width="6" height="3" rx="1" /><path d="M8 6h8l1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L8 6z" />
+      </svg>
+      <svg className="kedi-decor kedi-decor-gold animate-float-fast delay-700" style={{ bottom: "32%", left: "-4%", width: 46, height: 46 }}
+        viewBox="0 0 24 24" fill="currentColor">
+        <rect x="2" y="9" width="3" height="6" rx="1" /><rect x="19" y="9" width="3" height="6" rx="1" />
+        <rect x="5" y="10" width="2" height="4" /><rect x="17" y="10" width="2" height="4" /><rect x="7" y="11" width="10" height="2" />
+      </svg>
+      <svg className="kedi-decor animate-float-medium delay-500" style={{ bottom: "8%", right: "-6%", width: 58, height: 58 }}
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M2 6c4 0 4 4 8 4s4-4 8-4M2 12c4 0 4 4 8 4s4-4 8-4M2 18c4 0 4 4 8 4s4-4 8-4" />
+      </svg>
+      <svg className="kedi-decor kedi-decor-gold animate-float-slow delay-1000" style={{ top: "50%", left: "36%", width: 38, height: 38 }}
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="6" cy="6" r="2" /><circle cx="18" cy="6" r="2" /><path d="M6 8c-2 4 2 12 6 12s8-8 6-12" />
+      </svg>
+    </div>
+  );
+}
+
+/* ── Mini bağlam istatistik şeridi (V9 UI) — SADECE mevcut ctx verisi,
+ * yeni sorgu/DB isteği YOK. Masaüstünde küçük, mobilde tamamen gizli. */
+function KediStatStrip({ ctx }: { ctx: StudentContext }) {
+  const lastScore = ctx.records[0]?.overall;
+  const stats: { label: string; value: string }[] = [
+    { label: "Kalan Ders", value: ctx.subscriptionType === "monthly" ? "∞" : String(ctx.remainingLessons) },
+    { label: "Paket", value: ctx.packageDaysRemaining !== null ? `${ctx.packageDaysRemaining}g` : "—" },
+    { label: "Seviye", value: ctx.xp.level.current.name },
+    { label: "XP", value: ctx.xp.breakdown.total.toLocaleString() },
+    { label: "Son Ders", value: lastScore !== undefined ? `${lastScore}/10` : "—" },
+  ];
+  return (
+    <div className="hidden sm:flex relative z-10 flex-shrink-0 gap-1.5 px-4 pt-2.5 pb-1 overflow-x-auto">
+      {stats.map(s => (
+        <div key={s.label} className="kedi-stat-glass rounded-lg px-2.5 py-1.5 flex-shrink-0" style={{ minWidth: 58 }}>
+          <div className="text-[9px] uppercase tracking-wider" style={{ color: "rgba(196,181,253,0.55)", fontFamily: "var(--font-label)" }}>
+            {s.label}
+          </div>
+          <div className="text-[12px] font-semibold" style={{ color: "#F5F3FF", fontFamily: "var(--font-label)" }}>
+            {s.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── Ana bileşen ─────────────────────────────────────────────────── */
 
 export default function BlackCatAI() {
   const { student }         = useAuth();
   const [open, setOpen]         = useState(false);
   const [msgs, setMsgs]         = useState<Msg[]>([]);
+  /* PERF (Faz 3 profillemesinde bulundu): `msgs` (DB geçmişi + oturum boyu
+     biriken yeni mesajlar) sınırsız büyüyor — uzun sohbetlerde (40+ mesaj)
+     panel açıkken ~1400 DOM node'a çıkıyordu. `msgs`'in KENDİSİ (veri, AI
+     context, mood/history mantığı) DEĞİŞMEDİ — sadece EKRANA basılan alt
+     küme kontrol altına alındı. `visibleCount` başlangıçta son 20 mesajı
+     gösterir; "Önceki mesajları göster" büyütür. Yeni mesaj geldikçe
+     `visibleMsgs = msgs.slice(-visibleCount)` otomatik olarak en yeni
+     `visibleCount` mesajı gösterir (pencere kayar) — ayrı bir sınırlama
+     mantığı gerekmiyor. AI'nin hafızası/context'i bundan ETKİLENMEZ: sunucu
+     tarafı (app/api/kedi-ai/chat/route.ts) LLM'e gönderilecek geçmişi KENDİ
+     ayrı getKediMessages(...,20) çağrısıyla DB'den taze çekiyor, bu client
+     state'e hiç bakmıyor. */
+  const [visibleCount, setVisibleCount] = useState(20);
+  const visibleMsgs = useMemo(
+    () => (msgs.length > visibleCount ? msgs.slice(-visibleCount) : msgs),
+    [msgs, visibleCount]
+  );
   const [input, setInput]       = useState("");
   const [typing, setTyping]     = useState(false);
   const [loaded, setLoaded]     = useState(false);
@@ -804,14 +1082,16 @@ export default function BlackCatAI() {
       getHealthProfile(student.id).catch(() => null),
       getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
       getStudentXPAdjustments(student.id).catch(() => []),
-      getStudents().catch(() => []),
-      getAllXPAdjustments().catch(() => []),
+      // PERF (denetimde bulundu): TÜM salonun students(*)+xp_adjustments(*)
+      // satırlarını çekmek yerine (sadece sıralama için gereksiz büyük veri),
+      // sadece 2 kolonluk minimal aggregate — bkz. lib/db.ts yorum notu.
+      getHallOfFameAggregates().catch(() => ({ students: [], adjustments: [] })),
       getStudentMissionCompletions(student.id).catch(() => new Set<string>()),
       getKediMissions(student.id).catch(() => []),
       getKediVisionAnalyses(student.id).catch(() => []),
       getPublishedKediProgram(student.id).catch(() => null),
       getWaterLogRange(student.id, 7).catch(() => []),
-    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments, allStudents, allAdjustments, completions, customMissions, visionAnalyses, publishedProgram, recentWaterLogs]) => {
+    ]).then(([apts, recs, water, health, giftClaims, xpAdjustments, hallOfFameData, completions, customMissions, visionAnalyses, publishedProgram, recentWaterLogs]) => {
       const sorted      = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const sortedApts  = [...apts].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
       const summary     = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
@@ -835,10 +1115,16 @@ export default function BlackCatAI() {
       const earnedBadges = badges.filter(b => b.earned);
       const nextBadge    = findNextBadge(badges);
 
-      /* Onur Listesi (Hall of Fame) sırası — heuristic: tamamlanan ders × 100 + manuel XP */
-      const hallEntries = allStudents
+      /* Onur Listesi (Hall of Fame) sırası — heuristic: tamamlanan ders × 100 + manuel XP.
+         Hesaplama mantığı DEĞİŞMEDİ, sadece girdi (hallOfFameData) artık
+         select(*) yerine sadece 2 kolonluk minimal bir aggregate (bkz.
+         lib/db.ts getHallOfFameAggregates) — bu yüzden sumManualXP (tam
+         XPAdjustment tipini bekliyor) yerine burada doğrudan toplanıyor. */
+      const hallEntries = hallOfFameData.students
         .map(s => {
-          const manualTotal = sumManualXP(allAdjustments.filter(a => a.studentId === s.id));
+          const manualTotal = hallOfFameData.adjustments
+            .filter(a => a.studentId === s.id)
+            .reduce((sum, a) => sum + a.amount, 0);
           const approxXP    = Math.max(0, s.completedLessons * 100 + manualTotal);
           return { id: s.id, xp: approxXP };
         })
@@ -927,6 +1213,7 @@ export default function BlackCatAI() {
         visionAnalyses,
         publishedProgram,
         recentWaterLogs,
+        xpAdjustments,
       };
 
       setCtx(ctx);
@@ -1015,6 +1302,7 @@ export default function BlackCatAI() {
      Sunucu tarafı /api/kedi-ai/chat, öğrencinin tüm verisinden bir "digest"
      kurup system prompt'a gömüyor; burada sadece metni akıtıyoruz. */
   const KEDI_MOOD_DELIM = " KEDI_MOOD::";
+  const KEDI_NAV_DELIM = " KEDI_NAV::";
   const sendMessage = useCallback((overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || !ctx) return;
@@ -1044,14 +1332,20 @@ export default function BlackCatAI() {
           if (done) break;
           raw += decoder.decode(value, { stream: true });
           if (firstChunk) { setTyping(false); firstChunk = false; }
-          const display = raw.split(KEDI_MOOD_DELIM)[0];
+          const display = raw.split(KEDI_MOOD_DELIM)[0].split(KEDI_NAV_DELIM)[0];
           setMsgs(prev => prev.map(m => m.id === aiMsgId ? { ...m, text: display } : m));
         }
 
-        const [finalText, moodPart] = raw.split(KEDI_MOOD_DELIM);
+        const [beforeMood, moodPart] = raw.split(KEDI_MOOD_DELIM);
+        const [finalText, navKey] = beforeMood.split(KEDI_NAV_DELIM);
         const finalMood = (moodPart?.trim() as KediMood) || null;
         const cleanText = finalText.trim();
-        setMsgs(prev => prev.map(m => m.id === aiMsgId ? { ...m, text: cleanText } : m));
+        // navKey server tarafında (lib/kediNavActions.ts whitelist'i) ZATEN
+        // doğrulandı — burada sadece etikete çevriliyor, geçersiz/tanınmayan
+        // bir anahtar gelirse (olmamalı ama savunmacı) link eklenmez.
+        const navAction = navKey?.trim() ? KEDI_NAV_ACTIONS[navKey.trim()] : undefined;
+        const links = navAction ? [{ label: navAction.label, href: navAction.href }] : undefined;
+        setMsgs(prev => prev.map(m => m.id === aiMsgId ? { ...m, text: cleanText, links } : m));
         if (finalMood) setMood(finalMood);
         setTyping(false);
         if (voice.voiceOut) {
@@ -1194,18 +1488,32 @@ export default function BlackCatAI() {
               animate={{ opacity:1, y:0, scale:1, filter:"blur(0px)" }}
               exit={{ opacity:0, y:24, scale:0.96, filter:"blur(4px)" }}
               transition={{ type:"spring", stiffness:320, damping:28 }}
-              className="fixed flex flex-col kara-panel glass-strong"
-              style={{ zIndex: 55 }}
+              className="fixed flex flex-col kara-panel kedi-panel-glass"
+              style={{
+                zIndex: 55,
+                // BUG FIX: `.kara-panel`'in `height:70dvh` kuralı sabitti —
+                // küçültüldüğünde ("Mesaj alanı + input" bloğu {!minimized &&...}
+                // ile unmount olsa bile) DIŞ panel aynı tam yüksekliği koruyup
+                // header altında boş, içeriksiz bir cam alan bırakıyordu
+                // (canlı ekran görüntüsüyle doğrulandı). Minimized'ken inline
+                // stil devreye girip header'ın kendi doğal yüksekliğine
+                // küçültüyor — inline stil her zaman class'tan önceliklidir,
+                // .kara-panel'in kendisi (diğer state'te AYNEN) değişmedi.
+                ...(minimized ? { height: "auto", maxHeight: "none" } : {}),
+              }}
             >
-              {/* Üst akan neon şerit */}
-              <div className="absolute top-0 left-0 right-0 h-[3px] flex-shrink-0 gradient-animated gradient-violet-pink-orange rounded-t-2xl" />
+              <KediPanelDecor />
+
+              {/* Üst akan neon şerit — ince, premium (kalın/dikkat dağıtıcı olmasın) */}
+              <div className="absolute top-0 left-0 right-0 h-px flex-shrink-0 gradient-animated gradient-violet-pink-orange rounded-t-2xl"
+                style={{ opacity: 0.55 }} />
 
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+              <div className="relative z-10 flex items-center justify-between px-4 py-3 flex-shrink-0"
                 style={{ borderBottom:"1px solid rgba(139,92,246,0.15)" }}>
                 <div className="flex items-center gap-2.5">
                   <div className="relative w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background:"rgba(255,255,255,0.9)", border:"1px solid rgba(139,92,246,0.3)" }}>
+                    style={{ background:"rgba(255,255,255,0.9)", border:"1px solid rgba(245,158,11,0.4)", boxShadow: "0 0 0 1px rgba(139,92,246,0.35), 0 0 14px -4px rgba(245,158,11,0.5)" }}>
                     {/* Sinematik giriş — panel açılınca bir kerelik ışık patlaması */}
                     <motion.div
                       aria-hidden
@@ -1225,10 +1533,13 @@ export default function BlackCatAI() {
                       style={{ color:"#C4B5FD", fontFamily:"var(--font-display)", letterSpacing:"0.12em" }}>
                       KEDİ AI
                     </div>
+                    <div className="text-[10px] mb-0.5" style={{ color: "rgba(196,181,253,0.45)", fontFamily: "var(--font-label)" }}>
+                      Dijital Antrenör Koçu
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--color-success)" }} />
                       <span className="text-[10px]" style={{ color:"rgba(255,255,255,0.3)", fontFamily:"var(--font-label)" }}>
-                        Kişisel Antrenör Koçun
+                        Dijital Antrenör Aktif
                       </span>
                     </div>
                   </motion.div>
@@ -1266,28 +1577,45 @@ export default function BlackCatAI() {
               {/* Mesaj alanı + input */}
               {!minimized && (
                 <>
+                  {ctx && <KediStatStrip ctx={ctx} />}
+
                   <div
-                    className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+                    className="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-3"
                     style={{ overscrollBehavior:"contain", WebkitOverflowScrolling:"touch" } as React.CSSProperties}
                   >
+                    {msgs.length > visibleCount && (
+                      <button
+                        onClick={() => setVisibleCount(c => c + 20)}
+                        className="kedi-chip-glass w-full text-[11px] py-2 rounded-lg text-center transition-colors"
+                        style={{ fontFamily: "var(--font-label)", color: "rgba(196,181,253,0.75)" }}
+                      >
+                        ↑ Önceki mesajları göster ({msgs.length - visibleCount} daha)
+                      </button>
+                    )}
                     <AnimatePresence initial={false}>
-                      {msgs.map(m => <MsgBubble key={m.id} msg={m} onNavigate={() => setOpen(false)} />)}
+                      {visibleMsgs.map(m => <MsgBubble key={m.id} msg={m} onNavigate={() => setOpen(false)} />)}
                       {typing && <TypingIndicator key="typing" />}
                     </AnimatePresence>
                     <div ref={bottomRef} />
                   </div>
 
-                  {/* Hızlı sorular */}
+                  {/* Hızlı aksiyonlar */}
                   {msgs.length <= 1 && (
-                    <div className="flex-shrink-0 px-4 pb-2 flex gap-2 flex-wrap">
-                      {["Görevlerim neler?", "Bugün ne antrenman yapayım?", "Randevum ne zaman?", "XP durumum"].map(q => (
+                    <div className="relative z-10 flex-shrink-0 px-4 pb-2 flex gap-2 flex-wrap">
+                      {[
+                        { icon: "🥊", label: "Antrenman Planım", q: "Bugün ne çalışayım?" },
+                        { icon: "🥗", label: "Beslenme", q: "Bugün ne yemeliyim?" },
+                        { icon: "📈", label: "Gelişim Analizi", q: "Son 10 dersimde nasıl gelişmişim?" },
+                        { icon: "📋", label: "Son Dersim", q: "Son dersim nasıldı?" },
+                        { icon: "🎯", label: "Hedeflerim", q: "Görevlerim neler?" },
+                      ].map(chip => (
                         <button
-                          key={q}
-                          onClick={() => sendMessage(q)}
-                          className="glass text-[10px] px-2.5 py-1.5 rounded-lg transition-transform duration-200 hover:scale-[1.04] active:scale-95"
-                          style={{ fontFamily: "var(--font-label)", color: "#A78BFA" }}
+                          key={chip.label}
+                          onClick={() => sendMessage(chip.q)}
+                          className="kedi-chip-glass text-[10px] px-2.5 py-1.5 rounded-lg transition-transform duration-200 hover:scale-[1.04] active:scale-95"
+                          style={{ fontFamily: "var(--font-label)", color: "#E9D5FF" }}
                         >
-                          {q}
+                          <span className="mr-1">{chip.icon}</span>{chip.label}
                         </button>
                       ))}
                     </div>
@@ -1295,13 +1623,13 @@ export default function BlackCatAI() {
 
                   {/* Sesli komut hata mesajı */}
                   {voice.voiceError && (
-                    <div className="flex-shrink-0 px-4 pb-1.5 text-[11px]" style={{ color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
+                    <div className="relative z-10 flex-shrink-0 px-4 pb-1.5 text-[11px]" style={{ color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
                       ⚠️ {voice.voiceError}
                     </div>
                   )}
 
                   {/* Input */}
-                  <div className="flex-shrink-0 flex items-center gap-2 px-3 py-3"
+                  <div className="relative z-10 flex-shrink-0 flex items-center gap-2 px-3 py-3"
                     style={{ borderTop:"1px solid rgba(139,92,246,0.15)" }}>
 
                     {/* Mikrofon butonu */}
@@ -1328,7 +1656,7 @@ export default function BlackCatAI() {
                       onChange={e => setInput(e.target.value)}
                       onKeyDown={handleKey}
                       placeholder={voice.listening ? "Dinleniyor…" : "Bir şey sor…"}
-                      className="glass flex-1 outline-none text-sm text-white placeholder-white/20 px-3.5 py-2 rounded-full"
+                      className="kedi-input-glass flex-1 outline-none text-sm text-white placeholder-white/20 px-3.5 py-2 rounded-full"
                       style={{ fontFamily:"var(--font-label)" }}
                     />
                     <button

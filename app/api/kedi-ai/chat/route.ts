@@ -2,8 +2,9 @@ import { NextRequest } from "next/server";
 import { getKediMessages, getKediMemories, saveKediMessage } from "@/lib/db";
 import {
   buildStudentDigest, buildAdminDigest, buildSystemPrompt,
-  extractMood, extractMemoryDelta, applyMemoryDelta, formatHistoryForPrompt,
+  extractMood, extractMemoryDelta, extractNavDelta, applyMemoryDelta, formatHistoryForPrompt,
 } from "@/lib/kediAi";
+import { KEDI_NAV_ACTIONS } from "@/lib/kediNavActions";
 import { hasOpenRouterKey, streamOpenRouterChat, type OpenRouterMessage } from "@/lib/openrouter";
 import { KEDI_AI_MAX_TOKENS, OPENROUTER_TEXT_MODELS } from "@/lib/kediAiConfig";
 import type { KediAiActorType } from "@/lib/types";
@@ -13,6 +14,11 @@ import type { KediAiActorType } from "@/lib/types";
 // olarak asla oluşmayacak bir dizi olduğu için güvenle son parça olarak
 // akıtılabilir.
 export const KEDI_MOOD_DELIM = " KEDI_MOOD::";
+// Nav işaretleyici ayracı — KEDI_MOOD_DELIM İLE AYNI mekanizma (görünmez,
+// modelde doğal oluşmaz), mood delim'den ÖNCE eklenir. Client önce mood'u
+// (en sonda), sonra kalan metni nav delim'e göre ayırır — nav yoksa split
+// tek elemanlı dizi döner, mevcut davranış hiç değişmez (geriye uyumlu).
+export const KEDI_NAV_DELIM = " KEDI_NAV::";
 
 function jsonError(message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
@@ -62,8 +68,18 @@ export async function POST(req: NextRequest) {
   // karakterlik bir tampon kullanmak KISA cevaplarda (700'den kısa çoğu
   // sohbet turu) akışı tamamen öldürürdü, bu yaklaşım öyle bir regresyona
   // yol açmadan güvenliği koruyor.
+  // BUG FIX (V8 Live QA'da kanıtlandı): `lastIndexOf` kullanılıyordu — bu,
+  // birden fazla ardışık işaretleyici (nav+mood, memory+mood, nav+memory+mood)
+  // aynı turda geldiğinde İLK işaretleyicinin (ör. <!--nav:profil-->), SONRAKİ
+  // işaretleyici (<!--mood:...-->) akışa girdiği anda "serbest bırakılıp"
+  // kullanıcıya DÜZ METİN olarak sızmasına yol açıyordu (canlı testte
+  // "Profilini açıyorum. <!--nav:profil-->" şeklinde görüldü, doğrulandı).
+  // Yukarıdaki yorum zaten "İLK '<!--' görüldüğü andan itibaren hiçbir şey
+  // akıtılmaz" diyordu — `indexOf` (ilk oluşum) bu açıklanan davranışla
+  // eşleşen doğru fonksiyon; tek işaretleyicili (çoğunluk) turlarda davranış
+  // birebir aynı kalır (tek oluşumda ilk/son fark etmez).
   const findHoldPoint = (text: string): number => {
-    const idx = text.lastIndexOf("<!--");
+    const idx = text.indexOf("<!--");
     return idx === -1 ? text.length : idx;
   };
 
@@ -117,16 +133,19 @@ export async function POST(req: NextRequest) {
         return;
       }
 
-      // Sırasıyla: önce mood (her zaman en sonda), sonra hafıza işaretleyicisi
-      // (mood'dan hemen önce) ayıklanır — bkz. buildSystemPrompt'taki sıra
-      // talimatı. `held` içindeki extraction akışa gönderilecek son parçayı,
-      // `fullText` üzerindeki extraction ise DB'ye kaydedilecek tam metni verir.
+      // Sırasıyla: önce mood (her zaman en sonda), sonra hafıza işaretleyicisi,
+      // sonra nav işaretleyicisi ayıklanır — bkz. buildSystemPrompt'taki sıra
+      // talimatı (nav → memory → mood eklenir, buradan TERSTEN okunur).
+      // `held` içindeki extraction akışa gönderilecek son parçayı, `fullText`
+      // üzerindeki extraction ise DB'ye kaydedilecek tam metni verir.
       const { text: tailAfterMood, mood } = extractMood(held);
-      const { text: tailFinal, add: memAdd, removeIds: memRemoveIds } = extractMemoryDelta(tailAfterMood);
+      const { text: tailAfterMemory, add: memAdd, removeIds: memRemoveIds } = extractMemoryDelta(tailAfterMood);
+      const { text: tailFinal, navKey } = extractNavDelta(tailAfterMemory);
       sentChars += tailFinal.length;
 
       let fullDisplayText = extractMood(fullText).text;
       fullDisplayText = extractMemoryDelta(fullDisplayText).text;
+      fullDisplayText = extractNavDelta(fullDisplayText).text;
 
       // Serbest katman modeli ara sıra sadece işaretleyicileri döndürüp
       // asıl cevabı hiç üretmiyor (gözlemlendi) — sessizce boş bir mesaj
@@ -145,6 +164,10 @@ export async function POST(req: NextRequest) {
         content: fullDisplayText, mood: mood ?? undefined,
       });
 
+      // navKey zaten extractNavDelta içinde whitelist'e (KEDI_NAV_ACTIONS)
+      // karşı doğrulandı — burada TEKRAR kontrol edilmiyor, sadece varsa
+      // akıtılıyor (halüsinasyon/geçersiz bir anahtar navKey'i zaten null yapar).
+      if (navKey && KEDI_NAV_ACTIONS[navKey]) safeEnqueue(`${KEDI_NAV_DELIM}${navKey}`);
       safeEnqueue(`${KEDI_MOOD_DELIM}${mood ?? "calm"}`);
 
       // Hafıza güncelleme — ARTIK AYRI BİR LLM ÇAĞRISI DEĞİL, sadece Supabase

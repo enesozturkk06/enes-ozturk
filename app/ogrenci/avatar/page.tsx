@@ -19,8 +19,7 @@ import {
   type CatalogOption,
 } from "@/lib/avatarEvolution";
 import { PageHeader, Card, Button } from "@/app/components/ui";
-import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
-import { getActiveCharacterPack } from "@/lib/avatarPack";
+import LazyStudentAvatar from "@/app/components/shared/LazyStudentAvatar";
 import { Lock, Save, Check } from "lucide-react";
 
 const DEFAULT_CONFIG = (studentId: string): StudentAvatarConfig => ({
@@ -150,15 +149,20 @@ export default function AvatarPage() {
     <div className="max-w-5xl mx-auto space-y-6 pb-28">
       <PageHeader title="Avatarını Oluştur" subtitle="Kişiselleştirilebilir karakterin, ilerledikçe seninle birlikte gelişir" accent="Kedi Avatar" />
 
-      <div className="grid lg:grid-cols-[280px_1fr] gap-6">
-        {/* Canlı önizleme */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <Card className="p-6 flex flex-col items-center gap-4">
-            <div className="w-full rounded-2xl overflow-hidden" style={{ background: "#0a0a0c" }}>
-              <LazyAvatarEngine3D pack={getActiveCharacterPack()} activity="idle" height={220} />
+      <div className="grid lg:grid-cols-[280px_1fr] gap-6 min-w-0">
+        {/* Canlı önizleme — `min-w-0 w-full` mobilde ZORUNLU: grid item'ların
+            varsayılan `min-width: auto`'su, içerik (canvas) küçülmek istese
+            bile bu konteynerin 320px viewport'a sığacak kadar daralmasını
+            ENGELLİYORDU (320px'te sağdan kesiliyordu, doğrulandı). `lg:`
+            öneki YOK — sadece mobil/dar ekran davranışını düzeltiyor,
+            masaüstü `lg:sticky lg:top-6 lg:self-start` AYNEN korunuyor. */}
+        <div className="lg:sticky lg:top-6 lg:self-start min-w-0 w-full">
+          <Card className="p-6 flex flex-col items-center gap-4 min-w-0">
+            <div className="w-full rounded-2xl flex items-center justify-center py-3" style={{ background: "#0a0a0c" }}>
+              <LazyStudentAvatar config={config} tier={tier} size={140} />
             </div>
             <p className="text-[10px] text-white/30 text-center -mt-2" style={{ fontFamily: "var(--font-barlow-condensed)" }}>
-              3D önizleme (geliştirme aşaması) — aşağıdaki kozmetik seçimler kaydediliyor ama henüz bu 3D modele yansımıyor.
+              Canlı önizleme — aşağıdaki kozmetik seçimler Dijital Salon&apos;daki avatarına anında yansır.
             </p>
             <div className="text-center">
               <p className="text-white font-semibold text-sm" style={{ fontFamily: "var(--font-barlow-condensed)" }}>{tier.level.name}</p>

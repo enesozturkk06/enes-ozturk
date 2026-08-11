@@ -1,3 +1,4 @@
+import { parseISO } from "date-fns";
 import type { SubscriptionType, Appointment } from "./types";
 import {
   LESSON_DURATIONS, MONTHLY_DURATION_DAYS, DEFAULT_DURATION_DAYS,
@@ -89,8 +90,15 @@ export function computePackagePaceProjection(
   fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
   const recentCompletedCount = appointments.filter(a => {
     if (a.status !== "tamamlandi") return false;
-    const d = new Date(a.date);
-    return !isNaN(d.getTime()) && d >= fourWeeksAgo;
+    // parseISO — date-only string'i YEREL gece yarısı olarak yorumlar
+    // (new Date("YYYY-MM-DD") UTC gece yarısı yorumlar, Türkiye'de (+3) bu
+    // 3 saatlik bir kaymaya, sınır günlerinde yanlış dahil/hariç tutmaya
+    // yol açabilir — bkz. app/components/shared/BlackCatAI.tsx
+    // findLastCompletedAppointment ile AYNI düzeltme).
+    try {
+      const d = parseISO(a.date);
+      return d >= fourWeeksAgo;
+    } catch { return false; }
   }).length;
   const avgLessonsPerWeek = recentCompletedCount / 4;
   if (avgLessonsPerWeek <= 0) return null;

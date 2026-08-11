@@ -4,6 +4,7 @@
  * localStorage kullanılmaz.
  */
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { dedupeRequest } from "./db";
 
 export interface HealthProfile {
   height: number;
@@ -25,20 +26,22 @@ function db() {
 // ── Profil ────────────────────────────────────────────────────────────────────
 
 export async function getHealthProfile(studentId: string): Promise<HealthProfile | null> {
-  const { data, error } = await db()
-    .from("health_profiles")
-    .select("*")
-    .eq("student_id", studentId)
-    .maybeSingle();
-  if (error) { console.error("[getHealthProfile]", error.message); return null; }
-  if (!data) return null;
-  return {
-    height: data.height ?? 170,
-    weight: Number(data.weight ?? 70),
-    age: data.age ?? 25,
-    gender: data.gender as HealthProfile["gender"],
-    activityLevel: data.activity_level as HealthProfile["activityLevel"],
-  };
+  return dedupeRequest(`getHealthProfile:${studentId}`, async () => {
+    const { data, error } = await db()
+      .from("health_profiles")
+      .select("*")
+      .eq("student_id", studentId)
+      .maybeSingle();
+    if (error) { console.error("[getHealthProfile]", error.message); return null; }
+    if (!data) return null;
+    return {
+      height: data.height ?? 170,
+      weight: Number(data.weight ?? 70),
+      age: data.age ?? 25,
+      gender: data.gender as HealthProfile["gender"],
+      activityLevel: data.activity_level as HealthProfile["activityLevel"],
+    };
+  });
 }
 
 export async function saveHealthProfile(studentId: string, profile: HealthProfile): Promise<void> {
@@ -107,30 +110,34 @@ export async function logCalories(
 // ── Su logu ───────────────────────────────────────────────────────────────────
 
 export async function getWaterLog(studentId: string, date: string): Promise<WaterEntry | null> {
-  const { data, error } = await db()
-    .from("water_logs")
-    .select("date, glasses")
-    .eq("student_id", studentId)
-    .eq("date", date)
-    .maybeSingle();
-  if (error) { console.error("[getWaterLog]", error.message); return null; }
-  return data ? { date: data.date, glasses: data.glasses ?? 0 } : null;
+  return dedupeRequest(`getWaterLog:${studentId}:${date}`, async () => {
+    const { data, error } = await db()
+      .from("water_logs")
+      .select("date, glasses")
+      .eq("student_id", studentId)
+      .eq("date", date)
+      .maybeSingle();
+    if (error) { console.error("[getWaterLog]", error.message); return null; }
+    return data ? { date: data.date, glasses: data.glasses ?? 0 } : null;
+  });
 }
 
 /** Son N günün su kayıtları — lib/health.ts'teki getWeightLogs/getCalorieLogs
  * ile AYNI desen (aynı tablo aralığı sorgusu), Kedi AI Smart Notification
  * Center'ın "su hedefi sürekli tutturulamıyor" tespiti için eklendi. */
 export async function getWaterLogRange(studentId: string, days = 7): Promise<WaterEntry[]> {
-  const from = new Date();
-  from.setDate(from.getDate() - days);
-  const { data, error } = await db()
-    .from("water_logs")
-    .select("date, glasses")
-    .eq("student_id", studentId)
-    .gte("date", from.toISOString().split("T")[0])
-    .order("date", { ascending: true });
-  if (error) { console.error("[getWaterLogRange]", error.message); return []; }
-  return (data ?? []).map(r => ({ date: r.date, glasses: r.glasses ?? 0 }));
+  return dedupeRequest(`getWaterLogRange:${studentId}:${days}`, async () => {
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    const { data, error } = await db()
+      .from("water_logs")
+      .select("date, glasses")
+      .eq("student_id", studentId)
+      .gte("date", from.toISOString().split("T")[0])
+      .order("date", { ascending: true });
+    if (error) { console.error("[getWaterLogRange]", error.message); return []; }
+    return (data ?? []).map(r => ({ date: r.date, glasses: r.glasses ?? 0 }));
+  });
 }
 
 export async function setWaterGlasses(studentId: string, date: string, glasses: number): Promise<void> {

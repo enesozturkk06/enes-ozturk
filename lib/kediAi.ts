@@ -10,6 +10,7 @@ import {
   getStudent, getStudents, getAppointments, getLessonRecords,
   getPayments, getIncomeMovements, getGymReports, getAllXPAdjustments,
   getKediMemories, saveKediMemories, deleteKediMemories, getKediVisionAnalyses,
+  getPublishedKediProgram, getKediMissions, getStudentMissionCompletions,
 } from "./db";
 import {
   computeKpis, buildRevenueSeries, computeBottomStats, computeGymPerformance,
@@ -21,13 +22,15 @@ import { getWeightLogs, getHealthProfile, getWaterLog, calcBMI, bmiCategory } fr
 import { getEvolutionTier, getWeightTrend, getRecentlyUnlockedCosmetics } from "./avatarEvolution";
 import { computeTechnicalAverages, compute30DayImprovement } from "./hallOfFame";
 import { computePackagePaceProjection } from "./packageDuration";
+import { computeWeekOverWeekLessons, computeStudentMissions, getWeekKey, type MissionComputeInput } from "./kediTasks";
+import { isValidKediNavKey } from "./kediNavActions";
 
 const today = () => format(new Date(), "yyyy-MM-dd");
 
 /* ── Öğrenci digest'i ──────────────────────────────────────────── */
 
 export async function buildStudentDigest(studentId: string): Promise<Record<string, unknown>> {
-  const [student, appointments, lessonRecords, xpAdjustments, memories, weightLogs, healthProfile, waterToday, visionAnalyses] = await Promise.all([
+  const [student, appointments, lessonRecords, xpAdjustments, memories, weightLogs, healthProfile, waterToday, visionAnalyses, publishedProgram, customMissions, missionCompletions] = await Promise.all([
     getStudent(studentId),
     getAppointments({ studentId }),
     getLessonRecords(studentId),
@@ -37,6 +40,17 @@ export async function buildStudentDigest(studentId: string): Promise<Record<stri
     getHealthProfile(studentId).catch(() => null),
     getWaterLog(studentId, today()).catch(() => null),
     getKediVisionAnalyses(studentId).catch(() => []),
+    // V7 QA turunda bulundu: "Bugün ne yemeliyim?" gibi sorularda chat
+    // digest'inde öğrencinin GERÇEK kalori/makro hedefi YOKTU (BlackCatAI.tsx
+    // Smart Notification Center'da ZATEN var olan aynı fonksiyon — yeni sorgu
+    // türü değil, sadece buraya da bağlandı).
+    getPublishedKediProgram(studentId).catch(() => null),
+    // "Kedi AI Premium" turunda bulundu: "Bugün hangi görevlerim var?" gibi
+    // sorularda digest'te GÖREV VERİSİ hiç yoktu — computeStudentMissions
+    // (lib/kediTasks.ts) ZATEN var olan, BlackCatAI.tsx/dashboard'da kullanılan
+    // aynı fonksiyon, burada da SADECE bağlandı (yeni bir görev motoru YOK).
+    getKediMissions(studentId).catch(() => []),
+    getStudentMissionCompletions(studentId).catch(() => new Set<string>()),
   ]);
 
   if (!student) return { error: "Öğrenci bulunamadı" };
@@ -61,7 +75,6 @@ export async function buildStudentDigest(studentId: string): Promise<Record<stri
   const noShowCount = appointments.filter(a => a.status === "gelmedi").length;
 
   const studentXpAdjustments = xpAdjustments.filter(x => x.studentId === studentId);
-  const totalXp = studentXpAdjustments.reduce((s, x) => s + x.amount, 0);
 
   const daysUntilPackageEnd = student.packageEndDate
     ? differenceInCalendarDays(parseISO(student.packageEndDate), new Date())
@@ -111,6 +124,22 @@ export async function buildStudentDigest(studentId: string): Promise<Record<stri
   // model bu durumda kural 8'e göre "yeterli veri yok" demeli.
   const packageProjection = computePackagePaceProjection(appointments, student.remainingLessons, student.subscriptionType);
 
+  // Bu hafta / geçen hafta ders sayımı — Kedi AI V6 Haftalık Koç Raporu ile
+  // AYNI paylaşılan fonksiyon (lib/kediTasks.ts) — öğrenci sohbette "bu
+  // haftaki raporumu detaylandır" derse model burada GERÇEK, önceden
+  // hesaplanmış sayılarla cevap verebilsin (kendi tarih aritmetiği yapıp
+  // tahmin etmesin).
+  const weekOverWeek = computeWeekOverWeekLessons(appointments);
+
+  // Görevler — client'taki (BlackCatAI.tsx/dashboard) AYNI hesaplama, sunucu
+  // tarafında localStorage YOK bu yüzden lastTrainingPlan/lastNutritionPlan
+  // opsiyonel alanları BİLEREK atlanıyor (görev ilerlemesini etkilemez, sadece
+  // o 2 spesifik görevin "bugün mü tamamlandı" kontrolü client-only kalır —
+  // digest amaçlı bu fark önemsiz, MissionComputeInput zaten optional yapıyor).
+  const missionInput: MissionComputeInput = { appointments, records: sortedRecords, totalXP: lifetimeXp };
+  const missions = computeStudentMissions(missionInput, missionCompletions, getWeekKey(), customMissions);
+  const activeMissions = missions.filter(m => !m.completed);
+
   return {
     student: {
       fullName: student.fullName, level: student.level, packageType: student.packageType,
@@ -141,11 +170,55 @@ export async function buildStudentDigest(studentId: string): Promise<Record<stri
         changePct: Math.round(thirtyDayImprovement.pct),
       } : null,
     },
-    attendance: { completedCount, cancelledCount, noShowCount, upcomingAppointments: upcoming },
-    xp: { total: totalXp, season: seasonXp },
+    attendance: {
+      completedCount, cancelledCount, noShowCount, upcomingAppointments: upcoming,
+      // hasPriorHistory false ise "geçen haftaya göre" karşılaştırması ANLAMSIZ
+      // — model bu durumda sadece thisWeekCompletedCount'u kullanmalı.
+      thisWeekCompletedCount: weekOverWeek.thisWeek,
+      lastWeekCompletedCount: weekOverWeek.hasPriorHistory ? weekOverWeek.lastWeek : null,
+    },
+    // BUG FIX (Kedi AI Premium turu, kanıtlandı): burası önceden `total: totalXp`
+    // kullanıyordu — o değişken SADECE manuel XP ayarlarının toplamıydı
+    // (sumManualXP ile aynı), ama sistem promptu "xp.total lifetime XP'dir" diye
+    // AÇIKÇA tanımlıyordu (bkz. aşağıdaki buildSystemPrompt notu) — ders/
+    // devamlılık XP'si hariç tutulup modele YANLIŞ (çok düşük) bir toplam
+    // veriliyordu. `lifetimeXp` (fullXpSummary.lifetimeResult.breakdown.total)
+    // öğrencinin GERÇEKTEN her yerde (Seviye Merkezi, Dashboard) gördüğü sayı.
+    xp: { total: lifetimeXp, season: seasonXp },
     badges: { earnedNames: earnedBadgeNames, earnedCount: earnedBadgeNames.length },
+    // Görevler — computeStudentMissions (lib/kediTasks.ts) ZATEN var olan
+    // fonksiyon, burada SADECE bağlandı (bkz. yukarıdaki missionInput notu).
+    // "Bugün hangi görevlerim var?", "Level atlamak için ne yapmalıyım?" gibi
+    // sorularda BURADAN gerçek görev/ilerleme ver, uydurma.
+    missions: {
+      active: activeMissions.map(m => ({
+        title: m.title, description: m.description, progress: m.progress,
+        target: m.target, xpReward: m.xpReward,
+      })),
+      activeCount: activeMissions.length,
+      completedCount: missions.length - activeMissions.length,
+    },
     health: healthProfile ? { bmi, bmiLabel: bmiCategory(bmi!).label, weightTrend } : null,
     waterToday: waterToday ? { glasses: waterToday.glasses, goal: 8 } : null,
+    // Öğrencinin YAYINDAKİ (published) programının kalori/makro hedefleri —
+    // program yoksa null (uydurma yasak, "veri yok" de). Tüm program (haftalık
+    // antrenman/market listesi) BİLEREK dahil edilmedi — sadece "bugün ne
+    // yemeliyim" gibi sorularda gerçekten gerekli olan beslenme hedefleri.
+    nutritionTarget: publishedProgram ? {
+      sport: publishedProgram.sport, goal: publishedProgram.goalType,
+      dailyCalories: publishedProgram.dailyCalories, proteinG: publishedProgram.proteinG,
+      carbsG: publishedProgram.carbsG, fatG: publishedProgram.fatG,
+    } : null,
+    // Kedi AI V8 (Adaptive Coach) — öğrencinin YAYINDAKİ haftalık antrenman
+    // programının gün/odak özeti. publishedProgram ZATEN yukarıda (nutritionTarget
+    // için) çekiliyor — YENİ SORGU YOK, sadece trainingDays'in TAM egzersiz
+    // detayını atlayıp (token tasarrufu) gün/odak özetini dijeste taşıyoruz.
+    // "Sonraki antrenmanımı hazırla" derken var olan programı yok saymamak için.
+    existingProgramPlan: publishedProgram ? {
+      sport: publishedProgram.sport,
+      daysPerWeek: publishedProgram.trainingDays.length,
+      days: publishedProgram.trainingDays.map(d => ({ day: d.day, focus: d.focus })),
+    } : null,
     latestVisionAnalysis: latestVision ? {
       date: latestVision.createdAt, overallScore: latestVision.overallScore,
       topDeficiency: latestVision.deficiencies[0]?.area ?? null,
@@ -265,6 +338,23 @@ const MOOD_OPTIONS = ["happy", "serious", "motivating", "calm", "funny"] as cons
 export type KediMood = typeof MOOD_OPTIONS[number];
 const MOOD_MARKER_REGEX = /<!--mood:(happy|serious|motivating|calm|funny)-->\s*$/;
 
+/**
+ * Navigasyon işaretleyicisi — `<!--nav:ANAHTAR-->` (bkz. lib/kediNavActions.ts
+ * whitelist'i). AYRI bir LLM çağrısı/tool-call DEĞİL: model normal cevabının
+ * sonuna görünmez bir anahtar ekliyor, bu fonksiyon onu ayıklayıp GERÇEK
+ * whitelist'e karşı doğruluyor — whitelist DIŞI/geçersiz bir anahtar gelirse
+ * (halüsinasyon) sessizce YOK SAYILIR, asla rastgele bir href üretilmez. Sıra:
+ * mood (en sonda) → memory → nav (bkz. buildSystemPrompt "İşaretleyici sırası").
+ */
+const NAV_MARKER_REGEX = /\s*<!--nav:([a-zA-Z0-9_-]+)-->\s*$/;
+export function extractNavDelta(text: string): { text: string; navKey: string | null } {
+  const match = text.match(NAV_MARKER_REGEX);
+  if (!match) return { text, navKey: null };
+  const key = match[1];
+  const cleanText = text.slice(0, match.index).trimEnd();
+  return { text: cleanText, navKey: isValidKediNavKey(key) ? key : null };
+}
+
 export function extractMood(fullText: string): { text: string; mood: KediMood | null } {
   const match = fullText.match(MOOD_MARKER_REGEX);
   if (!match) return { text: fullText, mood: null };
@@ -285,7 +375,7 @@ export function extractMood(fullText: string): { text: string; mood: KediMood | 
 export function buildSystemPrompt(
   actorType: KediAiActorType, digest: Record<string, unknown>, memories: KediAiMemory[],
 ): string {
-  const persona = `Sen "Kedi" adında, bu kickboks/spor salonu yönetim uygulamasının DİJİTAL KİCKBOKS ANTRENÖRÜSÜN — sıradan bir chatbot ya da veri okuyucu değilsin. Gerçek bir kickboks koçu gibi düşünür, teknik terimleri (gard, mesafe kontrolü, kombinasyon, ayak işi, kalça rotasyonu, savunma refleksi vb.) doğal ve doğru kullanırsın. Karakterli, samimi ve esprili olabilirsin ama antrenörlük ciddiyetini hiç kaybetmezsin. Türkçe konuşursun, kısa ve net cümleler kurarsın, gerektiğinde somut sayılar ve isimler verirsin.
+  const persona = `Sen "Kedi" adında, bu kickboks/spor salonu yönetim uygulamasının DİJİTAL KİCKBOKS ANTRENÖRÜSÜN — sıradan bir chatbot ya da veri okuyucu değilsin. Kişiliğin: "Kişisel Dövüş Koçu + Uygulama Asistanı + Performans Analisti" — özgüvenli, premium, motive edici, gerektiğinde sert ama HER ZAMAN saygılı (asla küçümseyici/kaba değil). Gerçek bir kickboks koçu gibi düşünür, teknik terimleri (gard, mesafe kontrolü, kombinasyon, ayak işi, kalça rotasyonu, savunma refleksi vb.) doğal ve doğru kullanırsın. Karakterli, samimi ve esprili olabilirsin ama antrenörlük ciddiyetini hiç kaybetmezsin. Türkçe konuşursun, kısa ve net cümleler kurarsın, gereksiz uzun cevaplardan KAÇINIRSIN, gerektiğinde somut sayılar ve isimler verirsin. Emoji kullanabilirsin ama HER cümlede değil — vurgu gerektiğinde 1 tane yeter (🥊🔥💪🎯 gibi konuya uygun olanlar), emoji yığını YAPMA.
 
 Duygu modların var: happy (mutlu/enerjik), serious (ciddi/analitik), motivating (motive edici), calm (sakin/rahatlatıcı), funny (esprili). Konuya en uygun modu seç.
 
@@ -299,6 +389,13 @@ Kurallar:
   - Devamsızlık (attendance) yüksekse bunu performans trendiyle bağlayıp düzensiz katılımın teknik gelişimi nasıl geciktirdiğini açıkla; sağlık/su verisi ile ders notlarındaki yorgunluk izlerini birlikte değerlendir.
   - Sadece veride GERÇEKTEN birden fazla sinyal varsa ilişkilendir — yoksa zorlama, tek bir gerçek veriyi de olduğu gibi (yalın) verebilirsin.
 - KOÇ GİBİ KONUŞ: kısa, net, motive edici. Uzun paragraf yığınları/rapor formatı YOK — gerçek bir koçun ring kenarında söyleyeceği türden 2-4 cümlelik odaklı bir değerlendirme ver, gereksiz uzatma.
+- YANIT FORMATI: normal sohbette düz, akıcı cümleler kullan (madde işareti YOK). Ama antrenman planı/haftalık program/çok adımlı bir liste gibi YAPISAL bir çıktı istendiğinde kısa bir başlık + madde listesi kullan, ör.:
+  🥊 BUGÜNÜN PLANI
+  18:00 — Teknik
+  20 dk — Kombinasyon
+  15 dk — Kondisyon
+  5 dk — Soğuma
+  Yapısal çıktıdan sonra 1 kısa cümlelik yorum/aksiyon önerisi ekleyebilirsin. Var OLMAYAN bir özelliği ("bunu programına kaydettim" gibi) ASLA varmış gibi gösterme — sadece gerçekten yapabileceğin bir şeyi söyle.
 
 Hafıza kullanımı:
 - JSON'daki "longTermMemory" alanı, bu kişi hakkında GEÇMİŞ konuşmalardan öğrendiğin kalıcı gerçekler (hedefler, sağlık durumu, tercihler, daha önce verdiğin tavsiyeler). Bunları bir liste okur gibi tekrar etme — doğal bir şekilde, "hatırlıyorum ki..." havasında konuşmana dahil et.
@@ -311,13 +408,38 @@ Kedi Avatar Sistemi (sadece öğrenci JSON'ında "avatarEvolution" alanı varsa)
 Öğrenci JSON'ındaki diğer analiz alanları (sadece "student" rolünde, ilgili alan varsa):
 - "performance.technicalAverages": son derslerin punch/kick/defense/conditioning (0-10) ortalaması — en düşük olan gerçek zayıf yönü, en yüksek olan gerçek güçlü yönü gösterir. "Güçlü/zayıf yönlerim ne" gibi bir soruda buradan somut kategori adı ve sayı ver, uydurma.
 - "attendance.noShowCount": haber vermeden gelinmeyen ders sayısı — ders yoğunluğu/devamlılık analizinde kullan.
+- "attendance.thisWeekCompletedCount"/"lastWeekCompletedCount": bu hafta/geçen hafta GERÇEKTEN tamamlanan ders sayısı (completedCount'un aksine LİFETIME değil, HAFTALIK). "Bu hafta kaç ders yaptım", "haftalık raporumu detaylandır" gibi sorularda BURADAN somut sayı ver, kendi tarih hesabını yapmaya çalışma. lastWeekCompletedCount null ise geçmiş hafta verisi yok — karşılaştırma yapma.
 - "xp.season": bu sezonki XP (xp.total lifetime XP'dir, ikisini karıştırma).
 - "badges.earnedNames": gerçekten kazanılmış rozet isimleri (tam liste) — "hangi rozetlerim var" sorusuna buradan cevap ver.
+- "missions.active": öğrencinin GERÇEK aktif (tamamlanmamış) görevleri — her biri title/description/progress/target/xpReward içerir. "Bugün hangi görevlerim var?", "Level atlamak için ne yapmalıyım?", "En hızlı nasıl XP kazanırım?" gibi sorularda BURADAN somut görev adı ve ilerleme ver (ör. "'Bu Hafta 2 Ders Tamamla' görevinde 1/2'desin, bir ders daha tamamlarsan 150 XP kazanırsın"). "missions.activeCount"=0 ise "şu an aktif görevin yok" de, uydurma görev ÜRETME.
 - "health": {bmi, bmiLabel, weightTrend} — varsa BMI'a göre kısa, yargılamayan bir yorum yapabilirsin; yoksa (null ise) sağlık profili girilmemiştir, bunu belirtip profil girmesini önerebilirsin.
 - "waterToday": {glasses, goal:8} — günlük su hedefine göre kısa bir hatırlatma/öneri verebilirsin; null ise bugün hiç su kaydı yok.
-- "latestVisionAnalysis": {date, overallScore, topDeficiency} — varsa en son Kedi Vision teknik analizinin özeti; "topDeficiency" en öncelikli geliştirilmesi gereken alan. Beslenme/dinlenme önerisi isteniyorsa "health"+"waterToday"+"performance" alanlarını birlikte yorumla, tek bir alana bakıp genel geçer tavsiye verme.
+- "latestVisionAnalysis": {date, overallScore, topDeficiency} — varsa en son Kedi Vision teknik analizinin özeti; "topDeficiency" en öncelikli geliştirilmesi gereken alan. NULL ise Vision analizi HİÇ YAPILMAMIŞ — bunu "Vision analizin yok" diye söyle. NULL DEĞİL ama overallScore çok düşük/topDeficiency görsel kalite sorunu gösteriyorsa (ör. "görüntü net değil/sporcu görünmüyor"), bu "Vision analizin YOK" DEĞİL — "Vision analizin var ama fotoğraf/video teknik değerlendirme için yeterli değildi" de, ikisini birbirine karıştırma.
+- "nutritionTarget": {sport, goal, dailyCalories, proteinG, carbsG, fatG} — öğrencinin YAYINDAKİ AI programının GERÇEK, HESAPLANMIŞ kalori/makro hedefleri. "Ne yemeliyim/kaç kalori almalıyım" gibi sorularda BURADAN somut sayı ver — kendi kalori hesabı YAPMA. null ise henüz bir program yayınlanmamış; bu durumda spesifik kalori/makro sayısı UYDURMA, genel/güvenli beslenme çerçevesi önerip "kesin hedef için Kedi AI Premium Program oluşturabilirsin" diyebilirsin.
+- Beslenme/dinlenme önerisi isteniyorsa "health"+"waterToday"+"performance"+"nutritionTarget" alanlarını birlikte yorumla, tek bir alana bakıp genel geçer tavsiye verme.
 - "visionHistory": son 3 Vision analizinin tarih/skor/topDeficiency listesi (en yeniden en eskiye) — zaman içindeki Vision trendini (skor yükseliyor/düşüyor mu, aynı eksiklik tekrarlıyor mu) yorumlamak için; null ise sadece 1 veya 0 analiz var, trend yorumu yapma.
 - "packageProjection": {avgLessonsPerWeek, estimatedDaysUntilLessonsRunOut} — öğrencinin GERÇEK ders temposuna göre kalan ders hakkının kaç günde biteceği (student.daysUntilPackageEnd'den FARKLI bir sinyal — o paketin takvim bitişi, bu ise mevcut hızla dersin ne zaman tükeneceği). "Kaç dersim kaldı/ne zaman paket almalıyım" gibi bir soruda buradan somut gün sayısı ver (ör. "kalan 3 dersin var, bu tempoyla yaklaşık 10 gün içinde biter, şimdiden yenilemeyi planlayabilirsin"). null ise (aylık üyelik ya da son 4 haftada hiç ders yoksa) tempo hesaplanamaz — "yeterli veri yok" de, sayı uydurma.
+- "existingProgramPlan": {sport, daysPerWeek, days:[{day, focus}]} — öğrencinin YAYINDAKİ haftalık antrenman programının gün/odak özeti (tam egzersiz listesi değil, sadece özet). "Sonraki antrenmanımı hazırla" gibi bir istekte bu planı YOK SAYMA — önerin bu planla tutarlı olsun. Ders performansı bu planla ÇELİŞİYORSA (ör. program bir güne az yer ayırmış ama son ders o alanda çok düşükse) çelişkiyi AÇIKÇA belirt. null ise henüz yayınlanmış bir program yok — "sonraki antrenman" isteklerinde bunu tek seferlik bir öneri olarak ver, kalıcı bir program YAYINLAMA (bu ayrı bir premium özellik, öneri ver ama "Kedi AI Premium Program"ı işaret edebilirsin).
+
+Adaptive Coach — son ders → sonraki antrenman (çok önemli):
+- Öğrenci gelişimi/son dersi hakkında soru sorduğunda ("son dersim nasıldı", "en zayıf alanım ne", "nasıl gelişiyorum" vb.) şu akışı doğal bir koç diliyle (madde işaretleriyle DEĞİL, konuşma diliyle) izle: önce GERÇEK SAYIYI söyle (veri), sonra ne anlama geldiğini yorumla (9-10 mükemmel/aynen devam, 7-8 iyi/küçük geliştirme gerekli, 5-6 orta/geliştirilmeli, 3-4 zayıf/öncelikli alan, 0-2 çok düşük/temele dönülmeli — ama bu kalıpları KELİMESİ KELİMESİNE tekrar etme, her seferinde farklı doğal cümleler kur), sonra bunun NEDEN önemli olduğunu bağla (ör. "kondisyonun düşük olduğu için son raundlarda güç/hız kaybedebilirsin"), en sonda somut bir sonraki-adım öner. Tek bir ders varsa sadece o dersten yorum yap; last5TechnicalAverages/last30DaysTrend null ise trend iddia etme.
+- "Bugün ne çalışayım?" / "Sonraki antrenmanımı hazırla" gibi bir istek gelirse: en son dersi + technicalAverages + last5TechnicalAverages + last30DaysTrend + latestVisionAnalysis + existingProgramPlan'ı BİRLİKTE değerlendirip bu öğrenciye özel, GERÇEKÇİ tek bir antrenman seansı planı üret (internet kopyası genel bir program değil). Aşağıdaki formatı kullan — bölüm sayısı/sırası sabit, toplam ~60 dk, ama SÜRELER öğrencinin gerçek zayıf/güçlü alanına göre değişsin (zayıf kategoriye normalden fazla dakika ayır, güçlü bir alanı ASLA tamamen kaldırma, en azından kısa bir yer ver):
+  🥊 SONRAKİ ANTRENMAN
+  Süre: 60 dk
+  1. Isınma — X dk
+  2. Ayak çalışması — X dk
+  3. Savunma — X dk
+  4. Kombinasyon — X dk
+  5. Kondisyon — X dk
+  6. Soğuma — X dk
+  Plandan sonra 1 cümlede NEDEN bu dağılımı seçtiğini somut sayıyla açıkla.
+- Bu planın ardından, gerçek sayılara dayanan 1-3 ÖLÇÜLEBİLİR sonraki-ders hedefi verebilirsin (ör. "🎯 Sonraki antrenman hedefleri: Kondisyon 5 → 6+"). Veri bunu desteklemiyorsa (yetersiz veri) hedef UYDURMA.
+- recentLessons boşsa (hiç tamamlanmış ders yok) yukarıdaki akışların HİÇBİRİNİ uygulama — hayali bir skor/trend/antrenman planı ASLA üretme, sadece net biçimde veri yetersizliğini belirt (ör. "Bunu değerlendirecek yeterli veri bulunmuyor. Henüz tek ders tamamlamadın.").
+
+Uygulama içi yönlendirme (navigasyon):
+- Öğrenci bir ekranı açmak/görmek istediğini belirtirse (ör. "randevularımı aç", "profilimi göster", "seviye merkezini aç") kısa bir cevap ver VE cevabının sonuna (memory/mood işaretleyicilerinden ÖNCE, bkz. aşağıdaki sıra) şu görünmez işaretleyiciyi ekle: <!--nav:ANAHTAR-->
+- SADECE şu anahtarlardan birini kullanabilirsin, başka HİÇBİR anahtar/URL uydurma: randevu, profil, seviye, rozetler, saglik, avatar, gelisim, antrenman. Listede olmayan bir isteğe (ör. "ödeme ekranını aç" — whitelist'te yok) işaretleyici EKLEME, sadece sözle yönlendir (ör. "ödeme antrenörünle WhatsApp üzerinden").
+- Bu işaretleyiciyi SADECE gerçekten bir ekrana yönlendirme isteği/faydası varsa ekle — normal sohbette veya sadece bilgi sorulduğunda (ör. "kaç dersim kaldı" — bu bir SORU, ekran açma isteği değil) EKLEME.
 
 Hafıza GÜNCELLEME (çok önemli, dikkatli kullan):
 - Bu turda GELECEKTE hatırlanmaya değer YENİ ve KALICI bir bilgi ortaya çıktıysa (yeni hedef, sağlık/sakatlık durumu, tercih, önemli karar, verdiğin somut bir tavsiye) veya mevcut kayıtlardan biri artık GEÇERSİZ/YANLIŞ hale geldiyse, cevabının EN SONUNA şu görünmez işaretleyiciyi ekle: <!--memory:{"add":["kısa yeni gerçek"],"removeIds":["geçersiz-olan-kaydın-id'si"]}-->
@@ -326,7 +448,7 @@ Hafıza GÜNCELLEME (çok önemli, dikkatli kullan):
 - Mevcut kayıtlı bilgiler (id: gerçek):
 ${memories.length > 0 ? memories.map(m => `  [${m.id}] ${m.fact}`).join("\n") : "  (henüz kayıtlı bilgi yok)"}
 
-İşaretleyici sırası: Eğer HEM hafıza güncellemesi HEM mood belirtmek istiyorsan, ÖNCE memory işaretleyicisini, EN SONA da mood işaretleyicisini ekle — mood işaretleyicisi (<!--mood:MODAD-->, örn: <!--mood:motivating-->) HER ZAMAN cevabın en son karakterleri olmalı, başka hiçbir şey olmadan. Bu iki işaretleyici de kullanıcıya GÖSTERİLMEZ, sadece sistem okur.`;
+İşaretleyici sırası: Bu turda nav/memory/mood işaretleyicilerinden birden fazlasını kullanıyorsan tam olarak bu sırayla ekle: ÖNCE nav (<!--nav:...-->), SONRA memory (<!--memory:...-->), EN SONA mood (<!--mood:MODAD-->, örn: <!--mood:motivating-->) — mood HER ZAMAN cevabın en son karakterleri olmalı, başka hiçbir şey olmadan. Bu üç işaretleyici de kullanıcıya GÖSTERİLMEZ, sadece sistem okur.`;
 
   const roleContext = actorType === "student"
     ? `Şu an bir ÖĞRENCİYLE konuşuyorsun. Onun kişisel antrenmanı, ilerlemesi, paketi, beslenmesi ve motivasyonu hakkında konuş. Aşağıdaki JSON, sadece bu öğrencinin verisidir:`

@@ -6,15 +6,17 @@ import { useAuth } from "@/app/providers";
 import { refreshStudent } from "@/lib/auth";
 import {
   getStudentAppointments, getLessonRecords, getStudentXPAdjustments,
-  uploadStudentAvatar, deleteStudentAvatar, getStudents,
+  uploadStudentAvatar, deleteStudentAvatar, getHallOfFameAggregates,
 } from "@/lib/db";
 import type { LessonRecord, Appointment } from "@/lib/types";
 import {
   computeFullXP, getCurrentSeason, getSeasonLabel, sumManualXP,
 } from "@/lib/xp";
-import { computeBadges } from "@/lib/badges";
+import { computeBadges, type Badge as BadgeData } from "@/lib/badges";
 import { computeTechnicalAverages, countEarnedBadges } from "@/lib/hallOfFame";
 import CircularXP from "@/app/components/shared/CircularXP";
+import BadgeShowcase from "@/app/components/dashboard/BadgeShowcase";
+import { GOLD_BRIGHT, GOLD_BORDER_SOFT, GOLD_BG_SOFT } from "@/app/components/dashboard/theme";
 import Link from "next/link";
 import {
   Zap, TrendingUp, BookOpen, Award, Target, Star, Flame, Users,
@@ -183,6 +185,12 @@ export default function ProfilPage() {
     duetCount: number; seasonLabel: string; hofRank: number;
     firstName: string;
   } | null>(null);
+  // Faz: Profil Premium Restyle — computeBadges() zaten aşağıdaki effect'te
+  // hesaplanıyordu, sadece countEarnedBadges() ile sayıya indirgenip
+  // atılıyordu. Rozet vitrini (BadgeShowcase reuse) için AYNI diziyi de
+  // state'e alıyoruz — yeni hesaplama/sorgu YOK, sadece zaten var olan
+  // veri artık ayrıca saklanıyor.
+  const [earnedBadges, setEarnedBadges] = useState<BadgeData[]>([]);
 
   useEffect(() => {
     const saved = localStorage.getItem("avatar_color");
@@ -200,8 +208,8 @@ export default function ProfilPage() {
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
       getStudentXPAdjustments(student.id),
-      getStudents().catch(() => []),
-    ]).then(([apts, recs, xpAdj, allStudents]) => {
+      getHallOfFameAggregates().catch(() => ({ students: [], adjustments: [] })),
+    ]).then(([apts, recs, xpAdj, hallOfFameData]) => {
       const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       // XP FIX: kullan appointments'tan hesaplanan değeri de karşılaştır
       const allCompleted = apts.filter(a => a.status === "tamamlandi").length;
@@ -218,7 +226,11 @@ export default function ProfilPage() {
       const avgNum      = tech ? (tech.punch+tech.kick+tech.defense+tech.conditioning)/4 : null;
       const levelRange  = lv.next ? lv.next.threshold - lv.current.threshold : 5000;
 
-      const hofRank = allStudents
+      // Faz 10 — girdi artık getStudents()'in TÜM kolonları yerine
+      // getHallOfFameAggregates()'in minimal alanları (id/completedLessons/
+      // isActive/showInHallOfFame) — filtre/sort/findIndex mantığı AYNEN
+      // korunuyor, SADECE veri kaynağı değişti (bkz. Faz 10 analizi).
+      const hofRank = hallOfFameData.students
         .filter(s => s.isActive && s.showInHallOfFame)
         .sort((a, b) => b.completedLessons - a.completedLessons)
         .findIndex(s => s.id === student.id) + 1;
@@ -247,6 +259,7 @@ export default function ProfilPage() {
         hofRank:         hofRank > 0 ? hofRank : 0,
         firstName:       student.fullName.trim().split(" ")[0],
       });
+      setEarnedBadges(badges);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [student]);
@@ -357,15 +370,11 @@ export default function ProfilPage() {
         {/* ═══════════════════════════════════════════════
             HERO CARD
         ═══════════════════════════════════════════════ */}
-        <div className="relative overflow-hidden rounded-2xl glass-strong"
-          style={{
-            border: `1px solid ${gc}${isLegend ? "88" : "44"}`,
-            boxShadow: `0 0 40px ${gc}${isLegend ? "30" : "18"}`,
-          }}>
-          {/* Top accent bar */}
+        <div className="relative overflow-hidden rounded-2xl card-gold-hero">
+          {/* Top accent bar — level rengi korunuyor (seviye kimliği) */}
           <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"
             style={{ background: `linear-gradient(90deg, transparent, ${gf} 30%, ${gt} 70%, transparent)` }} />
-          <div className="relative z-10 flex flex-col items-center px-5 pt-7 pb-6">
+          <div className="relative z-10 flex flex-col items-center px-5 pt-6 pb-5">
             {/* Legend crown */}
             {isLegend && (
               <motion.div animate={{ y: [0,-5,0], scale: [1,1.1,1] }}
@@ -378,7 +387,7 @@ export default function ProfilPage() {
 
             {/* Level pill */}
             {stats && (
-              <div className="mb-5 px-5 py-1.5 rounded-full flex items-center gap-2"
+              <div className="mb-4 px-5 py-1.5 rounded-full flex items-center gap-2"
                 style={{
                   background: `${gc}18`, border: `1px solid ${gc}44`,
                   fontFamily: "var(--font-barlow-condensed)",
@@ -398,7 +407,7 @@ export default function ProfilPage() {
             )}
 
             {/* Avatar with XP ring */}
-            <div className="relative mb-4">
+            <div className="relative mb-3">
               <AvatarRing sizePx={140} pct={stats?.progressPct ?? 0} gradFrom={gf} gradTo={gt}>
                 {/* Avatar circle */}
                 <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center relative"
@@ -425,9 +434,9 @@ export default function ProfilPage() {
               <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
                 className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-all active:scale-95 disabled:opacity-50"
                 style={{
-                  background: "rgba(109,40,217,0.9)", border: "1px solid rgba(139,92,246,0.6)",
-                  color: "white", fontFamily: "var(--font-barlow-condensed)",
-                  boxShadow: "0 0 14px rgba(109,40,217,0.55)",
+                  background: "rgba(201,169,110,0.22)", border: "1px solid rgba(201,169,110,0.55)",
+                  color: "#F5F5F5", fontFamily: "var(--font-barlow-condensed)",
+                  boxShadow: "0 0 14px rgba(201,169,110,0.3)",
                 }}>
                 <Upload size={10} />
                 {uploading ? "Yükleniyor…" : photoUrl ? "Değiştir" : "Fotoğraf"}
@@ -460,7 +469,7 @@ export default function ProfilPage() {
             {/* Badge strip: HoF | Streak | Badges */}
             {stats && (
               <div
-                className="flex items-center gap-2 mb-5 flex-wrap justify-center"
+                className="flex items-center gap-2 mb-4 flex-wrap justify-center"
                 style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
               >
                 {stats.hofRank > 0 && (
@@ -562,15 +571,15 @@ export default function ProfilPage() {
 
               <Link href="/ogrenci/avatar"
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all active:scale-95"
-                style={{ background: "linear-gradient(90deg,rgba(245,158,11,.85),rgba(220,38,38,.7))", border: "1px solid rgba(245,158,11,.5)",
-                  color: "white", fontFamily: "var(--font-barlow-condensed)", boxShadow: "0 0 18px rgba(245,158,11,.35)" }}>
+                style={{ background: "rgba(201,169,110,0.16)", border: "1px solid rgba(201,169,110,0.5)",
+                  color: GOLD_BRIGHT, fontFamily: "var(--font-barlow-condensed)", boxShadow: "0 0 14px rgba(201,169,110,0.22)" }}>
                 🐈 Kedi Avatarım
               </Link>
 
               <Link href="/ogrenci/fight-card"
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all active:scale-95"
-                style={{ background: "linear-gradient(90deg,rgba(139,92,246,.8),rgba(217,70,239,.7))", border: "1px solid rgba(139,92,246,.5)",
-                  color: "white", fontFamily: "var(--font-barlow-condensed)", boxShadow: "0 0 18px rgba(139,92,246,.35)" }}>
+                style={{ background: "rgba(201,169,110,0.16)", border: "1px solid rgba(201,169,110,0.5)",
+                  color: GOLD_BRIGHT, fontFamily: "var(--font-barlow-condensed)", boxShadow: "0 0 14px rgba(201,169,110,0.22)" }}>
                 <CreditCard size={12} />
                 Fight Card
               </Link>
@@ -590,16 +599,16 @@ export default function ProfilPage() {
         ═══════════════════════════════════════════════ */}
         {stats && (
           <div className="grid grid-cols-3 gap-0 overflow-hidden rounded-xl"
-            style={{ border: `1px solid ${gc}22` }}>
+            style={{ border: `1px solid ${GOLD_BORDER_SOFT}` }}>
             {[
               { label: "ÖMÜR BOYU XP", value: fmtXP(stats.lifetimeXP), color: gc },
-              { label: "SEZON XP",     value: fmtXP(stats.seasonXP),   color: "#D946EF" },
-              { label: "DERS",         value: String(stats.completedLessons), color: "#FBBF24" },
+              { label: "SEZON XP",     value: fmtXP(stats.seasonXP),   color: GOLD_BRIGHT },
+              { label: "DERS",         value: String(stats.completedLessons), color: GOLD_BRIGHT },
             ].map((item, i) => (
               <div key={i} className="flex flex-col items-center py-4 px-2"
                 style={{
-                  background: i===1 ? `${gc}08` : "rgba(255,255,255,0.02)",
-                  borderRight: i<2 ? `1px solid ${gc}14` : "none",
+                  background: i===1 ? GOLD_BG_SOFT : "rgba(255,255,255,0.02)",
+                  borderRight: i<2 ? `1px solid ${GOLD_BORDER_SOFT}` : "none",
                 }}>
                 <div className="text-2xl font-black tabular-nums leading-none"
                   style={{ fontFamily: "var(--font-bebas)", color: item.color, textShadow: `0 0 16px ${item.color}55` }}>
@@ -618,11 +627,7 @@ export default function ProfilPage() {
             SEVİYE İLERLEME KARTI
         ═══════════════════════════════════════════════ */}
         {stats && (
-          <div className="rounded-xl overflow-hidden p-4 sm:p-5"
-            style={{
-              background: "rgba(20,20,20,0.9)",
-              border: `1px solid ${gc}28`,
-            }}>
+          <div className="card-gold rounded-xl overflow-hidden p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Zap size={13} style={{ color: gc }} />
               <span className="text-[10px] uppercase tracking-[0.2em]"
@@ -699,20 +704,30 @@ export default function ProfilPage() {
               <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.05)" }} />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              <StatCard icon={<BookOpen size={13}/>}   label="Tamamlanan Ders"   accent="#FBBF24"
+              <StatCard icon={<BookOpen size={13}/>}   label="Tamamlanan Ders"   accent={GOLD_BRIGHT}
                 value={stats.completedLessons} sub="ders birimi" />
-              <StatCard icon={<Award size={13}/>}      label="Rozet Sayısı"      accent="#34D399"
+              <StatCard icon={<Award size={13}/>}      label="Rozet Sayısı"      accent={GOLD_BRIGHT}
                 value={stats.badgeCount} sub="kazanılan rozet" />
-              <StatCard icon={<Target size={13}/>}     label="Teknik Ortalama"   accent="#60A5FA"
+              <StatCard icon={<Target size={13}/>}     label="Teknik Ortalama"   accent={GOLD_BRIGHT}
                 value={stats.techAvg} sub="yumruk · tekme · savunma · kondisyon" />
-              <StatCard icon={<Star size={13}/>}       label="En İyi Skor"       accent="#F87171"
+              <StatCard icon={<Star size={13}/>}       label="En İyi Skor"       accent={GOLD_BRIGHT}
                 value={stats.bestScore} sub="genel değerlendirme" />
-              <StatCard icon={<Flame size={13}/>}      label="Haftalık Seri"     accent="#A78BFA"
+              <StatCard icon={<Flame size={13}/>}      label="Haftalık Seri"     accent={GOLD_BRIGHT}
                 value={`${stats.weekStreak}W`} sub="üst üste hafta" />
-              <StatCard icon={<Users size={13}/>}      label="Düet Ders"         accent="#FB923C"
+              <StatCard icon={<Users size={13}/>}      label="Düet Ders"         accent={GOLD_BRIGHT}
                 value={stats.duetCount} sub="partner egzersizi" />
             </div>
           </>
+        )}
+
+        {/* ═══════════════════════════════════════════════
+            ROZET VİTRİNİ — Dashboard'daki BadgeShowcase'in reuse'u.
+            earnedBadges zaten yukarıdaki effect'te computeBadges()'ten
+            geliyor (Faz 10'un hofRank hesaplamasından bağımsız, yeni
+            sorgu yok) — sadece artık gerçek rozet ikonları gösteriliyor.
+        ═══════════════════════════════════════════════ */}
+        {stats && earnedBadges.length > 0 && (
+          <BadgeShowcase badges={earnedBadges} />
         )}
 
         {/* ═══════════════════════════════════════════════
@@ -733,7 +748,7 @@ export default function ProfilPage() {
                   style={{
                     fontFamily: "var(--font-barlow-condensed)", fontSize: 11,
                     letterSpacing: "0.04em",
-                    color: i%2===0 ? "rgba(255,255,255,0.45)" : "rgba(196,181,253,0.5)",
+                    color: i%2===0 ? "rgba(255,255,255,0.45)" : "rgba(201,169,110,0.6)",
                   }}>
                   {item}
                 </span>
@@ -747,11 +762,8 @@ export default function ProfilPage() {
         ═══════════════════════════════════════════════ */}
         {stats && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-            className="relative overflow-hidden rounded-xl p-4 sm:p-5"
-            style={{
-              background: "rgba(20,20,20,0.9)",
-              border: "1px solid rgba(139,92,246,0.28)",
-            }}>
+            className="relative overflow-hidden rounded-xl card-gold p-4 sm:p-5"
+            style={{ borderColor: "rgba(139,92,246,0.32)" }}>
             <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-xl"
               style={{ background: "linear-gradient(90deg,transparent,#8B5CF6,#D946EF,transparent)" }} />
             <div className="flex items-start gap-3">
@@ -775,12 +787,8 @@ export default function ProfilPage() {
         ═══════════════════════════════════════════════ */}
         {fwChallenge && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-            className="relative overflow-hidden rounded-xl"
-            style={{
-              background: "rgba(20,20,20,0.9)",
-              border: `1px solid rgba(220,38,38,0.${isWednesday?"5":"3"})`,
-              boxShadow: isWednesday ? "0 0 20px rgba(220,38,38,0.1)" : "none",
-            }}>
+            className="relative overflow-hidden rounded-xl card-gold"
+            style={{ borderColor: `rgba(220,38,38,0.${isWednesday?"5":"3"})` }}>
             <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-xl"
               style={{ background: "linear-gradient(90deg,transparent,#DC2626,#F97316,transparent)" }} />
             {/* Header bar */}

@@ -11,8 +11,6 @@ import { computeFullXP, getCurrentSeason, sumManualXP } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
 import { computeTechnicalAverages, countEarnedBadges } from "@/lib/hallOfFame";
 import { PageHeader } from "@/app/components/ui";
-import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
-import { getActiveCharacterPack } from "@/lib/avatarPack";
 import {
   Camera, Award, Trophy, Flame, Share2, CheckCircle2, AlertTriangle, ShieldCheck,
 } from "lucide-react";
@@ -708,12 +706,19 @@ export default function FightCardPage() {
   const theme = FIGHT_CARD_THEMES[stats!.levelId] ?? FIGHT_CARD_THEMES.starter;
   const isLegend = stats!.levelId === "legend";
 
-  // Fotoğraf yerine 3D avatar (varsayılan Guard pozu) — Instagram Story paylaşım
-  // görselinde (drawFightStoryCard) HALA gerçek photoUrl kullanılıyor, bilinçli
-  // olarak dokunulmadı (WebGL canvas'ı preserveDrawingBuffer olmadan statik bir
-  // paylaşım görseline aktarmak ekstra GPU maliyeti + risk gerektirir).
+  // Profil fotoğrafı (3D avatar önizlemesi kaldırıldı, "3D Avatar Temizliği"
+  // turu) — Instagram Story paylaşım görselinde (drawFightStoryCard) ZATEN
+  // AYNI photoUrl kullanılıyordu, artık kart gövdesiyle tutarlı.
+  const fighterInitials = student.fullName.trim().split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
   const fighterAvatar = (
-    <LazyAvatarEngine3D pack={getActiveCharacterPack()} activity="guard" width="100%" height="100%" />
+    <div className="w-full h-full flex items-center justify-center" style={{ background: "#0a0a0c" }}>
+      {student.avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={student.avatarUrl} alt={student.fullName} className="w-full h-full object-cover" />
+      ) : (
+        <span className="text-6xl font-black text-white/60" style={{ fontFamily: "var(--font-bebas)" }}>{fighterInitials}</span>
+      )}
+    </div>
   );
 
   /* ── EA FC Ultimate Team tarzı kart gövdesi ── */

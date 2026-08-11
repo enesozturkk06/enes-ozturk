@@ -7,6 +7,7 @@ import {
   HALL_CATEGORIES, rankByCategory,
   type HallEntry, type HallCategory, type CategoryDef,
 } from "@/lib/hallOfFame";
+import { GOLD_BRIGHT, GOLD_BORDER, GOLD_BORDER_SOFT, GOLD_BG_SOFT } from "@/app/components/dashboard/theme";
 
 /* ── Yardımcılar ──────────────────────────────────────────────────── */
 
@@ -35,10 +36,12 @@ function getDisplayValue(entry: HallEntry, def: CategoryDef): string {
   return def.displayValue(entry);
 }
 
+const PODIUM_BG = "linear-gradient(165deg, #141412 0%, #0e0e0e 100%)";
+
 function premiumStyle(entry: HallEntry): { background: string; border: string; glow: string; ring: string } {
   if (entry.level.id === "legend") {
     return {
-      background: "rgba(20,20,20,0.9)",
+      background: PODIUM_BG,
       border:     "rgba(251,191,36,0.5)",
       glow:       "0 0 24px rgba(251,191,36,0.18)",
       ring:       "#FBBF24",
@@ -46,14 +49,14 @@ function premiumStyle(entry: HallEntry): { background: string; border: string; g
   }
   if (entry.level.id === "diamond") {
     return {
-      background: "rgba(20,20,20,0.9)",
+      background: PODIUM_BG,
       border:     "rgba(103,232,249,0.4)",
       glow:       "0 0 20px rgba(103,232,249,0.16)",
       ring:       "#67E8F9",
     };
   }
   return {
-    background: "rgba(20,20,20,0.9)",
+    background: PODIUM_BG,
     border:     entry.level.colorPrimary + "44",
     glow:       `0 0 16px ${entry.level.glowColor}`,
     ring:       entry.level.colorPrimary,
@@ -171,6 +174,8 @@ function PodiumCard({ entry, rank, value, index }: {
         borderRadius: 12,
       }}
     >
+      <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-[12px]"
+        style={{ background: `linear-gradient(90deg, transparent, ${rs.ring}, transparent)` }} />
       {/* Taç — 1. sıra */}
       {isFirst && (
         <motion.div
@@ -195,7 +200,7 @@ function PodiumCard({ entry, rank, value, index }: {
       )}
       {entry.featured && !entry.studentOfMonth && (
         <span className="absolute top-1 right-1 text-[7px] sm:text-[9px] px-1 py-0.5 rounded-sm hidden sm:flex items-center gap-0.5"
-          style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)", color: "#C4B5FD", fontFamily: "var(--font-barlow-condensed)" }}>
+          style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER}`, color: GOLD_BRIGHT, fontFamily: "var(--font-barlow-condensed)" }}>
           <Award size={7} /> Öne Çıkan
         </span>
       )}
@@ -217,10 +222,10 @@ function PodiumCard({ entry, rank, value, index }: {
       {/* İsim */}
       <div
         className="mt-1.5 text-[9px] sm:text-sm font-semibold w-full px-0.5 truncate"
-        style={{ color: entry.isMe ? "#C4B5FD" : "#fff", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.03em" }}
+        style={{ color: entry.isMe ? GOLD_BRIGHT : "#fff", fontFamily: "var(--font-barlow-condensed)", letterSpacing: "0.03em" }}
       >
         {entry.name}
-        {entry.isMe && <span className="ml-0.5" style={{ color: "#8B5CF6" }}>(Sen)</span>}
+        {entry.isMe && <span className="ml-0.5" style={{ color: GOLD_BRIGHT }}>(Sen)</span>}
       </div>
 
       {/* Seviye — mobilde kısa isim */}
@@ -267,8 +272,8 @@ function LeaderboardRow({ entry, rank, value, index }: {
       transition={{ delay: index * 0.04 }}
       className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded"
       style={{
-        background: entry.isMe ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.02)",
-        border: `1px solid ${entry.isMe ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.06)"}`,
+        background: entry.isMe ? GOLD_BG_SOFT : "rgba(255,255,255,0.02)",
+        border: `1px solid ${entry.isMe ? GOLD_BORDER : "rgba(255,255,255,0.06)"}`,
       }}
     >
       {/* Sıra */}
@@ -283,11 +288,11 @@ function LeaderboardRow({ entry, rank, value, index }: {
       {/* İsim + stats */}
       <div className="flex-1 min-w-0">
         <div className="text-xs font-semibold truncate flex items-center gap-1"
-          style={{ color: entry.isMe ? "#C4B5FD" : "rgba(255,255,255,0.75)", fontFamily: "var(--font-barlow-condensed)" }}>
+          style={{ color: entry.isMe ? GOLD_BRIGHT : "rgba(255,255,255,0.75)", fontFamily: "var(--font-barlow-condensed)" }}>
           <span className="truncate">{entry.name}</span>
-          {entry.isMe && <span style={{ color: "#8B5CF6" }}>(Sen)</span>}
+          {entry.isMe && <span style={{ color: GOLD_BRIGHT }}>(Sen)</span>}
           {entry.studentOfMonth && <Sparkles size={9} style={{ color: "#F9A8D4", flexShrink: 0 }} />}
-          {entry.featured && !entry.studentOfMonth && <Award size={9} style={{ color: "#C4B5FD", flexShrink: 0 }} />}
+          {entry.featured && !entry.studentOfMonth && <Award size={9} style={{ color: GOLD_BRIGHT, flexShrink: 0 }} />}
         </div>
         {/* Stat satırı — mobil + masaüstü */}
         <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5"
@@ -330,17 +335,17 @@ export function HallOfFamePremium({ entries }: { entries: HallEntry[] }) {
     <div
       className="p-3 sm:p-6 border space-y-3 sm:space-y-5"
       style={{
-        background: "rgba(20,20,20,0.9)",
-        borderColor: "rgba(139,92,246,0.16)",
+        background: "linear-gradient(165deg, #131313 0%, #0e0e0f 100%)",
+        borderColor: GOLD_BORDER,
         borderRadius: 20,
-        boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+        boxShadow: "0 8px 30px rgba(0,0,0,0.4), 0 0 40px -20px rgba(201,169,110,0.2)",
       }}
     >
       {/* Başlık */}
       <div className="flex items-center gap-2.5">
         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "linear-gradient(135deg, rgba(251,191,36,0.2), rgba(139,92,246,0.2))", border: "1px solid rgba(251,191,36,0.3)" }}>
-          <Crown size={15} style={{ color: "#FBBF24" }} />
+          style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER}` }}>
+          <Crown size={15} style={{ color: GOLD_BRIGHT }} />
         </div>
         <div>
           <div className="text-sm sm:text-base font-bold tracking-widest uppercase"
@@ -361,7 +366,7 @@ export function HallOfFamePremium({ entries }: { entries: HallEntry[] }) {
           className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border transition-all"
           style={{
             background:   "rgba(255,255,255,0.04)",
-            borderColor:  dropdownOpen ? "rgba(251,191,36,0.5)" : "rgba(139,92,246,0.2)",
+            borderColor:  dropdownOpen ? "rgba(251,191,36,0.5)" : GOLD_BORDER_SOFT,
             boxShadow:    dropdownOpen ? "0 0 12px rgba(251,191,36,0.12)" : "none",
           }}
         >
@@ -385,8 +390,8 @@ export function HallOfFamePremium({ entries }: { entries: HallEntry[] }) {
           <div
             className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border overflow-hidden"
             style={{
-              background: "#0e0a1a",
-              borderColor: "rgba(139,92,246,0.25)",
+              background: "#121110",
+              borderColor: GOLD_BORDER,
               boxShadow:   "0 8px 32px rgba(0,0,0,0.7)",
             }}
           >

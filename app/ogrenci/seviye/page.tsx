@@ -5,11 +5,11 @@ import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
-  getStudentAppointments, getAppointments, getLessonRecords, getStudents,
+  getStudentAppointments, getLessonRecords,
   getStudentGiftClaimsForSeason, getGiftLessonRequestsForSeason,
-  getStudentXPAdjustments, getAllXPAdjustments, updateStudent,
+  getStudentXPAdjustments, getSeviyeLeaderboardData, updateStudent,
 } from "@/lib/db";
-import type { Student } from "@/lib/types";
+import type { Student, Appointment, LessonRecord, XPAdjustment } from "@/lib/types";
 import {
   computeFullXP, getLevelForXP, getCurrentSeason,
   getSeasonDateRange, getSeasonLabel, getDaysUntilSeasonEnd,
@@ -30,6 +30,7 @@ import CircularXP from "@/app/components/shared/CircularXP";
 import { PageHeader } from "@/app/components/ui";
 import { Zap, Crown, Trophy, Gift, Clock, ChevronRight, ChevronDown } from "lucide-react";
 import { triggerConfetti } from "@/app/components/shared/ConfettiEffect";
+import { GOLD_BORDER_SOFT } from "@/app/components/dashboard/theme";
 
 const stagger = { animate: { transition: { staggerChildren: 0.08 } } };
 const fadeUp = {
@@ -51,7 +52,7 @@ function LevelCard({ level, isCurrent, isEarned, index }: {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       whileHover={{ y: -3 }}
-      className={`relative flex flex-col p-5 rounded-2xl select-none ${isEarned ? "glass-strong" : "glass"}`}
+      className="relative flex flex-col p-5 rounded-2xl select-none card-gold"
       style={{
         borderColor: isCurrent ? level.colorPrimary + "99" : isEarned ? level.colorPrimary + "44" : undefined,
         boxShadow: isCurrent
@@ -162,8 +163,7 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
   ];
 
   return (
-    <div className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
-    <div className="glass-strong relative rounded-2xl p-5">
+    <div className="card-gold-hero relative rounded-2xl p-5">
       {/* Sezon başlık */}
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -233,9 +233,8 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
         </div>
       )}
 
-      {/* Hediye ders durumu — bağımsız premium modül */}
-      <div className="mt-4 relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]">
-        <div className="glass-strong relative rounded-2xl p-4">
+      {/* Hediye ders durumu — bağımsız modül, ince gold sınır (dıştaki card-gold-hero'nun içinde ikinci bir tam-ağırlıklı kart olmasın) */}
+      <div className="mt-4 relative rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${GOLD_BORDER_SOFT}` }}>
           <div className="text-[10px] uppercase tracking-widest mb-2.5" style={{ color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-label)", letterSpacing: "0.2em" }}>
             🎁 Bu Sezon Hediye Dersler
           </div>
@@ -275,9 +274,7 @@ function SeasonCard({ summary, claimed5k, claimed10k }: {
           <p className="text-[10px] text-white/20 mt-2.5" style={{ fontFamily: "var(--font-label)" }}>
             Yeni sezon başladığında hediye ders hakkın tekrar açılır (maks 2/sezon).
           </p>
-        </div>
       </div>
-    </div>
     </div>
   );
 }
@@ -288,7 +285,7 @@ function LifetimeXPCard({ xpResult }: { xpResult: XPResult }) {
   const { current, next, progressPct, xpInLevel, xpToNext } = xpResult.level;
 
   return (
-    <div className="glass-strong relative rounded-2xl p-5 overflow-hidden"
+    <div className="card-gold-hero relative rounded-2xl p-5 overflow-hidden"
       style={{
         borderColor: current.borderColor,
         boxShadow: `0 0 28px ${current.glowColor}`,
@@ -385,14 +382,26 @@ export default function SeviyeMerkeziPage() {
     Promise.all([
       getStudentAppointments(student.id),
       getLessonRecords(student.id),
-      getStudents().catch(() => [] as Student[]),
       getStudentGiftClaimsForSeason(student.id, season).catch(() => []),
       getStudentXPAdjustments(student.id).catch(() => []),
-      getAllXPAdjustments().catch(() => []),
-      getAppointments().catch(() => []),
-      getLessonRecords().catch(() => []),
+      // Faz 12 Adım A — eskiden ayrı ayrı getStudents()/getAllXPAdjustments()/
+      // getAppointments()/getLessonRecords() (hepsi select("*"), TÜM kolon)
+      // çekiliyordu. Şimdi TEK, dar-kolonlu bir fonksiyon — satır sayısı
+      // (hangi öğrenci/randevu/ders dönüyor) AYNI, sadece kolon sayısı daraldı.
+      getSeviyeLeaderboardData().catch(() => ({ students: [], appointments: [], records: [], adjustments: [] })),
       getGiftLessonRequestsForSeason(season).catch(() => []),
-    ]).then(([apts, recs, allStudents, giftClaims, xpAdjustments, allAdjustments, allAppointments, allRecords, seasonGiftRequests]) => {
+    ]).then(([apts, recs, giftClaims, xpAdjustments, hofData, seasonGiftRequests]) => {
+      // Aşağıdaki entries-oluşturma bloğu DEĞİŞMEDİ (byte-identical) — sadece
+      // girdi artık dar-kolonlu geliyor. computeFullXP/computeBadges/
+      // computeTechnicalAverages/compute30DayImprovement bu tiplerin SADECE
+      // altta zaten var olan alanlarını okuyor (studentId/status/date/
+      // overall/punch/kick/defense/conditioning/amount/createdAt/
+      // completedLessons) — cast SADECE TypeScript'in eksik-alan uyarısını
+      // bilerek bastırmak için, çalışma zamanı davranışı değişmiyor.
+      const allStudents    = hofData.students    as unknown as Student[];
+      const allAdjustments = hofData.adjustments as unknown as XPAdjustment[];
+      const allAppointments= hofData.appointments as unknown as Appointment[];
+      const allRecords     = hofData.records     as unknown as LessonRecord[];
       const sorted = [...recs].sort((a, b) => b.date.localeCompare(a.date));
       const result = computeFullXP(student.completedLessons, apts, sorted, season, xpAdjustments);
       setSummary(result);
@@ -512,11 +521,11 @@ export default function SeviyeMerkeziPage() {
             </div>
           </div>
           <div
-            className={`relative flex-shrink-0 rounded-full transition-all duration-200 ${showInHall ? "gradient-animated gradient-violet-pink-orange" : ""}`}
+            className="relative flex-shrink-0 rounded-full transition-all duration-200"
             style={{
               width: 42, height: 24,
-              background: showInHall ? undefined : "rgba(255,255,255,0.08)",
-              boxShadow: showInHall ? "0 0 12px rgba(139,92,246,0.4)" : "none",
+              background: showInHall ? "linear-gradient(90deg, #8F7A52, #E3C68C)" : "rgba(255,255,255,0.08)",
+              boxShadow: showInHall ? "0 0 12px rgba(201,169,110,0.45)" : "none",
             }}
           >
             <motion.div

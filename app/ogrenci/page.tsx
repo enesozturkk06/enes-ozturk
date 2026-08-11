@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/app/providers";
 import {
@@ -9,11 +9,11 @@ import {
   getStudentXPAdjustments, getStudentMissionCompletions, getKediMissions,
   getGyms, getStudentAvatar,
 } from "@/lib/db";
-import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, Gym, StudentAvatarConfig, AvatarAction } from "@/lib/types";
+import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, Gym, StudentAvatarConfig } from "@/lib/types";
 import { Badge, ProgressBar } from "@/app/components/ui";
 import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT } from "@/lib/constants";
 import { getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
-import { computeFullXP, getCurrentSeason, sumManualXP } from "@/lib/xp";
+import { computeFullXP, getCurrentSeason, sumManualXP, getDaysUntilSeasonEnd } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
 import { computeStudentMissions, getWeekKey, type MissionComputeInput } from "@/lib/kediTasks";
 import {
@@ -26,6 +26,8 @@ import ProfileHeroCard from "@/app/components/dashboard/ProfileHeroCard";
 import BadgeShowcase from "@/app/components/dashboard/BadgeShowcase";
 import DailyMissionsCard from "@/app/components/dashboard/DailyMissionsCard";
 import ActivityTimeline, { type TimelineItem } from "@/app/components/dashboard/ActivityTimeline";
+import StatsRail from "@/app/components/dashboard/StatsRail";
+import { GOLD_BRIGHT, GOLD_BORDER_SOFT, GOLD_BG_SOFT } from "@/app/components/dashboard/theme";
 import {
   Calendar, Clock, TrendingUp, Bell,
   CheckCircle, XCircle, ChevronRight, Users,
@@ -34,6 +36,7 @@ import {
 import Link from "next/link";
 import ActivityFeed from "@/app/components/shared/ActivityFeed";
 import PushNotificationButton from "@/app/components/shared/PushNotificationButton";
+import SportDecor from "@/app/components/shared/SportDecor";
 import { isAndroidDevice } from "@/lib/device";
 import { format, parseISO, isFuture, isToday, differenceInHours, differenceInMinutes } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -54,11 +57,13 @@ function loadAIPlan(kind: "training" | "nutrition"): { date: string; summary: st
 const stagger = { animate: { transition: { staggerChildren: 0.05 } } };
 const fadeUp  = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" as const } } };
 
-/** Bu sayfaya özel glass kart wrapper'ı — paylaşılan app/components/ui Card'ın
- *  yerine geçer (o component 16+ sayfada kullanılıyor, burada değiştirilmiyor). */
+/** Bu sayfaya özel premium gold kart wrapper'ı — paylaşılan app/components/ui
+ *  Card'ın yerine geçer (o component 16+ sayfada kullanılıyor, burada
+ *  değiştirilmiyor). Faz 1: glass-strong yerine .card-gold (globals.css,
+ *  Dashboard'a özel, diğer sayfaları etkilemez). */
 function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`glass-strong relative rounded-2xl overflow-hidden w-full ${className}`}>
+    <div className={`card-gold relative rounded-2xl overflow-hidden w-full ${className}`}>
       {children}
     </div>
   );
@@ -81,15 +86,6 @@ export default function OgrenciDashboard() {
   const [gyms, setGyms]                   = useState<Gym[]>([]);
   const [avatarConfig, setAvatarConfig]   = useState<StudentAvatarConfig | null>(null);
   const [loading, setLoading]             = useState(true);
-  // "XP kazandı → Victory" (bkz. Kedi Life event bağlantıları) — bu sayfanın
-  // KENDİ verisi yeniden çekildiğinde (reload()) toplam XP arttıysa avatar
-  // kısa süreliğine Victory oynatır. Not: BlackCatAI'nin global görev-XP
-  // ödülü bu sayfayı OTOMATİK yeniden çekmiyor (ayrı, bağlantısız bileşenler
-  // — bu haliyle sadece BU sayfanın kendi reload() çağrılarında XP artışı
-  // olursa tetiklenir, örn. randevu iptal/davet yanıtı sonrası).
-  const [heroAction, setHeroAction] = useState<AvatarAction | null>(null);
-  const prevXPRef = useRef<number | null>(null);
-
   // ── Pahalı, saf hesaplamalar — Guard'dan (aşağıdaki "if (!student ||
   // loading) return") ÖNCE, hook kuralları gereği. useMemo sayesinde SADECE
   // gerçek girdileri (appointments/records/xpAdjustments/vb.) değiştiğinde
@@ -133,21 +129,6 @@ export default function OgrenciDashboard() {
     })),
   ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8), [records, notifications, xpAdjustments]);
 
-  // "XP kazandı → Victory" (bkz. Kedi Life event bağlantıları) — bu sayfanın
-  // KENDİ verisi yeniden çekildiğinde (reload()) toplam XP arttıysa avatar
-  // kısa süreliğine Victory oynatır. Not: BlackCatAI'nin global görev-XP
-  // ödülü bu sayfayı OTOMATİK yeniden çekmiyor (ayrı, bağlantısız bileşenler
-  // — bu haliyle sadece BU sayfanın kendi reload() çağrılarında XP artışı
-  // olursa tetiklenir, örn. randevu iptal/davet yanıtı sonrası). Artık
-  // computeFullXP'yi BAĞIMSIZ tekrar ÇAĞIRMIYOR — yukarıdaki memoized
-  // xpSummary'yi okuyor (aynı sonuç, tekrar hesaplama yok).
-  useEffect(() => {
-    if (!student || loading || !xpSummary) return;
-    const total = xpSummary.lifetimeResult.breakdown.total;
-    if (prevXPRef.current !== null && total > prevXPRef.current) setHeroAction("victory");
-    prevXPRef.current = total;
-  }, [student, loading, xpSummary]);
-  const onHeroActionEnd = useCallback(() => setHeroAction(null), []);
   const [inviteLoading, setInviteLoading] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget]   = useState<Appointment | null>(null);
   const [cancelBusy, setCancelBusy]       = useState(false);
@@ -255,6 +236,11 @@ export default function OgrenciDashboard() {
   // sonra garantili non-null olduğu için xpSummary de garantili non-null
   // (useMemo'nun kendi guard'ı `student ? ... : null` şeklindeydi).
   const lifetimeXP = xpSummary!.lifetimeResult;
+  // Faz 1 — sezon özeti: xpSummary ZATEN hesaplanmıştı (yukarıda, useMemo),
+  // burada yeni bir hesap yapılmıyor, sadece getDaysUntilSeasonEnd (saf
+  // tarih fonksiyonu) ile kalan gün türetiliyor.
+  const seasonXP = xpSummary!.seasonResult.breakdown.total;
+  const seasonDaysLeft = getDaysUntilSeasonEnd(xpSummary!.season);
 
   // ── Yaklaşan Randevu (tekil) — salt-okunur türetilmiş değerler ──────
   const nextAppointment = upcoming[0] ?? null;
@@ -290,7 +276,8 @@ export default function OgrenciDashboard() {
 
   return (
     <>
-    <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-5 pb-28">
+    <motion.div variants={stagger} initial="initial" animate="animate" className="relative max-w-6xl mx-auto space-y-5 pb-28">
+      <SportDecor />
 
       {/* Hero + Profil Kartı + XP Bar + bugünkü tarih + Kedi AI mini tavsiye */}
       <motion.div variants={fadeUp}>
@@ -299,8 +286,8 @@ export default function OgrenciDashboard() {
           dateLabel={format(new Date(), "dd MMMM yyyy, EEEE", { locale: tr })}
           aiTip={heroAiTip}
           avatarConfig={avatarConfig}
-          avatarAction={heroAction}
-          onAvatarActionEnd={onHeroActionEnd}
+          seasonXP={seasonXP}
+          seasonDaysLeft={seasonDaysLeft}
         />
       </motion.div>
 
@@ -364,7 +351,153 @@ export default function OgrenciDashboard() {
         </motion.div>
       )}
 
-      {/* ══ DERS PAKETİ — en önemli kart, Hero'nun hemen altında ══ */}
+      {/* ══ YAKLAŞAN RANDEVU — Hero'nun hemen altında, ikinci güçlü alan (Faz 1 hiyerarşi #2) ══ */}
+      <motion.div variants={fadeUp}>
+        <Card className="p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Yaklaşan Randevu</h3>
+            <Link href="/ogrenci/randevu"
+              className="text-xs tracking-wider transition-colors"
+              style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>Tümü →</Link>
+          </div>
+          {!nextAppointment ? (
+            <div className="text-center py-8">
+              <Calendar size={28} className="text-white/10 mx-auto mb-3" />
+              <p className="text-sm" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
+                Yaklaşan randevunuz yok
+              </p>
+              <Link href="/ogrenci/randevu"
+                className="mt-3 inline-block text-xs tracking-wider transition-colors"
+                style={{ color: "var(--color-error)", fontFamily:"var(--font-label)" }}>+ Randevu Al</Link>
+            </div>
+          ) : (() => {
+            const hoursLeft  = differenceInHours(parseISO(`${nextAppointment.date}T${nextAppointment.startTime}`), new Date());
+            const canCancel  = hoursLeft >= CANCEL_LIMIT_HOURS;
+            const remainingLabel = nextAptMinutesLeft !== null
+              ? nextAptMinutesLeft < 60
+                ? `${Math.max(0, nextAptMinutesLeft)} dakika kaldı`
+                : nextAptMinutesLeft < 1440
+                  ? `${Math.floor(nextAptMinutesLeft / 60)} saat kaldı`
+                  : `${Math.floor(nextAptMinutesLeft / 1440)} gün kaldı`
+              : null;
+            return (
+              <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
+                <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+                  style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER_SOFT}` }}>
+                  <span className="text-sm" style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-display)" }}>
+                    {format(parseISO(nextAppointment.date), "dd")}
+                  </span>
+                  <span className="text-[9px]" style={{ color: GOLD_BRIGHT, opacity: 0.7, fontFamily:"var(--font-display)" }}>
+                    {format(parseISO(nextAppointment.date), "MMM", { locale: tr }).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>
+                      {format(parseISO(nextAppointment.date), "EEEE", { locale: tr })}
+                    </span>
+                    {nextAppointment.lessonType !== "bireysel" && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full"
+                        style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-label)" }}>
+                        {nextAppointment.lessonType === "duet" ? "Düet" : "Grup"}
+                      </span>
+                    )}
+                    {remainingLabel && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background:"rgba(245,158,11,0.12)", color:"var(--color-achievement)", fontFamily:"var(--font-label)" }}>
+                        {remainingLabel}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.50)" }}>
+                    <Clock size={11}/>
+                    <span style={{ fontFamily:"var(--font-label)" }}>{nextAppointment.startTime} – {nextAppointment.endTime}</span>
+                    {nextGym && <span style={{ fontFamily:"var(--font-label)" }}>· {nextGym.name}</span>}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <Badge color="green">{STATUS_LABELS[nextAppointment.status]}</Badge>
+                  <Link href="/ogrenci/randevu" className="text-[10px] transition-colors" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
+                    Randevu Detayı →
+                  </Link>
+                  <button
+                    onClick={() => handleCancelClick(nextAppointment)}
+                    className="text-[10px] transition-colors"
+                    style={{ color: canCancel ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)", fontFamily:"var(--font-label)", cursor: canCancel ? "pointer" : "default" }}
+                    title={canCancel ? "Randevuyu iptal et" : `${CANCEL_LIMIT_HOURS} saatten az kaldı`}
+                  >
+                    {canCancel ? "İptal et" : "⏱ İptal edilemez"}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </Card>
+      </motion.div>
+
+      {/* ══ STATS / PROGRESS — büyük rakamlar (Faz 1 hiyerarşi #3) ══ */}
+      <motion.div variants={fadeUp}>
+        <StatsRail
+          completedLessons={student.completedLessons}
+          totalXP={lifetimeXP.breakdown.total}
+          seasonXP={seasonXP}
+          seasonDaysLeft={seasonDaysLeft}
+          streak={lifetimeXP.currentStreak}
+        />
+      </motion.div>
+
+      {/* ══ GÜNLÜK GÖREVLER + ROZET VİTRİNİ (Faz 1 hiyerarşi #4-#5) ══ */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        <motion.div variants={fadeUp}>
+          <DailyMissionsCard missions={missions} />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <BadgeShowcase badges={badges} />
+        </motion.div>
+      </div>
+
+      {/* ══ KEDİ AI — bugünkü öneriler (Faz 1 hiyerarşi #6) ══ */}
+      <motion.div variants={fadeUp}>
+        <Card className="p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🐾</span>
+              <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Kedi AI</h3>
+            </div>
+            <Link href="/ogrenci/kedi-ai"
+              className="flex items-center gap-1 text-xs tracking-wider transition-colors flex-shrink-0"
+              style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>
+              Kedi AI&apos;ya Git <ChevronRight size={13} />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {kediSuggestions.map((s, i) => (
+              <div key={i} className="flex items-center gap-2.5 p-3 rounded-xl" style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER_SOFT}` }}>
+                <Sparkles size={14} className="flex-shrink-0" style={{ color: GOLD_BRIGHT }} />
+                <span className="text-sm" style={{ color:"rgba(255,255,255,0.72)", fontFamily:"var(--font-label)" }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </motion.div>
+
+      {/* ══ SON AKTİVİTE (Faz 1 hiyerarşi #7) ══ */}
+      <motion.div variants={fadeUp}>
+        <ActivityTimeline items={timelineItems} />
+      </motion.div>
+
+      {/* Push bildirim izni + Canlı aktivite akışı — ikincil, Activity kümesinin devamı */}
+      <motion.div variants={fadeUp}>
+        <PushNotificationButton role="student" studentId={student.id} />
+      </motion.div>
+      <motion.div variants={fadeUp}>
+        <ActivityFeed />
+      </motion.div>
+
+      {/* ══ İKİNCİL DETAYLAR — Paket / Sağlık / AI Diyet / Son Ders Notu.
+          Kullanıcı hiyerarşisinde ayrıca adlandırılmadı ama "mevcut özellikleri
+          koru" kuralı gereği hepsi burada, ana 8 grubun (Hero→Appointment→
+          Stats→Missions→Badges→KediAI→Activity→QuickActions) ALTINDA, ikincil
+          ağırlıkta duruyor — veri/mantık aynı, sadece görsel öncelik düştü. ══ */}
       <motion.div variants={fadeUp} id="paket-kartı">
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
@@ -388,7 +521,7 @@ export default function OgrenciDashboard() {
               <span className="text-sm" style={{ color:"rgba(255,255,255,0.72)", fontFamily:"var(--font-label)" }}>
                 Bu ay tamamlanan ders
               </span>
-              <span className="text-2xl font-bold" style={{ color:"#8B5CF6", fontFamily:"var(--font-display)" }}>
+              <span className="text-2xl font-bold" style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-display)" }}>
                 {student.completedLessons}
               </span>
             </div>
@@ -447,95 +580,12 @@ export default function OgrenciDashboard() {
         </Card>
       </motion.div>
 
-      {/* ══ YAKLAŞAN RANDEVU — bir sonraki ders (tekil) ══ */}
-      <motion.div variants={fadeUp}>
-        <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Yaklaşan Randevu</h3>
-            <Link href="/ogrenci/randevu"
-              className="text-xs text-gold/60 hover:text-gold tracking-wider transition-colors"
-              style={{ fontFamily:"var(--font-label)" }}>Tümü →</Link>
-          </div>
-          {!nextAppointment ? (
-            <div className="text-center py-8">
-              <Calendar size={28} className="text-white/10 mx-auto mb-3" />
-              <p className="text-sm" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
-                Yaklaşan randevunuz yok
-              </p>
-              <Link href="/ogrenci/randevu"
-                className="mt-3 inline-block text-xs tracking-wider transition-colors"
-                style={{ color: "var(--color-error)", fontFamily:"var(--font-label)" }}>+ Randevu Al</Link>
-            </div>
-          ) : (() => {
-            const hoursLeft  = differenceInHours(parseISO(`${nextAppointment.date}T${nextAppointment.startTime}`), new Date());
-            const canCancel  = hoursLeft >= CANCEL_LIMIT_HOURS;
-            const remainingLabel = nextAptMinutesLeft !== null
-              ? nextAptMinutesLeft < 60
-                ? `${Math.max(0, nextAptMinutesLeft)} dakika kaldı`
-                : nextAptMinutesLeft < 1440
-                  ? `${Math.floor(nextAptMinutesLeft / 60)} saat kaldı`
-                  : `${Math.floor(nextAptMinutesLeft / 1440)} gün kaldı`
-              : null;
-            return (
-              <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-                <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
-                  style={{ background:"rgba(220,38,38,0.1)", border:"1px solid rgba(220,38,38,0.2)" }}>
-                  <span className="text-sm" style={{ color: "var(--color-error)", fontFamily:"var(--font-display)" }}>
-                    {format(parseISO(nextAppointment.date), "dd")}
-                  </span>
-                  <span className="text-[9px]" style={{ color: "var(--color-error)", opacity: 0.7, fontFamily:"var(--font-display)" }}>
-                    {format(parseISO(nextAppointment.date), "MMM", { locale: tr }).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>
-                      {format(parseISO(nextAppointment.date), "EEEE", { locale: tr })}
-                    </span>
-                    {nextAppointment.lessonType !== "bireysel" && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-label)" }}>
-                        {nextAppointment.lessonType === "duet" ? "Düet" : "Grup"}
-                      </span>
-                    )}
-                    {remainingLabel && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background:"rgba(245,158,11,0.12)", color:"var(--color-achievement)", fontFamily:"var(--font-label)" }}>
-                        {remainingLabel}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.50)" }}>
-                    <Clock size={11}/>
-                    <span style={{ fontFamily:"var(--font-label)" }}>{nextAppointment.startTime} – {nextAppointment.endTime}</span>
-                    {nextGym && <span style={{ fontFamily:"var(--font-label)" }}>· {nextGym.name}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                  <Badge color="green">{STATUS_LABELS[nextAppointment.status]}</Badge>
-                  <Link href="/ogrenci/randevu" className="text-[10px] transition-colors" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
-                    Randevu Detayı →
-                  </Link>
-                  <button
-                    onClick={() => handleCancelClick(nextAppointment)}
-                    className="text-[10px] transition-colors"
-                    style={{ color: canCancel ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)", fontFamily:"var(--font-label)", cursor: canCancel ? "pointer" : "default" }}
-                    title={canCancel ? "Randevuyu iptal et" : `${CANCEL_LIMIT_HOURS} saatten az kaldı`}
-                  >
-                    {canCancel ? "İptal et" : "⏱ İptal edilemez"}
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-        </Card>
-      </motion.div>
-
       {/* ══ GÜNÜN ÖZETİ — Sağlık sayfasındaki gerçek verilerle 4 mini kart ══ */}
       <motion.div variants={fadeUp}>
         <Card className="p-5 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Günün Özeti</h3>
-            <Link href="/ogrenci/saglik" className="text-xs text-gold/60 hover:text-gold tracking-wider transition-colors" style={{ fontFamily:"var(--font-label)" }}>Sağlık →</Link>
+            <Link href="/ogrenci/saglik" className="text-xs tracking-wider transition-colors" style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>Sağlık →</Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
@@ -544,7 +594,7 @@ export default function OgrenciDashboard() {
               <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Bugünkü Su</div>
             </div>
             <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <Flame size={16} className="mx-auto mb-1" style={{ color:"var(--color-achievement)" }} />
+              <Flame size={16} className="mx-auto mb-1" style={{ color: GOLD_BRIGHT }} />
               <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{todayCalEntry ? todayCalEntry.consumed : "—"}</div>
               <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Bugünkü Kalori</div>
             </div>
@@ -569,7 +619,7 @@ export default function OgrenciDashboard() {
         <Card className="p-5 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>AI Diyet Özeti</h3>
-            <Link href="/ogrenci/saglik?tab=ai-diyet" className="text-xs text-gold/60 hover:text-gold tracking-wider transition-colors" style={{ fontFamily:"var(--font-label)" }}>Detaya git →</Link>
+            <Link href="/ogrenci/saglik?tab=ai-diyet" className="text-xs tracking-wider transition-colors" style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>Detaya git →</Link>
           </div>
           {!dietPlan ? (
             <div className="text-center py-6">
@@ -579,7 +629,7 @@ export default function OgrenciDashboard() {
               </p>
               <Link href="/ogrenci/saglik?tab=ai-diyet"
                 className="inline-block text-xs tracking-wider transition-colors"
-                style={{ color: "#8B5CF6", fontFamily:"var(--font-label)" }}>+ Plan Oluştur</Link>
+                style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>+ Plan Oluştur</Link>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -604,34 +654,6 @@ export default function OgrenciDashboard() {
         </Card>
       </motion.div>
 
-      {/* ══ KEDİ AI — bugünkü öneriler ══ */}
-      <motion.div variants={fadeUp}>
-        <Card className="p-5 sm:p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-lg">🐾</span>
-            <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Kedi AI</h3>
-          </div>
-          <div className="space-y-2">
-            {kediSuggestions.map((s, i) => (
-              <div key={i} className="flex items-center gap-2.5 p-3 rounded-xl" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-                <Sparkles size={14} className="flex-shrink-0" style={{ color:"#8B5CF6" }} />
-                <span className="text-sm" style={{ color:"rgba(255,255,255,0.72)", fontFamily:"var(--font-label)" }}>{s}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* ══ GÖREVLER — Rozet Vitrini + Günlük/Haftalık Görevler ══ */}
-      <div className="grid lg:grid-cols-2 gap-5">
-        <motion.div variants={fadeUp}>
-          <BadgeShowcase badges={badges} />
-        </motion.div>
-        <motion.div variants={fadeUp}>
-          <DailyMissionsCard missions={missions} />
-        </motion.div>
-      </div>
-
       {/* Son ders notu */}
       <motion.div variants={fadeUp}>
         <Card className="p-5 sm:p-6">
@@ -639,8 +661,8 @@ export default function OgrenciDashboard() {
             <h3 className="text-lg text-white tracking-wider"
               style={{ fontFamily:"var(--font-display)" }}>Son Ders Notu</h3>
             <Link href="/ogrenci/gelisim"
-              className="text-xs text-gold/60 hover:text-gold tracking-wider transition-colors"
-              style={{ fontFamily:"var(--font-label)" }}>Geçmiş →</Link>
+              className="text-xs tracking-wider transition-colors"
+              style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>Geçmiş →</Link>
           </div>
           {!lastRecord ? (
             <div className="text-center py-8">
@@ -686,19 +708,6 @@ export default function OgrenciDashboard() {
         </Card>
       </motion.div>
 
-      {/* ══ SON AKTİVİTE ══ */}
-      <motion.div variants={fadeUp}>
-        <ActivityTimeline items={timelineItems} />
-      </motion.div>
-
-      {/* Push bildirim izni + Canlı aktivite akışı — ikincil, sayfanın altında */}
-      <motion.div variants={fadeUp}>
-        <PushNotificationButton role="student" studentId={student.id} />
-      </motion.div>
-      <motion.div variants={fadeUp}>
-        <ActivityFeed />
-      </motion.div>
-
       {/* Hızlı erişim — Android'de scroll glitch'ine sebep oluyor, CSS düzeltmesi
           yetersiz kaldığı için Android'de tamamen kaldırıldı. iOS ve masaüstünde
           aynen görünüyor. */}
@@ -721,8 +730,9 @@ export default function OgrenciDashboard() {
                 (iOS'ta gorulmuyordu). Saf CSS hover/active gecisine
                 cevrildi - ayni gorsel his, dokunma/scroll catismasi yok.
               */}
-              <div className="glass p-4 text-center rounded-xl transition-transform duration-150 hover:-translate-y-0.5 hover:scale-[1.02] active:scale-95">
-                <div className="mx-auto mb-2" style={{ display:"flex", justifyContent:"center", color }}>
+              <div className="card-gold p-4 text-center rounded-xl transition-transform duration-150 hover:-translate-y-0.5 hover:scale-[1.02] active:scale-95">
+                <div className="w-9 h-9 mx-auto mb-2 rounded-lg flex items-center justify-center"
+                  style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER_SOFT}`, color }}>
                   {icon}
                 </div>
                 <div className="text-xs tracking-wider" style={{ color:"rgba(255,255,255,0.72)", fontFamily:"var(--font-label)" }}>{label}</div>

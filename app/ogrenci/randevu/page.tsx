@@ -8,10 +8,8 @@ import {
   cancelAppointment, getDuetPartner, getPendingInvites, respondToInvite,
   joinWaitlist, leaveWaitlist, getStudentWaitlist, updateStudent,
 } from "@/lib/db";
-import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry, AvatarAction } from "@/lib/types";
+import type { TimeSlot, Appointment, Student, LessonType, PendingInvite, WaitlistEntry } from "@/lib/types";
 import { PageHeader } from "@/app/components/ui";
-import LazyAvatarEngine3D from "@/app/components/shared/LazyAvatarEngine3D";
-import { getActiveCharacterPack } from "@/lib/avatarPack";
 import {
   TRAINER_NAME, TRAINER_WHATSAPP, TRAINER_LOCATION, CANCEL_LIMIT_HOURS,
   LESSON_DURATION_MINUTES, PACKAGE_EXPIRED_BOOKING_TEXT,
@@ -19,7 +17,7 @@ import {
 import { isPackageExpired } from "@/lib/packageDuration";
 import {
   Calendar, Clock, CheckCircle, XCircle, AlertTriangle,
-  Users, User, Bell, Clock3,
+  Users, User, Bell, Clock3, Swords,
 } from "lucide-react";
 import { format, addDays, parseISO, differenceInHours, isFuture } from "date-fns";
 import { tr } from "date-fns/locale";
@@ -27,6 +25,7 @@ import PackageExpiryBanner from "@/app/components/shared/PackageExpiryBanner";
 import LessonRulesCard from "@/app/components/shared/LessonRulesCard";
 
 const V = "#8B5CF6";
+const M = "#D946EF"; // magenta — ikincil accent (Faz: Randevu Premium Mor-Neon Redesign)
 
 const STATUS_TR: Record<string, string> = {
   onaylandi: "Onaylandı", iptal: "İptal", tamamlandi: "Tamamlandı", gelmedi: "Gelmedi",
@@ -39,13 +38,18 @@ const LESSON_TYPES: { value: LessonType; label: string; icon: React.ReactNode }[
   { value: "duet",     label: "Düet",     icon: <Users size={15} /> },
 ];
 
-/* ── Kart sarmalayıcı — premium glass ─────────────────────── */
+/* ── Kart sarmalayıcı — premium mor-neon ──────────────────────
+ * Faz: Randevu Premium Mor-Neon Redesign — .glass/.glass-strong yerine
+ * .card-neon/.card-neon-strong (globals.css, SADECE bu sayfa kullanır,
+ * global .glass sistemine dokunulmadı). Çağrı yerleri (`glass="glass-strong"`)
+ * DEĞİŞMEDİ — sadece hangi CSS sınıfına eşlendiği değişti. */
 function Card({ children, className = "", style = {}, glass = "glass" }: {
   children: React.ReactNode; className?: string; style?: React.CSSProperties; glass?: "glass" | "glass-strong";
 }) {
+  const surfaceClass = glass === "glass-strong" ? "card-neon-strong" : "card-neon";
   return (
     <div
-      className={`${glass} relative rounded-2xl overflow-hidden w-full ${className}`}
+      className={`${surfaceClass} relative rounded-2xl overflow-hidden w-full ${className}`}
       style={style}
     >
       {children}
@@ -53,24 +57,24 @@ function Card({ children, className = "", style = {}, glass = "glass" }: {
   );
 }
 
-/* ── Avatar — "ders aktifken Guard / ders bitince Victory" ─────────
+/* ── Ders durumu kartı — "şu an aktif mi" göstergesi ─────────
  * KENDİ bileşeninde izole edildi çünkü 30sn'lik interval'i (bkz. aşağıda)
  * sadece BU küçük kart yeniden render etsin diye — üst RandevuPage'in tamamı
  * (randevu formu, takvim, saat listesi) 30 saniyede bir GEREKSİZ yeniden
  * render OLMASIN. appointments referansı değiştiğinde (reload()) doğal
- * olarak yeniden render olur, aradaki 30sn'lerde SADECE bu kart tikler. */
+ * olarak yeniden render olur, aradaki 30sn'lerde SADECE bu kart tikler.
+ * 3D avatar önizlemesi kaldırıldı ("3D Avatar Temizliği" turu) — yerine
+ * durum ikonu (aktif/bekliyor). */
 function LessonStatusAvatarCard({ appointments }: { appointments: Appointment[] }) {
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
-  const [lessonAction, setLessonAction] = useState<AvatarAction | null>(null);
-  const [prevActiveApptId, setPrevActiveApptId] = useState<string | null>(null);
 
-  // "Ders aktifken Guard / ders bitince Victory" — appointment status
-  // modelinde "şu an aktif" diye bir alan YOK (sadece onaylandi/iptal/
-  // tamamlandi/gelmedi), bu yüzden date+startTime/endTime'dan TÜRETİLİYOR.
+  // "Ders aktif mi" — appointment status modelinde "şu an aktif" diye bir
+  // alan YOK (sadece onaylandi/iptal/tamamlandi/gelmedi), bu yüzden
+  // date+startTime/endTime'dan TÜRETİLİYOR.
   const now = new Date(nowTick);
   const activeAppointment = appointments.find(a =>
     a.status === "onaylandi" &&
@@ -78,28 +82,18 @@ function LessonStatusAvatarCard({ appointments }: { appointments: Appointment[] 
     now < parseISO(`${a.date}T${a.endTime}`)
   ) ?? null;
 
-  // Effect yerine render-sırasında türetme (react-hooks/set-state-in-effect kuralı).
-  const currActiveApptId = activeAppointment?.id ?? null;
-  if (currActiveApptId !== prevActiveApptId) {
-    if (prevActiveApptId && !currActiveApptId) setLessonAction("victory"); // ders az önce bitti
-    setPrevActiveApptId(currActiveApptId);
-  }
-
   return (
     <Card>
       <div className="p-4 flex items-center gap-3">
-        <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0" style={{ background: "#0a0a0c" }}>
-          <LazyAvatarEngine3D
-            pack={getActiveCharacterPack()}
-            activity={activeAppointment ? "guard" : "idle"}
-            action={lessonAction}
-            onActionEnd={() => setLessonAction(null)}
-            width={56}
-            height={56}
-          />
+        <div className="w-14 h-14 rounded-xl flex-shrink-0 flex items-center justify-center"
+          style={{
+            background: activeAppointment ? "rgba(220,38,38,0.12)" : "rgba(139,92,246,0.1)",
+            border: `1px solid ${activeAppointment ? "rgba(220,38,38,0.35)" : "rgba(139,92,246,0.25)"}`,
+          }}>
+          <Swords size={22} style={{ color: activeAppointment ? "#EF4444" : "#A78BFA" }} />
         </div>
         <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
-          {activeAppointment ? "Ders şu an aktif — gard pozunda 🥊" : "Bir sonraki dersini bekliyor"}
+          {activeAppointment ? "Ders şu an aktif 🥊" : "Bir sonraki dersini bekliyor"}
         </p>
       </div>
     </Card>
@@ -492,18 +486,20 @@ export default function RandevuPage() {
                       whileTap={{ scale: 0.94 }}
                       transition={{ type: "tween", duration: 0.15 }}
                       onClick={() => { setSelectedDate(d); setSelectedSlot(null); }}
-                      className={`flex flex-col items-center py-2.5 rounded-xl transition-colors ${active ? "gradient-violet-blue-red" : ""}`}
+                      className="flex flex-col items-center py-2.5 rounded-xl transition-colors"
                       style={{
-                        background: active ? undefined : "rgba(255,255,255,0.03)",
+                        background: active ? `linear-gradient(135deg, ${V}, #A855F7 55%, ${M})` : "rgba(255,255,255,0.03)",
                         border: active
-                          ? "1px solid rgba(139,92,246,0.65)"
+                          ? "1px solid rgba(196,181,253,0.7)"
                           : isToday
-                            ? "1.5px solid var(--color-achievement-bright)"
+                            ? "1.5px solid rgba(196,181,253,0.55)"
                             : "1px solid rgba(255,255,255,0.07)",
-                        boxShadow: isToday && !active ? "0 0 12px rgba(251,191,36,0.22)" : "none",
+                        boxShadow: active
+                          ? "0 0 18px -4px rgba(139,92,246,0.55)"
+                          : isToday ? "0 0 12px -4px rgba(196,181,253,0.3)" : "none",
                       }}>
                       <span className="text-[9px] leading-tight" style={{
-                        color: active ? "#fff" : isToday ? "var(--color-achievement-bright)" : "rgba(255,255,255,0.3)",
+                        color: active ? "#fff" : isToday ? "#C4B5FD" : "rgba(255,255,255,0.3)",
                         fontFamily: "var(--font-label)",
                       }}>
                         {format(parseISO(d), "EEE", { locale: tr }).toUpperCase()}
@@ -584,7 +580,7 @@ export default function RandevuPage() {
                             className={`glass p-3.5 rounded-xl text-center w-full transition-colors ${disabled ? "" : "cursor-pointer"}`}
                             style={{
                               borderColor: selected
-                                ? "var(--color-achievement)"
+                                ? "#C4B5FD"
                                 : taken
                                   ? "rgba(239,68,68,0.3)"
                                   : "rgba(139,92,246,0.3)",
@@ -592,11 +588,11 @@ export default function RandevuPage() {
                               cursor: disabled ? "not-allowed" : "pointer",
                               opacity: blocked ? 0.25 : disabled ? 0.55 : 1,
                               boxShadow: selected
-                                ? "0 0 20px rgba(245,158,11,0.35), 0 0 45px rgba(245,158,11,0.12)"
+                                ? "0 0 20px rgba(139,92,246,0.4), 0 0 45px rgba(217,70,239,0.14)"
                                 : taken ? "none" : "0 0 14px rgba(139,92,246,0.07)",
                             }}>
                             <div className="text-sm font-semibold" style={{
-                              color: selected ? "var(--color-achievement-bright)" : "#fff",
+                              color: selected ? "#E9D5FF" : "#fff",
                               fontFamily: "var(--font-label)",
                             }}>
                               {slot.startTime}
@@ -618,9 +614,9 @@ export default function RandevuPage() {
                               disabled={wlBusy}
                               className="w-full py-1 text-[10px] font-semibold rounded-lg transition-all flex items-center justify-center gap-1"
                               style={{
-                                background: inWl ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
-                                border: `1px solid ${inWl ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.08)"}`,
-                                color: inWl ? "#FBBF24" : "rgba(255,255,255,0.3)",
+                                background: inWl ? "rgba(217,70,239,0.12)" : "rgba(255,255,255,0.03)",
+                                border: `1px solid ${inWl ? "rgba(217,70,239,0.4)" : "rgba(255,255,255,0.08)"}`,
+                                color: inWl ? "#F0ABFC" : "rgba(255,255,255,0.3)",
                                 fontFamily: "var(--font-label)",
                                 opacity: wlBusy ? 0.5 : 1,
                               }}
@@ -683,8 +679,12 @@ export default function RandevuPage() {
                         Vazgeç
                       </button>
                       <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
-                        className="gradient-animated gradient-slow gradient-violet-blue-red py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50 transition-transform active:scale-[0.97]"
-                        style={{ fontFamily: "var(--font-label)" }}>
+                        className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50 transition-transform active:scale-[0.97]"
+                        style={{
+                          fontFamily: "var(--font-label)",
+                          background: `linear-gradient(135deg, ${V}, #A855F7 55%, ${M})`,
+                          boxShadow: "0 4px 24px -6px rgba(139,92,246,0.5)",
+                        }}>
                         {saving ? "Oluşturuluyor..." : "Randevuyu Onayla"}
                       </button>
                     </div>
@@ -703,17 +703,17 @@ export default function RandevuPage() {
 
           {/* Bekleme Listesi */}
           {waitlist.length > 0 && (
-            <Card style={{ border: "1px solid rgba(251,191,36,0.2)", background: "rgba(251,191,36,0.03)" }}>
+            <Card style={{ border: "1px solid rgba(217,70,239,0.22)", background: "rgba(217,70,239,0.04)" }}>
               <div className="p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <Clock3 size={13} style={{ color: "#FBBF24" }} />
-                  <p className="text-xs uppercase" style={{ color: "#FBBF24", fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
+                  <Clock3 size={13} style={{ color: "#F0ABFC" }} />
+                  <p className="text-xs uppercase" style={{ color: "#F0ABFC", fontFamily: "var(--font-label)", letterSpacing: "0.12em" }}>
                     Bekleme Listem ({waitlist.length})
                   </p>
                 </div>
                 {waitlist.map(w => (
                   <div key={w.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
-                    style={{ borderColor: "rgba(251,191,36,0.08)" }}>
+                    style={{ borderColor: "rgba(217,70,239,0.1)" }}>
                     <div>
                       <div className="text-xs font-semibold text-white/70" style={{ fontFamily: "var(--font-label)" }}>
                         {w.date} · {w.startTime}

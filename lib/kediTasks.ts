@@ -29,9 +29,47 @@ export function getWeekKey(): string {
   return `${getYear(now)}-W${getISOWeek(now).toString().padStart(2, "0")}`;
 }
 
-/** Bu haftanın başlangıcı (Pazartesi) */
-function thisWeekStart(): Date {
+/** Bu haftanın başlangıcı (Pazartesi) — export edildi (Kedi AI V6 Haftalık
+ * Koç Raporu, bu hafta/geçen hafta ders sayımı için AYNI hafta tanımını
+ * kullanmak üzere buradan reuse ediyor — kendi hafta hesaplamasını
+ * TEKRAR yazmıyor, görev sistemiyle "hafta" tutarsızlığı olmasın diye). */
+export function thisWeekStart(): Date {
   return startOfWeek(new Date(), { weekStartsOn: 1 });
+}
+
+/** Bu hafta / geçen hafta GERÇEKTEN tamamlanmış (status: "tamamlandi") ders
+ * sayısı — Kedi AI V6 Haftalık Koç Raporu HEM client-side (BlackCatAI.tsx,
+ * deterministik rapor metni) HEM server-side (lib/kediAi.ts, sohbet
+ * digest'i) tarafından kullanılıyor. Aynı filtre/pencere mantığı İKİ YERDE
+ * AYRI AYRI yazılmasın diye buraya taşındı (tek doğruluk kaynağı). */
+export interface WeekOverWeekLessons {
+  thisWeek: number;
+  lastWeek: number;
+  /** Bu haftadan ÖNCEYE ait GERÇEK bir tamamlanan randevu var mı — "geçen
+   * haftaya göre" karşılaştırmasının anlamlı olup olmadığını belirler. */
+  hasPriorHistory: boolean;
+}
+export function computeWeekOverWeekLessons(appointments: Appointment[]): WeekOverWeekLessons {
+  const weekStart = thisWeekStart();
+  const lastWeekStart = new Date(weekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+  const isCompletedInRange = (a: Appointment, from: Date, to?: Date) => {
+    if (a.status !== "tamamlandi") return false;
+    try {
+      const d = parseISO(a.date);
+      return d >= from && (!to || d < to);
+    } catch { return false; }
+  };
+
+  return {
+    thisWeek: appointments.filter(a => isCompletedInRange(a, weekStart)).length,
+    lastWeek: appointments.filter(a => isCompletedInRange(a, lastWeekStart, weekStart)).length,
+    hasPriorHistory: appointments.some(a => {
+      if (a.status !== "tamamlandi") return false;
+      try { return parseISO(a.date) < weekStart; } catch { return false; }
+    }),
+  };
 }
 
 /* ── Yardımcılar ──────────────────────────────────────────────────── */

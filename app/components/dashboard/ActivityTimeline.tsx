@@ -23,7 +23,7 @@ interface Props { items: TimelineItem[] }
 
 function ActivityTimeline({ items }: Props) {
   return (
-    <div className="glass-strong rounded-2xl p-5 sm:p-6">
+    <div className="card-gold rounded-2xl p-5 sm:p-6">
       <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily: "var(--font-display)" }}>SON AKTİVİTELER</h3>
 
       {items.length === 0 ? (

@@ -43,6 +43,31 @@ function db() {
   return supabase!;
 }
 
+/* ── Kısa ömürlü istek tekilleştirme (performans denetiminde bulunan
+   gerçek sorun) ────────────────────────────────────────────────────
+   BlackCatAI.tsx (layout seviyesinde, TÜM /ogrenci/* sayfalarında mount)
+   ile o an açık olan sayfanın KENDİSİ (dashboard/randevu/vb.) neredeyse
+   AYNI ANDA, BAĞIMSIZ olarak AYNI öğrencinin appointments/lesson_records/
+   xp/mission verisini ayrı ayrı çekiyordu — network üzerinden aynı veri
+   iki kez iniyordu. Global bir state/cache mimarisi (SWR/React Query vb.)
+   KURMADAN, SADECE bu birkaç fonksiyonun içine çok kısa (5sn) ömürlü bir
+   "aynı anda gelen aynı isteği paylaş" katmanı eklendi. 5sn sonra normal
+   taze sorguya döner — hiçbir çağıran taraf FARK ETMEZ (dönüş tipi/
+   davranışı birebir aynı), sadece mount-zamanı çakışan istekler TEK ağ
+   çağrısını paylaşır. Hata durumunda cache'te bozuk bir promise kalmasın
+   diye reddedilen istek hemen cache'ten silinir. */
+const inflightCache = new Map<string, { promise: Promise<unknown>; ts: number }>();
+const DEDUPE_TTL_MS = 5000;
+
+export function dedupeRequest<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const hit = inflightCache.get(key);
+  if (hit && Date.now() - hit.ts < DEDUPE_TTL_MS) return hit.promise as Promise<T>;
+  const promise = fn();
+  inflightCache.set(key, { promise, ts: Date.now() });
+  promise.catch(() => inflightCache.delete(key));
+  return promise;
+}
+
 /* ── Row mappers ────────────────────────────────────────────── */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ms = (r: any): Student => ({
@@ -503,37 +528,39 @@ export async function getIncompleteAppointments(beforeDate: string): Promise<App
  * - Düet daveti kabul ettiği (appointment_students → invite_status != declined)
  */
 export async function getStudentAppointments(studentId: string): Promise<Appointment[]> {
-  // 1. Kendi oluşturduğu randevular
-  const { data: direct, error: e1 } = await db()
-    .from("appointments").select("*")
-    .eq("student_id", studentId).order("date").order("start_time");
-  if (e1) fail("getStudentAppointments:direct", e1);
+  return dedupeRequest(`getStudentAppointments:${studentId}`, async () => {
+    // 1. Kendi oluşturduğu randevular
+    const { data: direct, error: e1 } = await db()
+      .from("appointments").select("*")
+      .eq("student_id", studentId).order("date").order("start_time");
+    if (e1) fail("getStudentAppointments:direct", e1);
 
-  // 2. appointment_students üzerinden partner olduğu randevular
-  //    select("*") ile — schema cache bağımsız
-  const { data: apStRows } = await db()
-    .from("appointment_students")
-    .select("*")
-    .eq("student_id", studentId);
+    // 2. appointment_students üzerinden partner olduğu randevular
+    //    select("*") ile — schema cache bağımsız
+    const { data: apStRows } = await db()
+      .from("appointment_students")
+      .select("*")
+      .eq("student_id", studentId);
 
-  // JS'de filtrele: accepted olanlar ve creator olmayanlar
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const partnerAccepted = (apStRows ?? []).filter((r: any) =>
-    r.role !== "creator" && r.invite_status === "accepted"
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ).map((r: any) => r.appointment_id as string);
+    // JS'de filtrele: accepted olanlar ve creator olmayanlar
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const partnerAccepted = (apStRows ?? []).filter((r: any) =>
+      r.role !== "creator" && r.invite_status === "accepted"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ).map((r: any) => r.appointment_id as string);
 
-  const directIds = (direct ?? []).map(r => r.id);
-  const extraIds  = partnerAccepted.filter(id => !directIds.includes(id));
+    const directIds = (direct ?? []).map(r => r.id);
+    const extraIds  = partnerAccepted.filter(id => !directIds.includes(id));
 
-  if (extraIds.length === 0) return (direct ?? []).map(ma);
+    if (extraIds.length === 0) return (direct ?? []).map(ma);
 
-  const { data: extra, error: e3 } = await db()
-    .from("appointments").select("*").in("id", extraIds);
-  if (e3) fail("getStudentAppointments:extra", e3);
+    const { data: extra, error: e3 } = await db()
+      .from("appointments").select("*").in("id", extraIds);
+    if (e3) fail("getStudentAppointments:extra", e3);
 
-  return [...(direct ?? []), ...(extra ?? [])].map(ma)
-    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+    return [...(direct ?? []), ...(extra ?? [])].map(ma)
+      .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  });
 }
 
 /** Bekleyen davetleri sayısı (bildirim badge için) */
@@ -1149,11 +1176,13 @@ export async function getTimeSlots(date: string): Promise<TimeSlot[]> {
    ═══════════════════════════════════════════════════════════════ */
 
 export async function getLessonRecords(studentId?: string): Promise<LessonRecord[]> {
-  let q = db().from("lesson_records").select("*").order("date", { ascending: false });
-  if (studentId) q = q.eq("student_id", studentId);
-  const { data, error } = await q;
-  if (error) fail("getLessonRecords", error);
-  return (data ?? []).map(ml);
+  return dedupeRequest(`getLessonRecords:${studentId ?? "ALL"}`, async () => {
+    let q = db().from("lesson_records").select("*").order("date", { ascending: false });
+    if (studentId) q = q.eq("student_id", studentId);
+    const { data, error } = await q;
+    if (error) fail("getLessonRecords", error);
+    return (data ?? []).map(ml);
+  });
 }
 
 export async function createLessonRecord(record: Omit<LessonRecord, "id" | "createdAt">): Promise<LessonRecord> {
@@ -1290,16 +1319,18 @@ function kediProgramJson(program: KediProgram) {
 
 /** Öğrencinin şu an YAYINDA olan (öğrencinin gördüğü) tek sürümü — yoksa null. */
 export async function getPublishedKediProgram(studentId: string): Promise<KediProgram | null> {
-  const { data, error } = await db()
-    .from("kedi_ai_programs").select("*")
-    .eq("student_id", studentId).eq("status", "published")
-    .order("version", { ascending: false }).limit(1).maybeSingle();
-  if (error) {
-    if (isSchemaError(error)) { console.warn("getPublishedKediProgram: kedi_ai_programs tablosu hazır değil"); return null; }
-    console.error("getPublishedKediProgram:", error.message);
-    return null;
-  }
-  return data ? mKediProgram(data) : null;
+  return dedupeRequest(`getPublishedKediProgram:${studentId}`, async () => {
+    const { data, error } = await db()
+      .from("kedi_ai_programs").select("*")
+      .eq("student_id", studentId).eq("status", "published")
+      .order("version", { ascending: false }).limit(1).maybeSingle();
+    if (error) {
+      if (isSchemaError(error)) { console.warn("getPublishedKediProgram: kedi_ai_programs tablosu hazır değil"); return null; }
+      console.error("getPublishedKediProgram:", error.message);
+      return null;
+    }
+    return data ? mKediProgram(data) : null;
+  });
 }
 
 /** Öğrencinin TÜM program sürümleri (taslak/yayında/arşiv), en yeniden eskiye — Koç Merkezi geçmiş/karşılaştırma görünümü için. */
@@ -1406,15 +1437,17 @@ const mKediVisionAnalysis = (r: any): KediVisionAnalysis => ({
 
 /** Öğrencinin TÜM geçmiş analizleri, en yeniden eskiye — gelişim karşılaştırması ve geçmiş görünümü için. */
 export async function getKediVisionAnalyses(studentId: string): Promise<KediVisionAnalysis[]> {
-  const { data, error } = await db()
-    .from("kedi_ai_vision_analyses").select("*")
-    .eq("student_id", studentId).order("created_at", { ascending: false });
-  if (error) {
-    if (isSchemaError(error)) return [];
-    console.error("getKediVisionAnalyses:", error.message);
-    return [];
-  }
-  return (data ?? []).map(mKediVisionAnalysis);
+  return dedupeRequest(`getKediVisionAnalyses:${studentId}`, async () => {
+    const { data, error } = await db()
+      .from("kedi_ai_vision_analyses").select("*")
+      .eq("student_id", studentId).order("created_at", { ascending: false });
+    if (error) {
+      if (isSchemaError(error)) return [];
+      console.error("getKediVisionAnalyses:", error.message);
+      return [];
+    }
+    return (data ?? []).map(mKediVisionAnalysis);
+  });
 }
 
 /** Aynı görsel (aynı hash) bu öğrenci için daha önce analiz edildiyse döner —
@@ -2506,13 +2539,15 @@ export async function createXPAdjustment(
 
 /** Öğrencinin manuel XP geçmişini getir (en yeni → en eski) */
 export async function getStudentXPAdjustments(studentId: string): Promise<XPAdjustment[]> {
-  const { data, error } = await db()
-    .from("xp_adjustments")
-    .select("*")
-    .eq("student_id", studentId)
-    .order("created_at", { ascending: false });
-  if (error) { console.error("[getStudentXPAdjustments]", error.message); return []; }
-  return (data ?? []).map(mapXPAdjustment);
+  return dedupeRequest(`getStudentXPAdjustments:${studentId}`, async () => {
+    const { data, error } = await db()
+      .from("xp_adjustments")
+      .select("*")
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false });
+    if (error) { console.error("[getStudentXPAdjustments]", error.message); return []; }
+    return (data ?? []).map(mapXPAdjustment);
+  });
 }
 
 /** Admin: tüm öğrencilerin manuel XP kayıtlarını getir (toplu hesaplama için) */
@@ -2523,6 +2558,124 @@ export async function getAllXPAdjustments(): Promise<XPAdjustment[]> {
     .order("created_at", { ascending: false });
   if (error) { console.error("[getAllXPAdjustments]", error.message); return []; }
   return (data ?? []).map(mapXPAdjustment);
+}
+
+/** Onur Listesi (Hall of Fame) sıralaması için MİNİMUM veri — performans
+ * denetiminde bulunan gerçek sorun: BlackCatAI.tsx kendi sırasını hesaplamak
+ * için getStudents()+getAllXPAdjustments() (TÜM kolonlar, TÜM öğrenciler)
+ * çekiyordu, ama sadece 2 alana ihtiyacı var. getStudents()/getAllXPAdjustments()
+ * KENDİLERİ değiştirilmedi (admin panelleri + seviye/arena/fight-card/profil
+ * sayfalarının KENDİ ayrı ihtiyaçları için hâlâ tam veri döndürüyorlar) — bu,
+ * SADECE BlackCatAI'nin sıralama hesaplaması için paralel, minimal bir
+ * alternatiftir. Aynı hesaplama mantığı (tamamlanan ders×100 + manuel XP)
+ * BlackCatAI.tsx'te DEĞİŞMEDİ, sadece girdi verisi küçültüldü. */
+export interface HallOfFameAggregateRow {
+  id: string; completedLessons: number;
+  // Faz 10 — profil/page.tsx'in kendi Onur Listesi filtresi (isActive &&
+  // showInHallOfFame) için eklendi. BlackCatAI bu iki alanı KULLANMIYOR
+  // (kendi hallEntries hesaplaması değişmedi) — geriye uyumlu, katkısal alan.
+  isActive: boolean; showInHallOfFame: boolean;
+}
+export interface XPAdjustmentAggregateRow { studentId: string; amount: number }
+
+export async function getHallOfFameAggregates(): Promise<{
+  students: HallOfFameAggregateRow[]; adjustments: XPAdjustmentAggregateRow[];
+}> {
+  // Faz 10 — BlackCatAI (layout'ta her zaman mount) ve profil/page.tsx aynı
+  // anda bu fonksiyonu çağırabilir; dedupeRequest (bkz. dosya başındaki
+  // yorum, Faz 1'de kurulan aynı mekanizma) tek network isteğini paylaştırır.
+  return dedupeRequest("getHallOfFameAggregates", async () => {
+    const [studentsRes, adjustmentsRes] = await Promise.all([
+      db().from("students").select("id, completed_lessons, is_active, show_in_hall_of_fame"),
+      db().from("xp_adjustments").select("student_id, amount"),
+    ]);
+    if (studentsRes.error) console.error("[getHallOfFameAggregates/students]", studentsRes.error.message);
+    if (adjustmentsRes.error) console.error("[getHallOfFameAggregates/adjustments]", adjustmentsRes.error.message);
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      students: (studentsRes.data ?? []).map((r: any) => ({
+        id: r.id as string,
+        completedLessons: (r.completed_lessons as number) ?? 0,
+        isActive: (r.is_active as boolean) ?? true,
+        showInHallOfFame: (r.show_in_hall_of_fame as boolean) ?? true,
+      })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adjustments: (adjustmentsRes.data ?? []).map((r: any) => ({ studentId: r.student_id as string, amount: r.amount as number })),
+    };
+  });
+}
+
+/* ── Faz 12 Adım A — Seviye Merkezi Onur Listesi için dar-kolonlu
+ * tüm-gym verisi. /ogrenci/seviye önceden getStudents()/
+ * getAllXPAdjustments()/getAppointments()/getLessonRecords() (hepsi
+ * select("*"), TÜM kolonlar — phone/email/notes/trainerNotes/
+ * studentPhone dahil) çekiyordu; computeFullXP/computeBadges/
+ * computeTechnicalAverages/compute30DayImprovement'ın GERÇEKTEN
+ * okuduğu alanlar bunlardan çok daha dar. Bu fonksiyon SADECE o
+ * alanları döndürür — satır sayısı (hangi öğrenci/randevu/ders
+ * dönüyor) AYNI kalır, sadece kolon sayısı daralır.
+ * getHallOfFameAggregates() (Faz 10, profil/BlackCatAI) BİLEREK
+ * DEĞİŞTİRİLMEDİ — bu tamamen ayrı, kendi dedupeRequest anahtarına
+ * sahip bir fonksiyon; seviye'nin showInHallOfFame filtresi (isActive'e
+ * BAKMAZ) profil'in isActive&&showInHallOfFame filtresinden FARKLI
+ * olduğu için satır-seviyesi eleme burada bilerek yapılmıyor (Adım B,
+ * bu turda uygulanmadı). */
+export interface SeviyeStudentRow {
+  id: string; fullName: string; completedLessons: number; createdAt: string;
+  showInHallOfFame: boolean; hallFeatured: boolean; isStudentOfMonth: boolean;
+  avatarUrl?: string; packageType?: string;
+}
+export interface SeviyeApptRow { studentId: string; status: string; date: string }
+export interface SeviyeRecordRow {
+  studentId: string; date: string; overall: number;
+  punch: number; kick: number; defense: number; conditioning: number;
+}
+export interface SeviyeAdjRow { studentId: string; amount: number; createdAt: string }
+
+export async function getSeviyeLeaderboardData(): Promise<{
+  students: SeviyeStudentRow[]; appointments: SeviyeApptRow[];
+  records: SeviyeRecordRow[]; adjustments: SeviyeAdjRow[];
+}> {
+  return dedupeRequest("getSeviyeLeaderboardData", async () => {
+    const [studentsRes, apptsRes, recordsRes, adjRes] = await Promise.all([
+      db().from("students").select("id, full_name, completed_lessons, created_at, show_in_hall_of_fame, hall_featured, is_student_of_month, avatar_url, package_type"),
+      db().from("appointments").select("student_id, status, date"),
+      db().from("lesson_records").select("student_id, date, overall, punch, kick, defense, conditioning"),
+      db().from("xp_adjustments").select("student_id, amount, created_at"),
+    ]);
+    if (studentsRes.error) console.error("[getSeviyeLeaderboardData/students]", studentsRes.error.message);
+    if (apptsRes.error) console.error("[getSeviyeLeaderboardData/appointments]", apptsRes.error.message);
+    if (recordsRes.error) console.error("[getSeviyeLeaderboardData/records]", recordsRes.error.message);
+    if (adjRes.error) console.error("[getSeviyeLeaderboardData/adjustments]", adjRes.error.message);
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      students: (studentsRes.data ?? []).map((r: any) => ({
+        id:               r.id as string,
+        fullName:         r.full_name as string,
+        completedLessons: (r.completed_lessons as number) ?? 0,
+        createdAt:        r.created_at as string,
+        showInHallOfFame: (r.show_in_hall_of_fame as boolean) ?? true,
+        hallFeatured:     (r.hall_featured as boolean) ?? false,
+        isStudentOfMonth: (r.is_student_of_month as boolean) ?? false,
+        avatarUrl:        r.avatar_url as string | undefined,
+        packageType:      r.package_type as string | undefined,
+      })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      appointments: (apptsRes.data ?? []).map((r: any) => ({
+        studentId: r.student_id as string, status: r.status as string, date: r.date as string,
+      })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      records: (recordsRes.data ?? []).map((r: any) => ({
+        studentId:   r.student_id as string, date: r.date as string,
+        overall:     r.overall as number, punch: r.punch as number, kick: r.kick as number,
+        defense:     r.defense as number, conditioning: r.conditioning as number,
+      })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      adjustments: (adjRes.data ?? []).map((r: any) => ({
+        studentId: r.student_id as string, amount: r.amount as number, createdAt: r.created_at as string,
+      })),
+    };
+  });
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -2656,15 +2809,17 @@ const mapKediMission = (r: any): KediMission => ({
 
 /** Aktif görev tanımlarını getir — studentId verilirse ona + global olanlar */
 export async function getKediMissions(studentId?: string): Promise<KediMission[]> {
-  const { data, error } = await db()
-    .from("kedi_missions")
-    .select("*")
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
-  if (error) { console.error("[getKediMissions]", error.message); return []; }
-  return (data ?? [])
-    .filter((r: any) => !r.student_id || r.student_id === studentId)
-    .map(mapKediMission);
+  return dedupeRequest(`getKediMissions:${studentId ?? "ALL"}`, async () => {
+    const { data, error } = await db()
+      .from("kedi_missions")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+    if (error) { console.error("[getKediMissions]", error.message); return []; }
+    return (data ?? [])
+      .filter((r: any) => !r.student_id || r.student_id === studentId)
+      .map(mapKediMission);
+  });
 }
 
 /** Yeni özel görev oluştur */
@@ -2695,12 +2850,14 @@ export async function deleteKediMission(id: string): Promise<void> {
 
 /** Öğrencinin tamamladığı görev anahtarlarını Set olarak döndür */
 export async function getStudentMissionCompletions(studentId: string): Promise<Set<string>> {
-  const { data, error } = await db()
-    .from("kedi_mission_completions")
-    .select("mission_key")
-    .eq("student_id", studentId);
-  if (error) { console.error("[getStudentMissionCompletions]", error.message); return new Set(); }
-  return new Set((data ?? []).map((r: any) => r.mission_key as string));
+  return dedupeRequest(`getStudentMissionCompletions:${studentId}`, async () => {
+    const { data, error } = await db()
+      .from("kedi_mission_completions")
+      .select("mission_key")
+      .eq("student_id", studentId);
+    if (error) { console.error("[getStudentMissionCompletions]", error.message); return new Set(); }
+    return new Set((data ?? []).map((r: any) => r.mission_key as string));
+  });
 }
 
 /**

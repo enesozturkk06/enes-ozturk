@@ -7,8 +7,12 @@ import {
 } from "lucide-react";
 import { CANCEL_LIMIT_HOURS, LESSON_DURATION_MINUTES, LESSON_RULES_REMINDER_TEXT } from "@/lib/constants";
 
-const GOLD = "#d97706";
-const RED  = "#ef4444";
+// Faz: Randevu Premium Mor-Neon Redesign — bu kartın vurgu rengi
+// eskiden amber/kehribar tonundaydı, sayfanın kimliği mor-neon
+// kalacağı için değiştirildi. RED (iptal/katılmama gibi gerçekten
+// kritik durumlar) DOKUNULMADI.
+const ACCENT = "#A78BFA";
+const RED    = "#ef4444";
 
 function Section({ icon, title, color, children }: {
   icon: React.ReactNode; title: string; color: string; children: React.ReactNode;
@@ -44,9 +48,9 @@ export default function LessonRulesCard({
   if (accepted) {
     return (
       <div className="flex items-start gap-3 p-4 rounded-xl mb-4"
-        style={{ background: `${GOLD}12`, border: `1px solid ${GOLD}35` }}>
-        <Timer size={16} style={{ color: GOLD, flexShrink: 0, marginTop: 1 }} />
-        <p className="text-sm min-w-0" style={{ color: `${GOLD}dd`, fontFamily: "var(--font-barlow-condensed)" }}>
+        style={{ background: `${ACCENT}12`, border: `1px solid ${ACCENT}35` }}>
+        <Timer size={16} style={{ color: ACCENT, flexShrink: 0, marginTop: 1 }} />
+        <p className="text-sm min-w-0" style={{ color: `${ACCENT}dd`, fontFamily: "var(--font-barlow-condensed)" }}>
           {LESSON_RULES_REMINDER_TEXT}
         </p>
       </div>
@@ -66,28 +70,28 @@ export default function LessonRulesCard({
   return (
     <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-4 w-full">
       <div className="rounded-2xl overflow-hidden w-full relative"
-        style={{ background: "rgba(15,15,22,0.95)", border: `1px solid ${GOLD}30` }}>
+        style={{ background: "rgba(15,15,22,0.95)", border: `1px solid ${ACCENT}30` }}>
         <div className="absolute top-0 left-0 right-0 h-px"
-          style={{ background: `linear-gradient(90deg,transparent,${GOLD},${RED},transparent)` }} />
+          style={{ background: `linear-gradient(90deg,transparent,${ACCENT},${RED},transparent)` }} />
 
-        <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: `${GOLD}20` }}>
-          <Dumbbell size={16} style={{ color: GOLD, flexShrink: 0 }} />
+        <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: `${ACCENT}20` }}>
+          <Dumbbell size={16} style={{ color: ACCENT, flexShrink: 0 }} />
           <span className="text-base font-bold text-white tracking-wide" style={{ fontFamily: "var(--font-bebas)" }}>
             🥊 Ders Bilgilendirmesi
           </span>
         </div>
 
         <div className="px-4 pt-1">
-          <Section icon={<Timer size={15} />} title="Antrenman Süresi" color={GOLD}>
+          <Section icon={<Timer size={15} />} title="Antrenman Süresi" color={ACCENT}>
             Tüm özel dersler {LESSON_DURATION_MINUTES} dakika sürmektedir.
           </Section>
 
-          <Section icon={<MapPin size={15} />} title="Derse Geliş" color={GOLD}>
+          <Section icon={<MapPin size={15} />} title="Derse Geliş" color={ACCENT}>
             Lütfen dersten en az 20 dakika önce salonda hazır bulunun.<br />
             Isınma ve hazırlık süresi ders süresine dahildir.
           </Section>
 
-          <Section icon={<Backpack size={15} />} title="Yanınızda Getirmeniz Gerekenler" color={GOLD}>
+          <Section icon={<Backpack size={15} />} title="Yanınızda Getirmeniz Gerekenler" color={ACCENT}>
             Su · Havlu · Bandaj · Eldiven (varsa) · Ağızlık (varsa)
           </Section>
 
@@ -102,16 +106,16 @@ export default function LessonRulesCard({
             korumak ve antrenman planının düzenini sağlamak amacıyla uygulanmaktadır.
           </Section>
 
-          <Section icon={<Clock size={15} />} title="Geç Kalma" color={GOLD}>
+          <Section icon={<Clock size={15} />} title="Geç Kalma" color={ACCENT}>
             Geç kalınan süre ders süresine dahildir. Ders bitiş saati uzatılamaz.
           </Section>
 
-          <Section icon={<HeartPulse size={15} />} title="Sağlık Durumu" color={GOLD}>
+          <Section icon={<HeartPulse size={15} />} title="Sağlık Durumu" color={ACCENT}>
             Herhangi bir sakatlık veya sağlık probleminiz varsa ders başlamadan önce antrenörünüze
             bilgi veriniz.
           </Section>
 
-          <Section icon={<Dumbbell size={15} />} title="Antrenman Kuralları" color={GOLD}>
+          <Section icon={<Dumbbell size={15} />} title="Antrenman Kuralları" color={ACCENT}>
             Antrenörün talimatlarına uyunuz. Salon ve ekipmanlara özen gösteriniz.
             Telefonunuzu sessize almanız tavsiye edilir.
           </Section>
@@ -121,13 +125,13 @@ export default function LessonRulesCard({
           <button type="button" onClick={handleToggle} disabled={saving}
             className="w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all disabled:opacity-60"
             style={{
-              background: saving ? `${GOLD}15` : "rgba(255,255,255,0.03)",
-              border: saving ? `1px solid ${GOLD}50` : "1px solid rgba(255,255,255,0.1)",
+              background: saving ? `${ACCENT}15` : "rgba(255,255,255,0.03)",
+              border: saving ? `1px solid ${ACCENT}50` : "1px solid rgba(255,255,255,0.1)",
             }}>
             <span className="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center mt-0.5"
               style={{
-                background: saving ? GOLD : "transparent",
-                border: `1.5px solid ${saving ? GOLD : "rgba(255,255,255,0.3)"}`,
+                background: saving ? ACCENT : "transparent",
+                border: `1.5px solid ${saving ? ACCENT : "rgba(255,255,255,0.3)"}`,
               }}>
               {saving && <span style={{ color: "#0f0f16", fontSize: 13, fontWeight: 700, lineHeight: 1 }}>✓</span>}
             </span>

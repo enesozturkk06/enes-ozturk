@@ -9,11 +9,12 @@ import { CatIcon } from "@/app/components/shared/BlackCatAI";
 import {
   LayoutDashboard, Calendar, TrendingUp, Dumbbell,
   Bell, LogOut, Menu, X, ChevronRight, Heart, Award, Zap,
-  FileText, Medal, User, Swords, CreditCard, Building2,
+  FileText, Medal, User, Swords, CreditCard, Building2, Sparkles,
 } from "lucide-react";
 
 const links = [
   { href: "/ogrenci",              label: "Panel",          icon: LayoutDashboard, exact: true },
+  { href: "/ogrenci/kedi-ai",      label: "Kedi AI",        icon: Sparkles },
   { href: "/ogrenci/randevu",      label: "Randevu",        icon: Calendar },
   { href: "/ogrenci/gelisim",      label: "Gelişimim",      icon: TrendingUp },
   { href: "/ogrenci/saglik",       label: "Sağlık",         icon: Heart },

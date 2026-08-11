@@ -3,6 +3,7 @@ import { memo } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Circle } from "lucide-react";
 import type { StudentMission } from "@/lib/types";
+import { GOLD_BRIGHT, GOLD_BG_SOFT, GOLD_BORDER_SOFT } from "./theme";
 
 interface Props { missions: StudentMission[] }
 
@@ -10,12 +11,12 @@ function DailyMissionsCard({ missions }: Props) {
   const completedCount = missions.filter(m => m.completed).length;
 
   return (
-    <div className="glass-strong rounded-2xl p-5 sm:p-6">
+    <div className="card-gold rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>GÜNLÜK GÖREVLER</h3>
         {missions.length > 0 && (
           <span className="text-xs px-2.5 py-1 rounded-lg flex-shrink-0"
-            style={{ background: "rgba(245,158,11,0.1)", color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>
+            style={{ background: GOLD_BG_SOFT, color: GOLD_BRIGHT, border: `1px solid ${GOLD_BORDER_SOFT}`, fontFamily: "var(--font-label)" }}>
             {completedCount} / {missions.length} tamamlandı
           </span>
         )}
@@ -54,7 +55,7 @@ function DailyMissionsCard({ missions }: Props) {
                 )}
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded-lg flex-shrink-0"
-                style={{ background: "rgba(245,158,11,0.1)", color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>
+                style={{ background: GOLD_BG_SOFT, color: GOLD_BRIGHT, border: `1px solid ${GOLD_BORDER_SOFT}`, fontFamily: "var(--font-label)" }}>
                 +{m.xpReward} XP
               </span>
             </motion.div>

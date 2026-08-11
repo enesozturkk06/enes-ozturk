@@ -44,6 +44,13 @@ export default function LazyAvatarEngine3D(
   // büyük performans kaldıracı bu (dpr 2→1, ~4 kat piksel maliyeti farkı).
   const quality = lowEnd ? "reduced" : liveQuality;
 
+  // `renderMode` ("full"|"light", bkz. AvatarEngine3D.tsx) `props` içinde
+  // zaten mevcut (Omit sadece "animate"ı çıkarıyor) — `{...props}` ile
+  // olduğu gibi geçer, burada AYRICA elle aktarmaya gerek yok. Bilerek
+  // `quality` hesaplamasına KARIŞTIRILMADI (Faz 7 mimari kararı): dpr=1
+  // zorlaması `renderMode==="light"` için AvatarEngine3D.tsx'in kendi
+  // içinde, mevcut adaptive-quality/low-end mantığından BAĞIMSIZ olarak
+  // yapılıyor — bu yüzden `quality` burada HİÇ değişmedi.
   return (
     <div ref={ref} style={{ width, height }}>
       {inView && <AvatarEngine3DImpl {...props} animate={animate} quality={quality} />}
