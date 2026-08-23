@@ -159,12 +159,19 @@ export default function StudentNav() {
         <div className="lg:hidden fixed inset-0 z-40" onClick={() => setOpen(false)}>
           <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
           <nav
-            className="glass-strong absolute left-0 right-0 px-3 pb-4"
+            className="glass-strong absolute left-0 right-0 px-3 pb-4 overflow-y-auto overscroll-contain"
             style={{
               top: "calc(env(safe-area-inset-top, 0px) + 56px)",
               paddingTop: "8px",
               borderRadius: "0 0 20px 20px",
               border: "none",
+              // Menü, üstte header'ın altından başlayıp alttaki sabit bottom-nav
+              // bar'ının (safe-area dahil) HİÇBİR ZAMAN arkasına geçmeyecek
+              // şekilde sınırlandırılıyor — 15 link + Çıkış butonu bu yüksekliği
+              // aşarsa (kısa boylu iPhone'larda olduğu gibi) menü kendi içinde
+              // kayar, "Çıkış" her zaman kaydırılarak görünür alana gelir.
+              maxHeight: "calc(100dvh - (env(safe-area-inset-top, 0px) + 56px) - var(--bottom-nav-total-h, calc(env(safe-area-inset-bottom, 0px) + 64px)))",
+              WebkitOverflowScrolling: "touch",
             }}
             onClick={e => e.stopPropagation()}
           >
