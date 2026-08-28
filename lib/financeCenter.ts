@@ -9,7 +9,7 @@ import type { IncomeMovement, Appointment, Payment, Student } from "./types";
 import type { GymReport } from "./db";
 import {
   format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  startOfYear, endOfYear, subDays, differenceInCalendarDays,
+  startOfYear, endOfYear, subDays, subMonths, differenceInCalendarDays,
 } from "date-fns";
 import { tr } from "date-fns/locale";
 
@@ -17,7 +17,7 @@ const D = (d: Date) => format(d, "yyyy-MM-dd");
 
 /* ── Zaman Aralığı ─────────────────────────────────────────────────── */
 
-export type TimeRange = "today" | "week" | "month" | "year" | "custom";
+export type TimeRange = "today" | "week" | "month" | "lastMonth" | "year" | "custom";
 
 export interface RangeBounds {
   from: string; to: string;
@@ -33,6 +33,7 @@ export function getRangeBounds(range: TimeRange, custom?: { from: string; to: st
     case "today": from = now; to = now; break;
     case "week":  from = startOfWeek(now, { weekStartsOn: 1 }); to = endOfWeek(now, { weekStartsOn: 1 }); break;
     case "month": from = startOfMonth(now); to = endOfMonth(now); break;
+    case "lastMonth": { const lm = subMonths(now, 1); from = startOfMonth(lm); to = endOfMonth(lm); break; }
     case "year":  from = startOfYear(now); to = endOfYear(now); break;
     case "custom":
       if (custom?.from && custom?.to) {

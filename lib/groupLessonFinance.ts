@@ -48,8 +48,14 @@ export function computeGroupRevenue(
   let gymShare = 0;
   let needsSessionCount = false;
 
+  // GERÇEK TAHSİLAT KURALI: yüzde paylaşımı GERÇEKTEN tahsil edilen tutar
+  // üzerinden hesaplanır (expectedMonthlyRevenue üzerinden DEĞİL) — aksi
+  // halde henüz ödenmemiş aidatlar üzerinden salon payı tahakkuk ederdi.
+  // fixed_monthly_rent/fixed_per_lesson zaten tahsilattan bağımsız sabit
+  // bir kira/ders-başı bedeli olduğu için DEĞİŞMEDİ (bu ikisi gerçek bir
+  // "gelir yüzdesi" değil, salonun sabit gideri niteliğinde).
   if (group.shareType === "percentage") {
-    gymShare = expectedMonthlyRevenue * ((group.gymPercentage ?? 0) / 100);
+    gymShare = collectedThisMonth * ((group.gymPercentage ?? 0) / 100);
   } else if (group.shareType === "fixed_monthly_rent") {
     gymShare = group.fixedMonthlyRent ?? 0;
   } else if (group.shareType === "fixed_per_lesson") {
@@ -64,7 +70,8 @@ export function computeGroupRevenue(
 
   return {
     group, activeMemberCount, expectedMonthlyRevenue, collectedThisMonth,
-    gymShare, netEarnings: expectedMonthlyRevenue - gymShare, occupancyRate, needsSessionCount,
+    // GERÇEK TAHSİLAT KURALI: net kazanç da tahsil edilenden hesaplanır.
+    gymShare, netEarnings: collectedThisMonth - gymShare, occupancyRate, needsSessionCount,
   };
 }
 

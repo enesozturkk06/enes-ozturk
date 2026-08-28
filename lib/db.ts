@@ -9,7 +9,8 @@ import type {
   PackagePurchase, PackageType, PaymentStatus, ArenaDuel,
   Gym, GymShareType, IncomeMovement, IncomeMovementType, PaymentRecordStatus,
   GroupLesson, GroupShareType, GroupLessonMember, GroupLessonPayment, GroupLessonSession,
-  OtherIncome, OtherIncomeType, KediAiMessage, KediAiActorType, KediAiMemory,
+  OtherIncome, OtherIncomeType, Expense, ExpenseCategory, Refund,
+  KediAiMessage, KediAiActorType, KediAiMemory,
   KediProgram, KediVisionAnalysis, StudentAvatarConfig,
 } from "./types";
 import { supabase, isSupabaseConfigured } from "./supabase";
@@ -1234,13 +1235,21 @@ const mKedi = (r: any): KediAiMessage => ({
   role: r.role, content: r.content, mood: r.mood ?? undefined, createdAt: r.created_at,
 });
 
-/** Bir öğrenci (actorType="student") ya da admin (actorType="admin") sohbetinin geçmişini döner. */
+/** Bir öğrenci (actorType="student") ya da admin (actorType="admin") sohbetinin geçmişini döner.
+ * BUG FIX: eskiden `ascending:true` + `limit` birlikte kullanılıyordu — bu,
+ * `limit`'i AŞAN her öğrenci için EN ESKİ N mesajı döndürüyordu (en SON
+ * mesajlar hiç çekilmiyordu). Hem sohbet ekranının "en eski mesajdan
+ * başlıyor" görünen hatasının, HEM DE Kedi AI'nin (bu fonksiyonu
+ * /api/kedi-ai/chat/route.ts'te bağlam/hafıza kurmak için de kullanan)
+ * son mesajları "hatırlayamamasının" gerçek kök nedeni buydu. Artık
+ * `descending` + `limit` ile GERÇEKTEN en son N mesaj çekiliyor, sonra
+ * eskiden-yeniye sıraya (mevcut tüm çağıranların beklediği sıra) çevriliyor. */
 export async function getKediMessages(actorType: KediAiActorType, studentId?: string, limit = 40): Promise<KediAiMessage[]> {
   let q = db().from("kedi_ai_messages").select("*").eq("actor_type", actorType);
   q = actorType === "student" && studentId ? q.eq("student_id", studentId) : q.is("student_id", null);
-  const { data, error } = await q.order("created_at", { ascending: true }).limit(limit);
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(limit);
   if (error) { console.error("getKediMessages:", error.message); return []; }
-  return (data ?? []).map(mKedi);
+  return (data ?? []).map(mKedi).reverse();
 }
 
 export async function saveKediMessage(params: {
@@ -1990,7 +1999,8 @@ export async function sendGroupPaymentReminder(studentId: string, groupName: str
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const moi = (r: any): OtherIncome => ({
   id: r.id, incomeType: r.income_type as OtherIncomeType, description: r.description ?? undefined,
-  amount: Number(r.amount ?? 0), incomeDate: r.income_date, createdAt: r.created_at ?? "",
+  amount: Number(r.amount ?? 0), incomeDate: r.income_date,
+  paymentMethod: r.payment_method ?? undefined, createdAt: r.created_at ?? "",
 });
 
 export async function getOtherIncome(): Promise<OtherIncome[]> {
@@ -2000,17 +2010,121 @@ export async function getOtherIncome(): Promise<OtherIncome[]> {
 }
 
 export async function addOtherIncome(entry: Omit<OtherIncome, "id" | "createdAt">): Promise<OtherIncome> {
-  const { data, error } = await db().from("other_income").insert({
+  const payload: Record<string, unknown> = {
     income_type: entry.incomeType, description: entry.description ?? null,
     amount: entry.amount, income_date: entry.incomeDate,
-  }).select().single();
+  };
+  if (entry.paymentMethod) payload.payment_method = entry.paymentMethod;
+  let { data, error } = await db().from("other_income").insert(payload).select().single();
+  // payment_method kolonu henüz migrate edilmemişse (SUPABASE_FINANCE_EXPENSES_REFUNDS.sql
+  // çalıştırılmadan önce) onsuz tekrar dene — kayıt kaybolmasın.
+  if (error && isSchemaError(error) && "payment_method" in payload) {
+    delete payload.payment_method;
+    ({ data, error } = await db().from("other_income").insert(payload).select().single());
+  }
   if (error) fail("addOtherIncome", error);
   return moi(data);
+}
+
+export async function updateOtherIncome(id: string, updates: Partial<Omit<OtherIncome, "id" | "createdAt">>): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (updates.incomeType !== undefined) payload.income_type = updates.incomeType;
+  if (updates.description !== undefined) payload.description = updates.description ?? null;
+  if (updates.amount !== undefined) payload.amount = updates.amount;
+  if (updates.incomeDate !== undefined) payload.income_date = updates.incomeDate;
+  if (updates.paymentMethod !== undefined) payload.payment_method = updates.paymentMethod ?? null;
+  let { error } = await db().from("other_income").update(payload).eq("id", id);
+  if (error && isSchemaError(error) && "payment_method" in payload) {
+    delete payload.payment_method;
+    ({ error } = await db().from("other_income").update(payload).eq("id", id));
+  }
+  if (error) fail("updateOtherIncome", error);
 }
 
 export async function deleteOtherIncome(id: string): Promise<void> {
   const { error } = await db().from("other_income").delete().eq("id", id);
   if (error) fail("deleteOtherIncome", error);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GİDERLER — salon kirası, ekipman, reklam, personel vb.
+   Şema-toleranslı: SUPABASE_FINANCE_EXPENSES_REFUNDS.sql çalıştırılmadan
+   önce getExpenses() sessizce [] döner, addExpense() net bir hata fırlatır.
+   ═══════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mex = (r: any): Expense => ({
+  id: r.id, amount: Number(r.amount ?? 0), category: r.category as ExpenseCategory,
+  description: r.description ?? undefined, expenseDate: r.expense_date,
+  paymentMethod: r.payment_method ?? undefined, gymId: r.gym_id ?? undefined,
+  createdAt: r.created_at ?? "",
+});
+
+export async function getExpenses(): Promise<Expense[]> {
+  const { data, error } = await db().from("expenses").select("*").order("expense_date", { ascending: false });
+  if (error) { if (isSchemaError(error)) return []; fail("getExpenses", error); }
+  return (data ?? []).map(mex);
+}
+
+export async function addExpense(entry: Omit<Expense, "id" | "createdAt">): Promise<Expense> {
+  const { data, error } = await db().from("expenses").insert({
+    amount: entry.amount, category: entry.category, description: entry.description ?? null,
+    expense_date: entry.expenseDate, payment_method: entry.paymentMethod ?? null,
+    gym_id: entry.gymId ?? null,
+  }).select().single();
+  if (error) fail("addExpense", error);
+  return mex(data);
+}
+
+export async function updateExpense(id: string, updates: Partial<Omit<Expense, "id" | "createdAt">>): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (updates.amount !== undefined) payload.amount = updates.amount;
+  if (updates.category !== undefined) payload.category = updates.category;
+  if (updates.description !== undefined) payload.description = updates.description ?? null;
+  if (updates.expenseDate !== undefined) payload.expense_date = updates.expenseDate;
+  if (updates.paymentMethod !== undefined) payload.payment_method = updates.paymentMethod ?? null;
+  if (updates.gymId !== undefined) payload.gym_id = updates.gymId ?? null;
+  const { error } = await db().from("expenses").update(payload).eq("id", id);
+  if (error) fail("updateExpense", error);
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const { error } = await db().from("expenses").delete().eq("id", id);
+  if (error) fail("deleteExpense", error);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   İADELER — bir ödemenin (kısmen veya tamamen) geri ödenmesi.
+   Gerçek tahsilat kuralı: iade, net gelirden AYRICA düşülür (payments/
+   income_movements kayıtları DEĞİŞTİRİLMEZ — çift muhasebe önlenir).
+   ═══════════════════════════════════════════════════════════════ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mrf = (r: any): Refund => ({
+  id: r.id, paymentId: r.payment_id ?? undefined, studentId: r.student_id ?? undefined,
+  studentName: r.student_name ?? undefined, amount: Number(r.amount ?? 0),
+  reason: r.reason ?? undefined, refundDate: r.refund_date, createdAt: r.created_at ?? "",
+});
+
+export async function getRefunds(): Promise<Refund[]> {
+  const { data, error } = await db().from("refunds").select("*").order("refund_date", { ascending: false });
+  if (error) { if (isSchemaError(error)) return []; fail("getRefunds", error); }
+  return (data ?? []).map(mrf);
+}
+
+export async function addRefund(entry: Omit<Refund, "id" | "createdAt">): Promise<Refund> {
+  const { data, error } = await db().from("refunds").insert({
+    payment_id: entry.paymentId ?? null, student_id: entry.studentId ?? null,
+    student_name: entry.studentName ?? null, amount: entry.amount,
+    reason: entry.reason ?? null, refund_date: entry.refundDate,
+  }).select().single();
+  if (error) fail("addRefund", error);
+  return mrf(data);
+}
+
+export async function deleteRefund(id: string): Promise<void> {
+  const { error } = await db().from("refunds").delete().eq("id", id);
+  if (error) fail("deleteRefund", error);
 }
 
 /* ═══════════════════════════════════════════════════════════════

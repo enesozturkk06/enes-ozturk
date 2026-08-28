@@ -4,19 +4,23 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Briefcase, Plus, X, Trash2, Presentation, Wrench, Handshake, ShoppingBag, Video, PartyPopper, MoreHorizontal,
+  Dumbbell, Users, Building2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
 import type { OtherIncome, OtherIncomeType } from "@/lib/types";
 
 const TYPE_CFG: Record<OtherIncomeType, { label: string; icon: React.ReactNode }> = {
+  ozel_ders:     { label: "Özel Ders",   icon: <Dumbbell size={14} /> },
+  grup_ders:     { label: "Grup Ders",   icon: <Users size={14} /> },
+  urun_satisi:   { label: "Ürün Satışı", icon: <ShoppingBag size={14} /> },
+  sponsorluk:    { label: "Sponsorluk",  icon: <Handshake size={14} /> },
+  salon_geliri:  { label: "Salon Geliri", icon: <Building2 size={14} /> },
+  diger:         { label: "Diğer",       icon: <MoreHorizontal size={14} /> },
   seminer:       { label: "Seminer",     icon: <Presentation size={14} /> },
   workshop:      { label: "Workshop",    icon: <Wrench size={14} /> },
-  sponsorluk:    { label: "Sponsorluk",  icon: <Handshake size={14} /> },
-  urun_satisi:   { label: "Ürün Satışı", icon: <ShoppingBag size={14} /> },
   online_ders:   { label: "Online Ders", icon: <Video size={14} /> },
   ozel_etkinlik: { label: "Özel Etkinlik", icon: <PartyPopper size={14} /> },
-  diger:         { label: "Diğer",       icon: <MoreHorizontal size={14} /> },
 };
 
 export default function OtherIncomeModule({

@@ -152,7 +152,13 @@ export interface GroupLessonSession {
 
 export type OtherIncomeType =
   | "seminer" | "workshop" | "sponsorluk" | "urun_satisi"
-  | "online_ders" | "ozel_etkinlik" | "diger";
+  | "online_ders" | "ozel_etkinlik" | "diger"
+  | "ozel_ders" | "grup_ders" | "salon_geliri";
+
+/** Finans Merkezi'nde manuel gelir/gider/iade formlarında kullanılan ödeme yöntemi.
+ * Payment.method (öğrenci ödemeleri) ile KARIŞTIRILMASIN — o alan ayrı ve daha geniş
+ * bir değer kümesi kullanıyor (papara/aylik vb.), burada DEĞİŞTİRİLMEDİ. */
+export type FinancePaymentMethod = "nakit" | "kart" | "havale_eft" | "diger";
 
 export interface OtherIncome {
   id: string;
@@ -160,6 +166,38 @@ export interface OtherIncome {
   description?: string;
   amount: number;
   incomeDate: string;
+  /** Şema henüz migrate edilmemişse undefined olabilir (isSchemaError toleranslı okuma). */
+  paymentMethod?: FinancePaymentMethod;
+  createdAt: string;
+}
+
+/* ── Giderler ──────────────────────────────────────────────────────── */
+
+export type ExpenseCategory =
+  | "salon_kirasi" | "salon_payi" | "ekipman" | "reklam"
+  | "ulasim" | "fatura" | "personel" | "vergi_harc" | "diger";
+
+export interface Expense {
+  id: string;
+  amount: number;
+  category: ExpenseCategory;
+  description?: string;
+  expenseDate: string;
+  paymentMethod?: FinancePaymentMethod;
+  gymId?: string;
+  createdAt: string;
+}
+
+/* ── İadeler ───────────────────────────────────────────────────────── */
+
+export interface Refund {
+  id: string;
+  paymentId?: string;
+  studentId?: string;
+  studentName?: string;
+  amount: number;
+  reason?: string;
+  refundDate: string;
   createdAt: string;
 }
 
