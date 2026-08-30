@@ -8,11 +8,11 @@ import { GOLD_BRIGHT } from "./theme";
 
 const RARITY_ORDER: Record<Rarity, number> = { legendary: 3, epic: 2, rare: 1, common: 0 };
 
-interface Props { badges: BadgeData[] }
+interface Props { badges: BadgeData[]; limit?: number }
 
-function BadgeShowcase({ badges }: Props) {
+function BadgeShowcase({ badges, limit = 8 }: Props) {
   const earnedAll = badges.filter(b => b.earned);
-  const earned = [...earnedAll].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]).slice(0, 8);
+  const earned = [...earnedAll].sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]).slice(0, limit);
 
   return (
     <div className="card-gold rounded-2xl p-5 sm:p-6">

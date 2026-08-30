@@ -1,9 +1,11 @@
 "use client";
 import { memo } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Bell, Zap, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, Bell, Zap, ChevronRight, type LucideIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
+import { GOLD_BRIGHT } from "./theme";
 
 export interface TimelineItem {
   id: string;
@@ -19,12 +21,28 @@ const ICONS: Record<TimelineItem["type"], { icon: LucideIcon; color: string }> =
   xp:           { icon: Zap,      color: "#F59E0B" },
 };
 
-interface Props { items: TimelineItem[] }
+interface Props {
+  items: TimelineItem[];
+  /** Verilirse sadece ilk N öğe gösterilir + "Tümü" bağlantısı (Gelişim
+   * Takibi sayfasına — mevcut sayfa, yeni route eklenmedi). */
+  limit?: number;
+  allHref?: string;
+}
 
-function ActivityTimeline({ items }: Props) {
+function ActivityTimeline({ items, limit, allHref }: Props) {
+  const visible = limit ? items.slice(0, limit) : items;
+
   return (
     <div className="card-gold rounded-2xl p-5 sm:p-6">
-      <h3 className="text-lg text-white tracking-wider mb-4" style={{ fontFamily: "var(--font-display)" }}>SON AKTİVİTELER</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>SON AKTİVİTELER</h3>
+        {allHref && items.length > 0 && (
+          <Link href={allHref} className="flex items-center gap-1 text-xs tracking-wider transition-colors flex-shrink-0"
+            style={{ color: GOLD_BRIGHT, fontFamily: "var(--font-label)" }}>
+            Tümü <ChevronRight size={13} />
+          </Link>
+        )}
+      </div>
 
       {items.length === 0 ? (
         <p className="text-sm text-white/30 text-center py-6" style={{ fontFamily: "var(--font-label)" }}>
@@ -35,7 +53,7 @@ function ActivityTimeline({ items }: Props) {
           initial="initial" animate="animate"
           variants={{ animate: { transition: { staggerChildren: 0.04 } } }}
         >
-          {items.map((item, i) => {
+          {visible.map((item, i) => {
             const { icon: Icon, color } = ICONS[item.type];
             let dateLabel = "";
             try { dateLabel = format(parseISO(item.date), "dd MMM", { locale: tr }); } catch { /* geçersiz tarih — boş bırak */ }
@@ -44,7 +62,7 @@ function ActivityTimeline({ items }: Props) {
                 variants={{ initial: { opacity: 0, x: -8 }, animate: { opacity: 1, x: 0 } }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
                 className="flex gap-3 py-3"
-                style={{ borderBottom: i < items.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}
+                style={{ borderBottom: i < visible.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}
               >
                 <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center"
                   style={{ background: `${color}18`, border: `1px solid ${color}30` }}>

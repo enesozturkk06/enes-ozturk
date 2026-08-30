@@ -11,8 +11,7 @@ import {
 } from "@/lib/db";
 import type { Appointment, LessonRecord, Notification, PendingInvite, XPAdjustment, KediMission, Gym, StudentAvatarConfig } from "@/lib/types";
 import { Badge, ProgressBar } from "@/app/components/ui";
-import { PACKAGES, STATUS_LABELS, PAYMENT_LABELS, CANCEL_LIMIT_HOURS, PACKAGE_EXPIRED_TEXT } from "@/lib/constants";
-import { getDaysRemaining, getPackageUrgency } from "@/lib/packageDuration";
+import { PACKAGES, CANCEL_LIMIT_HOURS } from "@/lib/constants";
 import { computeFullXP, getCurrentSeason, sumManualXP, getDaysUntilSeasonEnd } from "@/lib/xp";
 import { computeBadges } from "@/lib/badges";
 import { computeStudentMissions, getWeekKey, type MissionComputeInput } from "@/lib/kediTasks";
@@ -22,16 +21,19 @@ import {
   type HealthProfile, type WeightEntry, type CalorieEntry,
 } from "@/lib/health";
 import { getDietPlan, type DietPlan } from "@/lib/diet";
-import ProfileHeroCard from "@/app/components/dashboard/ProfileHeroCard";
+import DashboardHeader from "@/app/components/dashboard/DashboardHeader";
+import NextLessonCard from "@/app/components/dashboard/NextLessonCard";
+import PackageSummaryCard from "@/app/components/dashboard/PackageSummaryCard";
+import TodayMetricsCard from "@/app/components/dashboard/TodayMetricsCard";
+import KediInsightCard from "@/app/components/dashboard/KediInsightCard";
+import LevelProgressCard from "@/app/components/dashboard/LevelProgressCard";
 import BadgeShowcase from "@/app/components/dashboard/BadgeShowcase";
 import DailyMissionsCard from "@/app/components/dashboard/DailyMissionsCard";
 import ActivityTimeline, { type TimelineItem } from "@/app/components/dashboard/ActivityTimeline";
-import StatsRail from "@/app/components/dashboard/StatsRail";
 import { GOLD_BRIGHT, GOLD_BORDER_SOFT, GOLD_BG_SOFT } from "@/app/components/dashboard/theme";
 import {
-  Calendar, Clock, TrendingUp, Bell,
-  CheckCircle, XCircle, ChevronRight, Users,
-  Droplets, Flame, Scale, Activity, Utensils, Sparkles, Swords, BarChart3,
+  Calendar, TrendingUp, CheckCircle, XCircle, Users,
+  Activity, Utensils, Swords, BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import ActivityFeed from "@/app/components/shared/ActivityFeed";
@@ -57,10 +59,8 @@ function loadAIPlan(kind: "training" | "nutrition"): { date: string; summary: st
 const stagger = { animate: { transition: { staggerChildren: 0.05 } } };
 const fadeUp  = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" as const } } };
 
-/** Bu sayfaya özel premium gold kart wrapper'ı — paylaşılan app/components/ui
- *  Card'ın yerine geçer (o component 16+ sayfada kullanılıyor, burada
- *  değiştirilmiyor). Faz 1: glass-strong yerine .card-gold (globals.css,
- *  Dashboard'a özel, diğer sayfaları etkilemez). */
+/** Bu sayfaya özel premium gold kart wrapper'ı — ikincil detay bölümleri
+ *  (Diyet/Son Ders Notu) için, paylaşılan app/components/ui Card'ın yerine. */
 function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div className={`card-gold relative rounded-2xl overflow-hidden w-full ${className}`}>
@@ -228,7 +228,6 @@ export default function OgrenciDashboard() {
   // totalLessons = öğrenciye atanan gerçek ders sayısı (admin'in girdiği değer)
   // pkg.lessonCount = paket şablonundaki varsayılan — sabit olduğu için KULLANILMAZ
   const totalLessons = student.totalLessons > 0 ? student.totalLessons : (pkg?.lessonCount ?? 1);
-  const progressPct  = Math.round((student.completedLessons / totalLessons) * 100);
   const packageLabel = student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name ?? ""} Paketi`;
 
   // xpSummary/badges/missions/timelineItems artık yukarıda (guard'dan ÖNCE)
@@ -236,9 +235,6 @@ export default function OgrenciDashboard() {
   // sonra garantili non-null olduğu için xpSummary de garantili non-null
   // (useMemo'nun kendi guard'ı `student ? ... : null` şeklindeydi).
   const lifetimeXP = xpSummary!.lifetimeResult;
-  // Faz 1 — sezon özeti: xpSummary ZATEN hesaplanmıştı (yukarıda, useMemo),
-  // burada yeni bir hesap yapılmıyor, sadece getDaysUntilSeasonEnd (saf
-  // tarih fonksiyonu) ile kalan gün türetiliyor.
   const seasonXP = xpSummary!.seasonResult.breakdown.total;
   const seasonDaysLeft = getDaysUntilSeasonEnd(xpSummary!.season);
 
@@ -276,22 +272,21 @@ export default function OgrenciDashboard() {
 
   return (
     <>
-    <motion.div variants={stagger} initial="initial" animate="animate" className="relative max-w-6xl mx-auto space-y-5 pb-28">
+    <motion.div variants={stagger} initial="initial" animate="animate" className="relative max-w-3xl mx-auto space-y-4">
       <SportDecor />
 
-      {/* Hero + Profil Kartı + XP Bar + bugünkü tarih + Kedi AI mini tavsiye */}
+      {/* 1. Kompakt premium header — logo + karşılama + bildirim + profil */}
       <motion.div variants={fadeUp}>
-        <ProfileHeroCard
-          student={student} xpResult={lifetimeXP} packageLabel={packageLabel}
-          dateLabel={format(new Date(), "dd MMMM yyyy, EEEE", { locale: tr })}
-          aiTip={heroAiTip}
-          avatarConfig={avatarConfig}
-          seasonXP={seasonXP}
-          seasonDaysLeft={seasonDaysLeft}
+        <DashboardHeader
+          firstName={student.fullName.split(" ")[0]}
+          fullName={student.fullName}
+          photoUrl={student.avatarUrl}
+          level={lifetimeXP.level.current}
+          unreadCount={unreadNotifs}
         />
       </motion.div>
 
-      {/* Bekleyen Düet Davetleri */}
+      {/* Bekleyen Düet Davetleri — aksiyon gerektirir, header'ın hemen altında kalır */}
       {pendingInvites.length > 0 && (
         <motion.div variants={fadeUp}>
           <div className="glass rounded-2xl overflow-hidden">
@@ -334,158 +329,53 @@ export default function OgrenciDashboard() {
         </motion.div>
       )}
 
-      {/* Bildirim bandı */}
-      {unreadNotifs > 0 && (
-        <motion.div variants={fadeUp}>
-          <Link href="/ogrenci/bildirimler"
-            className="glass flex items-center justify-between p-4 rounded-xl transition-all"
-            style={{ borderColor:"rgba(251,146,60,0.25)" }}>
-            <div className="flex items-center gap-3">
-              <Bell size={16} style={{ color: "var(--color-warning)" }} />
-              <span className="text-sm text-white/70" style={{ fontFamily:"var(--font-label)" }}>
-                {unreadNotifs} okunmamış bildiriminiz var
-              </span>
-            </div>
-            <ChevronRight size={16} style={{ color: "var(--color-warning)", opacity: 0.5 }} />
-          </Link>
-        </motion.div>
-      )}
-
-      {/* ══ YAKLAŞAN RANDEVU — Hero'nun hemen altında, ikinci güçlü alan (Faz 1 hiyerarşi #2) ══ */}
+      {/* 2. Sıradaki Dersin — ana aksiyon kartı */}
       <motion.div variants={fadeUp}>
-        <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Yaklaşan Randevu</h3>
-            <Link href="/ogrenci/randevu"
-              className="text-xs tracking-wider transition-colors"
-              style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>Tümü →</Link>
-          </div>
-          {!nextAppointment ? (
-            <div className="text-center py-8">
-              <Calendar size={28} className="text-white/10 mx-auto mb-3" />
-              <p className="text-sm" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
-                Yaklaşan randevunuz yok
-              </p>
-              <Link href="/ogrenci/randevu"
-                className="mt-3 inline-block text-xs tracking-wider transition-colors"
-                style={{ color: "var(--color-error)", fontFamily:"var(--font-label)" }}>+ Randevu Al</Link>
-            </div>
-          ) : (() => {
-            const hoursLeft  = differenceInHours(parseISO(`${nextAppointment.date}T${nextAppointment.startTime}`), new Date());
-            const canCancel  = hoursLeft >= CANCEL_LIMIT_HOURS;
-            const remainingLabel = nextAptMinutesLeft !== null
-              ? nextAptMinutesLeft < 60
-                ? `${Math.max(0, nextAptMinutesLeft)} dakika kaldı`
-                : nextAptMinutesLeft < 1440
-                  ? `${Math.floor(nextAptMinutesLeft / 60)} saat kaldı`
-                  : `${Math.floor(nextAptMinutesLeft / 1440)} gün kaldı`
-              : null;
-            return (
-              <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-                <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
-                  style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER_SOFT}` }}>
-                  <span className="text-sm" style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-display)" }}>
-                    {format(parseISO(nextAppointment.date), "dd")}
-                  </span>
-                  <span className="text-[9px]" style={{ color: GOLD_BRIGHT, opacity: 0.7, fontFamily:"var(--font-display)" }}>
-                    {format(parseISO(nextAppointment.date), "MMM", { locale: tr }).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-semibold text-white" style={{ fontFamily:"var(--font-label)" }}>
-                      {format(parseISO(nextAppointment.date), "EEEE", { locale: tr })}
-                    </span>
-                    {nextAppointment.lessonType !== "bireysel" && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full"
-                        style={{ background:"rgba(139,92,246,0.15)", color:"#A855F7", fontFamily:"var(--font-label)" }}>
-                        {nextAppointment.lessonType === "duet" ? "Düet" : "Grup"}
-                      </span>
-                    )}
-                    {remainingLabel && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background:"rgba(245,158,11,0.12)", color:"var(--color-achievement)", fontFamily:"var(--font-label)" }}>
-                        {remainingLabel}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 text-xs" style={{ color:"rgba(255,255,255,0.50)" }}>
-                    <Clock size={11}/>
-                    <span style={{ fontFamily:"var(--font-label)" }}>{nextAppointment.startTime} – {nextAppointment.endTime}</span>
-                    {nextGym && <span style={{ fontFamily:"var(--font-label)" }}>· {nextGym.name}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                  <Badge color="green">{STATUS_LABELS[nextAppointment.status]}</Badge>
-                  <Link href="/ogrenci/randevu" className="text-[10px] transition-colors" style={{ color:"rgba(255,255,255,0.4)", fontFamily:"var(--font-label)" }}>
-                    Randevu Detayı →
-                  </Link>
-                  <button
-                    onClick={() => handleCancelClick(nextAppointment)}
-                    className="text-[10px] transition-colors"
-                    style={{ color: canCancel ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)", fontFamily:"var(--font-label)", cursor: canCancel ? "pointer" : "default" }}
-                    title={canCancel ? "Randevuyu iptal et" : `${CANCEL_LIMIT_HOURS} saatten az kaldı`}
-                  >
-                    {canCancel ? "İptal et" : "⏱ İptal edilemez"}
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-        </Card>
+        <NextLessonCard nextAppointment={nextAppointment} nextGym={nextGym} minutesLeft={nextAptMinutesLeft} onCancelClick={handleCancelClick} />
       </motion.div>
 
-      {/* ══ STATS / PROGRESS — büyük rakamlar (Faz 1 hiyerarşi #3) ══ */}
+      {/* 3. Kompakt paket kartı */}
+      <motion.div variants={fadeUp} id="paket-kartı">
+        <PackageSummaryCard student={student} packageLabel={packageLabel} totalLessons={totalLessons} />
+      </motion.div>
+
+      {/* 4. Bugün — Su/Kalori/Kilo/BMI */}
       <motion.div variants={fadeUp}>
-        <StatsRail
-          completedLessons={student.completedLessons}
-          totalXP={lifetimeXP.breakdown.total}
-          seasonXP={seasonXP}
-          seasonDaysLeft={seasonDaysLeft}
-          streak={lifetimeXP.currentStreak}
+        <TodayMetricsCard
+          waterGlasses={waterGlasses}
+          calories={todayCalEntry ? todayCalEntry.consumed : null}
+          weightKg={lastWeight ? lastWeight.weight : null}
+          bmi={bmi}
+          bmiLabel={bmiCat?.label}
         />
       </motion.div>
 
-      {/* ══ GÜNLÜK GÖREVLER + ROZET VİTRİNİ (Faz 1 hiyerarşi #4-#5) ══ */}
-      <div className="grid lg:grid-cols-2 gap-5">
-        <motion.div variants={fadeUp}>
-          <DailyMissionsCard missions={missions} />
-        </motion.div>
-        <motion.div variants={fadeUp}>
-          <BadgeShowcase badges={badges} />
-        </motion.div>
-      </div>
-
-      {/* ══ KEDİ AI — bugünkü öneriler (Faz 1 hiyerarşi #6) ══ */}
+      {/* 5. Kompakt Kedi AI önerisi */}
       <motion.div variants={fadeUp}>
-        <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🐾</span>
-              <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Kedi AI</h3>
-            </div>
-            <Link href="/ogrenci/kedi-ai"
-              className="flex items-center gap-1 text-xs tracking-wider transition-colors flex-shrink-0"
-              style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>
-              Kedi AI&apos;ya Git <ChevronRight size={13} />
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {kediSuggestions.map((s, i) => (
-              <div key={i} className="flex items-center gap-2.5 p-3 rounded-xl" style={{ background: GOLD_BG_SOFT, border: `1px solid ${GOLD_BORDER_SOFT}` }}>
-                <Sparkles size={14} className="flex-shrink-0" style={{ color: GOLD_BRIGHT }} />
-                <span className="text-sm" style={{ color:"rgba(255,255,255,0.72)", fontFamily:"var(--font-label)" }}>{s}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <KediInsightCard tip={heroAiTip} />
       </motion.div>
 
-      {/* ══ SON AKTİVİTE (Faz 1 hiyerarşi #7) ══ */}
+      {/* 6. Kompakt Seviye / XP */}
       <motion.div variants={fadeUp}>
-        <ActivityTimeline items={timelineItems} />
+        <LevelProgressCard xpResult={lifetimeXP} seasonXP={seasonXP} seasonDaysLeft={seasonDaysLeft} streak={lifetimeXP.currentStreak} hasAvatarConfig={!!avatarConfig} />
       </motion.div>
 
-      {/* Push bildirim izni + Canlı aktivite akışı — ikincil, Activity kümesinin devamı */}
+      {/* 7. Son aktiviteler — son 3 + Tümü */}
+      <motion.div variants={fadeUp}>
+        <ActivityTimeline items={timelineItems} limit={3} allHref="/ogrenci/gelisim" />
+      </motion.div>
+
+      {/* 8. Günlük görevler özeti + Tümü */}
+      <motion.div variants={fadeUp}>
+        <DailyMissionsCard missions={missions} limit={3} />
+      </motion.div>
+
+      {/* 9. Rozet vitrini özeti + Tümü */}
+      <motion.div variants={fadeUp}>
+        <BadgeShowcase badges={badges} limit={3} />
+      </motion.div>
+
+      {/* Push bildirim izni + Canlı aktivite akışı */}
       <motion.div variants={fadeUp}>
         <PushNotificationButton role="student" studentId={student.id} />
       </motion.div>
@@ -493,128 +383,10 @@ export default function OgrenciDashboard() {
         <ActivityFeed />
       </motion.div>
 
-      {/* ══ İKİNCİL DETAYLAR — Paket / Sağlık / AI Diyet / Son Ders Notu.
+      {/* ══ İKİNCİL DETAYLAR — AI Diyet / Son Ders Notu.
           Kullanıcı hiyerarşisinde ayrıca adlandırılmadı ama "mevcut özellikleri
-          koru" kuralı gereği hepsi burada, ana 8 grubun (Hero→Appointment→
-          Stats→Missions→Badges→KediAI→Activity→QuickActions) ALTINDA, ikincil
+          koru" kuralı gereği burada, ana hiyerarşinin ALTINDA, ikincil
           ağırlıkta duruyor — veri/mantık aynı, sadece görsel öncelik düştü. ══ */}
-      <motion.div variants={fadeUp} id="paket-kartı">
-        <Card className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
-            <div className="min-w-0">
-              <h3 className="text-lg text-white tracking-wider"
-                style={{ fontFamily:"var(--font-display)" }}>
-                {student.subscriptionType === "monthly" ? "Aylık Üyelik" : `${pkg?.name} Paketi`}
-              </h3>
-              <p className="text-xs mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
-                {student.subscriptionType === "monthly"
-                  ? `${student.monthlyFee ? `₺${student.monthlyFee.toLocaleString("tr-TR")} / ay` : "Aylık ödeme"}`
-                  : `${totalLessons} ders paketi`}
-              </p>
-            </div>
-            <Badge color={student.paymentStatus === "odendi" ? "green" : student.paymentStatus === "kismi" ? "gold" : "red"}>
-              {PAYMENT_LABELS[student.paymentStatus]}
-            </Badge>
-          </div>
-          {student.subscriptionType === "monthly" ? (
-            <div className="flex items-center justify-between py-2">
-              <span className="text-sm" style={{ color:"rgba(255,255,255,0.72)", fontFamily:"var(--font-label)" }}>
-                Bu ay tamamlanan ders
-              </span>
-              <span className="text-2xl font-bold" style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-display)" }}>
-                {student.completedLessons}
-              </span>
-            </div>
-          ) : (
-            <>
-              <ProgressBar value={student.completedLessons} max={totalLessons} color="red"
-                label={`${student.completedLessons} / ${totalLessons} ders`} />
-              {/* Kullanılan / Kalan ders özeti */}
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="text-xl font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{student.completedLessons}</div>
-                  <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Kullanılan Ders</div>
-                </div>
-                <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="text-xl font-bold" style={{ color:"var(--color-error)", fontFamily:"var(--font-display)" }}>{student.remainingLessons}</div>
-                  <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Kalan Ders</div>
-                </div>
-              </div>
-              <div className="mt-2 text-right text-xs" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>{progressPct}% tamamlandı</div>
-            </>
-          )}
-
-          {/* Paket süresi + son kullanım tarihi */}
-          {(() => {
-            const daysRemaining = getDaysRemaining(student.packageEndDate);
-            if (daysRemaining === null) return null;
-            const urgency = getPackageUrgency(daysRemaining);
-            return (
-              <div className="mt-4 pt-4 border-t border-white/8">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <span className="text-xs tracking-widest uppercase" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
-                    Paket Süresi
-                  </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${urgency.color}`}
-                    style={{ background: urgency.bg, border: `1px solid ${urgency.border}`, fontFamily:"var(--font-label)" }}>
-                    {daysRemaining < 0 ? "Süresi Doldu" : `${daysRemaining} gün kaldı`}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
-                  <span>Başlangıç: {student.packageStartDate ? format(parseISO(student.packageStartDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
-                  <span>Bitiş: {student.packageEndDate ? format(parseISO(student.packageEndDate), "dd MMM yyyy", { locale: tr }) : "—"}</span>
-                </div>
-                {lastRecord && (
-                  <div className="text-xs mt-1" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
-                    Son kullanım: {format(parseISO(lastRecord.date), "dd MMMM yyyy", { locale: tr })}
-                  </div>
-                )}
-                {daysRemaining < 0 && (
-                  <p className="text-xs mt-2" style={{ color:"var(--color-error)", fontFamily:"var(--font-label)" }}>
-                    {PACKAGE_EXPIRED_TEXT}
-                  </p>
-                )}
-              </div>
-            );
-          })()}
-        </Card>
-      </motion.div>
-
-      {/* ══ GÜNÜN ÖZETİ — Sağlık sayfasındaki gerçek verilerle 4 mini kart ══ */}
-      <motion.div variants={fadeUp}>
-        <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>Günün Özeti</h3>
-            <Link href="/ogrenci/saglik" className="text-xs tracking-wider transition-colors" style={{ color: GOLD_BRIGHT, fontFamily:"var(--font-label)" }}>Sağlık →</Link>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <Droplets size={16} className="mx-auto mb-1" style={{ color:"#60A5FA" }} />
-              <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{waterGlasses}/8</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Bugünkü Su</div>
-            </div>
-            <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <Flame size={16} className="mx-auto mb-1" style={{ color: GOLD_BRIGHT }} />
-              <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{todayCalEntry ? todayCalEntry.consumed : "—"}</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Bugünkü Kalori</div>
-            </div>
-            <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <Scale size={16} className="mx-auto mb-1" style={{ color:"var(--color-success)" }} />
-              <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{lastWeight ? `${lastWeight.weight}kg` : "—"}</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>Son Kilo</div>
-            </div>
-            <div className="rounded-xl p-3 text-center" style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
-              <Activity size={16} className="mx-auto mb-1" style={{ color:"#A78BFA" }} />
-              <div className="text-lg font-bold" style={{ color:"#fff", fontFamily:"var(--font-display)" }}>{bmi ? bmi.toFixed(1) : "—"}</div>
-              <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color:"rgba(255,255,255,0.50)", fontFamily:"var(--font-label)" }}>
-                BMI{bmiCat ? ` · ${bmiCat.label}` : ""}
-              </div>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* ══ AI DİYET ÖZETİ ══ */}
       <motion.div variants={fadeUp}>
         <Card className="p-5 sm:p-6">
           <div className="flex items-center justify-between mb-4">
