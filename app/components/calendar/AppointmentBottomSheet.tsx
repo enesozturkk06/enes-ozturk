@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -9,30 +9,16 @@ import { X } from "lucide-react";
  * VE öğrenci randevu onay/detay akışı AYNI kabuğu kullanır, içerik
  * children ile role'e göre değişir.
  *
- * Yapı (mobil taşma/erişilemeyen buton bug'ı düzeltmesi — Safari/iPhone'a
- * özel kök neden):
- *  - Android'de (Chrome) `position:fixed; inset:0` her zaman GERÇEKTEN
- *    görünen alana eşit render olur. Gerçek iPhone Safari'de İSE eski,
- *    hâlâ kısmen geçerli bir davranış var: `fixed` elemanlar bazen
- *    "layout viewport" (Safari'nin adres çubuğu hep gizliymiş gibi
- *    varsaydığı, GERÇEKTEN görünenden daha uzun sanal alan) baz alınarak
- *    boyutlandırılıyor/konumlandırılıyor — "visual viewport" (gerçekten
- *    görünen, daha kısa alan) değil. Sonuç: backdrop'un kendisi görünenden
- *    daha uzun render oluyor, `items-end` de sheet'i bu daha uzun kutunun
- *    altına hizalıyor — yani sheet (ve footer'daki buton) gerçek ekranın
- *    ALTINDA, görünmez bir bölgede konumlanıyor. Bu Android'de hiç
- *    yaşanmayan, Safari'ye özgü bir davranış — "Android'de düzeldi,
- *    iPhone Safari'de düzelmedi" raporuyla tam örtüşüyor.
- *  - ÇÖZÜM: CSS viewport birimlerine (vh/dvh/%) GÜVENMİYORUZ. Bunun
- *    yerine `window.visualViewport` (gerçekten görünen alanı ms hassasiyetle
- *    veren, tüm modern iOS/Android'de desteklenen API) ile backdrop'un
- *    `top`/`height` değerini JS'te PİKSEL olarak ölçüp inline style'a
- *    yazıyoruz — Safari'nin toolbar'ı açılıp kapandıkça (`resize`/`scroll`
- *    event'leri ile) canlı güncelleniyor. Backdrop artık HER ZAMAN gerçek
- *    görünen alanla birebir aynı; `.appointment-sheet-panel` (globals.css)
- *    içindeki yüzde bazlı max-height de bu doğru kutuya göre çözülüyor.
- *    `visualViewport` yoksa (çok eski tarayıcı) eski `inset:0` davranışına
- *    sessizce geri düşülüyor.
+ * Yapı (mobil taşma/erişilemeyen buton bug'ı düzeltmesi):
+ *  - GEÇİCİ TEŞHİS AŞAMASINDA: gerçek iPhone Safari'de bu bug ısrar ediyor,
+ *    hiçbir otomatik test aracında (Chromium + gerçek WebKit motoru)
+ *    tekrarlanamıyor. `window.visualViewport` ile backdrop'u JS'te piksel
+ *    olarak yeniden konumlandırma denemesi framer-motion'ın giriş
+ *    animasyonuyla çakışıp KENDİ test ortamımda YENİ bir bug'a yol açtığı
+ *    için GERİ ALINDI — karmaşıklığı artırıp kanıtlanmamış bir çözümü
+ *    üretimde tutmak yerine sade CSS'e dönüldü. `.appointment-sheet-panel`
+ *    (globals.css) max-height'i dvh/vh DEĞİL, backdrop'un `position:fixed;
+ *    inset:0` kutusuna göre YÜZDE kullanıyor.
  *  - Başlık/handle sabit (flex-shrink-0), içerik `flex-1 min-h-0 overflow-y-auto`
  *    ile GERÇEKTEN kendi içinde scroll eder (önceki hata: bu satırda
  *    min-h-0 yoktu, flex çocuğu içeriğe göre büyüyüp dış overflow-hidden
@@ -55,23 +41,43 @@ export default function AppointmentBottomSheet({
    * ayrı, her zaman görünür kalır (örn. "Randevuyu Onayla" / "Tamamlandı"). */
   footer?: React.ReactNode;
 }) {
-  // Gerçekten görünen alanı (Safari'nin "layout viewport"u değil, "visual
-  // viewport"u) piksel cinsinden takip ediyoruz — bkz. üstteki açıklama.
-  const [viewport, setViewport] = useState<{ top: number; height: number } | null>(null);
-
+  // GEÇİCİ TEŞHİS — iPhone Safari'de kaydırılamayan/kesik footer sorunu
+  // gerçek cihazda ısrar ediyor, otomatik test araçlarında (Chromium +
+  // gerçek WebKit motoru) tekrarlanamıyor. ?debug=1 ile açılınca sheet'in
+  // üstünde gerçek cihazdan okunan ham sayıları gösterir. TEK SEFERLİK
+  // ölçüm — animasyon penceresinde tekrarlı setState/re-render, panelin
+  // giriş animasyonuyla çakışıp KENDİ BAŞINA ayrı bir bug'a yol açtığı
+  // görüldüğü için (bu, gerçek kullanıcı raporundan BAĞIMSIZ, teşhis
+  // kodunun kendi yan etkisiydi) artık sadece TEK bir gecikmeli ölçüm var.
+  // Sorun netleşince KALDIRILACAK — kalıcı bir özellik değil.
+  const [debugInfo, setDebugInfo] = useState<string>("");
+  const [debugOn] = useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1"
+  );
+  const footerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open) return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => setViewport({ top: vv.offsetTop, height: vv.height });
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, [open]);
+    if (!open || !debugOn) return;
+    const t1 = setTimeout(() => {
+      const vv = window.visualViewport;
+      const isStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true
+        || window.matchMedia("(display-mode: standalone)").matches;
+      const panelEl = document.querySelector<HTMLDivElement>(".appointment-sheet-panel");
+      const pr = panelEl?.getBoundingClientRect();
+      const fr = footerRef.current?.getBoundingClientRect();
+      const panelTransform = panelEl ? getComputedStyle(panelEl).transform : "?";
+      const backdrop = panelEl?.parentElement;
+      const backdropRect = backdrop?.getBoundingClientRect();
+      setDebugInfo(
+        `innerH:${window.innerHeight} vvH:${vv ? Math.round(vv.height) : "n/a"} vvTop:${vv ? Math.round(vv.offsetTop) : "n/a"} standalone:${isStandalone} dpr:${window.devicePixelRatio}\n` +
+        `backdrop: y=${backdropRect ? Math.round(backdropRect.y) : "?"} h=${backdropRect ? Math.round(backdropRect.height) : "?"}\n` +
+        `panelTransform: ${panelTransform}\n` +
+        `panel: y=${pr ? Math.round(pr.y) : "?"} h=${pr ? Math.round(pr.height) : "?"} bottom=${pr ? Math.round(pr.bottom) : "?"}\n` +
+        `footer: ${fr ? `y=${Math.round(fr.y)} h=${Math.round(fr.height)} bottom=${Math.round(fr.bottom)}` : "BULUNAMADI"}\n` +
+        `ua:${navigator.userAgent.slice(0, 70)}`
+      );
+    }, 1300);
+    return () => clearTimeout(t1);
+  }, [open, debugOn]);
 
   useEffect(() => {
     if (!open) return;
@@ -99,9 +105,15 @@ export default function AppointmentBottomSheet({
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className="fixed inset-0 z-[60] flex items-end justify-center"
-          style={viewport ? { top: viewport.top, height: viewport.height, bottom: "auto" } : undefined}
           onClick={onClose}>
           <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)" }} />
+          {debugOn && (
+            <pre style={{
+              position: "fixed", top: 0, left: 0, right: 0, zIndex: 999,
+              background: "#ff0080", color: "#fff", fontSize: 10, lineHeight: 1.4,
+              padding: "6px 8px", margin: 0, whiteSpace: "pre-wrap", fontFamily: "monospace",
+            }}>{debugInfo || "ölçülüyor..."}</pre>
+          )}
           <motion.div
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 32, stiffness: 320 }}
@@ -132,7 +144,7 @@ export default function AppointmentBottomSheet({
             </div>
 
             {footer && (
-              <div className="flex-shrink-0 px-5 pt-3"
+              <div ref={footerRef} className="flex-shrink-0 px-5 pt-3"
                 style={{
                   borderTop: "1px solid rgba(255,255,255,0.08)",
                   background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12))",
