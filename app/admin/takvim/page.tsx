@@ -1,41 +1,49 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   getSlotsForDate, addSlotsToDate, toggleSlot,
   removeSlot, clearDate, setAllOpen, weekSummary,
   type Slot,
 } from "@/lib/slots";
-import { getAppointments, getStudents, createAppointment, getIncomeMovements, getPendingGiftLessonRequests, getGyms } from "@/lib/db";
-import type { Appointment, Student, LessonType, GiftLessonRequest, Gym } from "@/lib/types";
 import {
-  Plus, Trash2, Lock, Unlock, Check, Zap, UserPlus,
-  Calendar, Wallet, CalendarClock, PieChart, LayoutGrid, CalendarDays,
-} from "lucide-react";
-import { format, addDays, startOfWeek, parseISO, isFuture } from "date-fns";
+  getAppointments, getStudents, createAppointment, getIncomeMovements,
+  getPendingGiftLessonRequests, getGyms, getAppointmentStudents,
+  completeAppointmentWithAttendance, adminCancelAppointment, updateAppointment,
+} from "@/lib/db";
+import type { Appointment, Student, LessonType, GiftLessonRequest, Gym } from "@/lib/types";
+import { Gift, Check, Package as PackageIcon, MapPin, User as UserIcon, Clock } from "lucide-react";
+import { format, addDays, subDays, startOfWeek, parseISO } from "date-fns";
 import { tr } from "date-fns/locale";
-import TakvimStatCard from "@/app/components/takvim/TakvimStatCard";
-import WeekStrip from "@/app/components/takvim/WeekStrip";
-import DayTimeline from "@/app/components/takvim/DayTimeline";
-import TakvimRightPanel from "@/app/components/takvim/TakvimRightPanel";
-import LessonDetailModal from "@/app/components/takvim/LessonDetailModal";
+import { STATUS_LABELS, TRAINER_NAME, TRAINER_LOCATION, LESSON_DURATION_MINUTES, PACKAGES } from "@/lib/constants";
 
-const stagger = { animate: { transition: { staggerChildren: 0.06 } } };
-const fadeUp  = {
-  initial: { opacity: 0, y: 16, scale: 0.96, filter: "blur(6px)" },
-  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const } },
+import CalendarHeader from "@/app/components/calendar/CalendarHeader";
+import CalendarStats from "@/app/components/calendar/CalendarStats";
+import WeekDateSelector, { type CalendarDay } from "@/app/components/calendar/WeekDateSelector";
+import CalendarTimeline, { type TimelineRow } from "@/app/components/calendar/CalendarTimeline";
+import EmptySlot from "@/app/components/calendar/EmptySlot";
+import AppointmentCard from "@/app/components/calendar/AppointmentCard";
+import AppointmentBottomSheet from "@/app/components/calendar/AppointmentBottomSheet";
+import CalendarActionMenu from "@/app/components/calendar/CalendarActionMenu";
+
+const fadeUp = {
+  initial: { opacity: 0, y: 12, filter: "blur(4px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const } },
 };
 
 const fmt = (d: Date) => d.toISOString().split("T")[0];
 const todayStr = fmt(new Date());
 
+const LESSON_TYPE_LABEL: Record<LessonType, string> = { bireysel: "Özel Ders", duet: "Düet Ders", grup: "Grup Ders" };
+const STATUS_COLOR: Record<string, string> = {
+  onaylandi: "var(--color-success)", tamamlandi: "#60A5FA", iptal: "var(--color-error)", gelmedi: "var(--color-warning)",
+};
+
 const TIME_OPTIONS: string[] = [];
-for (let h = 0; h < 24; h++) {
-  for (const m of [0, 30]) {
-    TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
-  }
-}
+for (let h = 0; h < 24; h++) for (const m of [0, 30]) TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+
+type SheetMode = null | "addChoice" | "addRange" | "addAppt";
 
 export default function TakvimPage() {
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -44,16 +52,12 @@ export default function TakvimPage() {
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [summary, setSummary] = useState<Record<string, { total: number; open: number }>>({});
-  const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  /* Premium redesign — salt-okunur ek veriler (hesaplama/iş mantığı değişmedi) */
   const [todayRevenue, setTodayRevenue] = useState(0);
   const [pendingGifts, setPendingGifts] = useState<GiftLessonRequest[]>([]);
-  const [todaySlots, setTodaySlots] = useState<Slot[]>([]);
-  const [viewMode, setViewMode] = useState<"day" | "week">("day");
-  const [weekSlots, setWeekSlots] = useState<Record<string, Slot[]>>({});
   const [now, setNow] = useState(new Date());
+  const [gyms, setGyms] = useState<Gym[]>([]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -64,27 +68,25 @@ export default function TakvimPage() {
   const [rangeTo, setRangeTo] = useState("22:00");
   const [intervalMin, setIntervalMin] = useState("60");
 
-  /* Randevu oluşturma formu */
-  const [aptPanel, setAptPanel]         = useState(false);
-  const [aptStudent, setAptStudent]     = useState("");
-  const [aptStudent2, setAptStudent2]   = useState("");
-  const [aptTime, setAptTime]           = useState("");
-  const [aptType, setAptType]           = useState<LessonType>("bireysel");
-  const [aptSaving, setAptSaving]       = useState(false);
+  /* Randevu oluşturma formu — mevcut mantık aynen korunuyor */
+  const [aptStudent, setAptStudent] = useState("");
+  const [aptStudent2, setAptStudent2] = useState("");
+  const [aptTime, setAptTime] = useState("");
+  const [aptType, setAptType] = useState<LessonType>("bireysel");
+  const [aptSaving, setAptSaving] = useState(false);
+
+  const [sheetMode, setSheetMode] = useState<SheetMode>(null);
+  const [detailApt, setDetailApt] = useState<Appointment | null>(null);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
 
   const weekStart = startOfWeek(weekBase, { weekStartsOn: 1 });
-  const weekDays  = Array.from({ length: 7 }, (_, i) => fmt(addDays(weekStart, i)));
+  const weekDays = Array.from({ length: 7 }, (_, i) => fmt(addDays(weekStart, i)));
 
-  /* Öğrencileri yükle */
   useEffect(() => { getStudents().then(setStudents); }, []);
-  /* Salonlar — ders detay popup'ında "Salon" alanı için (salt-okunur) */
-  const [gyms, setGyms] = useState<Gym[]>([]);
   useEffect(() => { getGyms().then(setGyms).catch(() => {}); }, []);
 
-  /* Ders detay popup'ı */
-  const [detailApt, setDetailApt] = useState<Appointment | null>(null);
-
-  /* Randevu oluştur */
   const handleCreateApt = async () => {
     if (!aptStudent || !aptTime) { alert("Öğrenci ve saat seçin."); return; }
     const std = students.find(s => s.id === aptStudent);
@@ -99,10 +101,9 @@ export default function TakvimPage() {
         date: selectedDate, startTime: aptTime, endTime: slotEnd,
         lessonType: aptType, partnerStudentIds: secondIds,
       });
-      setAptPanel(false);
+      setSheetMode(null);
       setAptStudent(""); setAptStudent2(""); setAptTime(""); setAptType("bireysel");
       await reload();
-      flash();
     } catch (err: unknown) {
       alert("Randevu oluşturulamadı: " + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -113,18 +114,16 @@ export default function TakvimPage() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, a, sum, todaySl, income, gifts] = await Promise.all([
+      const [s, a, sum, income, gifts] = await Promise.all([
         getSlotsForDate(selectedDate),
         getAppointments(),
         weekSummary(weekDays),
-        getSlotsForDate(todayStr),
         getIncomeMovements({ dateFrom: todayStr, dateTo: todayStr, status: "odendi" }).catch(() => []),
         getPendingGiftLessonRequests().catch(() => []),
       ]);
       setSlots(s);
       setAllAppointments(a);
       setSummary(sum);
-      setTodaySlots(todaySl);
       setTodayRevenue(income.reduce((sum2, m) => sum2 + m.paymentAmount, 0));
       setPendingGifts(gifts);
     } catch (err) {
@@ -137,442 +136,402 @@ export default function TakvimPage() {
 
   useEffect(() => { reload(); }, [reload]);
 
-  /* Haftalık görünüm — sadece view=week iken 7 gün için slot verisi çekilir (lazy) */
-  useEffect(() => {
-    if (viewMode !== "week") return;
-    let cancelled = false;
-    Promise.all(weekDays.map(d => getSlotsForDate(d))).then(results => {
-      if (cancelled) return;
-      const map: Record<string, Slot[]> = {};
-      weekDays.forEach((d, i) => { map[d] = results[i]; });
-      setWeekSlots(map);
-    });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, weekBase]);
-
-  const flash = () => { setSaved(true); setTimeout(() => setSaved(false), 1500); };
-
   const handleAddRange = async () => {
     if (!rangeFrom || !rangeTo) return;
     setLoading(true);
     await addSlotsToDate(selectedDate, rangeFrom, rangeTo, Number(intervalMin) || 60);
     await reload();
-    flash();
+    setSheetMode(null);
   };
 
-  const handleToggle = async (start: string) => {
-    await toggleSlot(selectedDate, start);
-    await reload();
-    flash();
+  const handleToggle = async (start: string) => { await toggleSlot(selectedDate, start); await reload(); };
+  const handleRemove = async (start: string) => { await removeSlot(selectedDate, start); await reload(); };
+  const handleSetAll = async (open: boolean) => { await setAllOpen(selectedDate, open); await reload(); };
+  const handleClear = async () => { await clearDate(selectedDate); await reload(); };
+
+  const handleComplete = async (apt: Appointment) => {
+    setSheetBusy(true);
+    try {
+      const parts = await getAppointmentStudents(apt.id).catch(() => []);
+      const attendances = parts.length > 0
+        ? parts.map(p => ({ studentId: p.studentId, attended: true }))
+        : [{ studentId: apt.studentId, attended: true }];
+      const result = await completeAppointmentWithAttendance(apt.id, attendances);
+      if (!result.success && result.warnings.length) alert(result.warnings.join("\n"));
+      setDetailApt(null);
+      await reload();
+    } catch (err) {
+      alert("Tamamlanamadı: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSheetBusy(false);
+    }
   };
 
-  const handleRemove = async (start: string) => {
-    await removeSlot(selectedDate, start);
-    await reload();
-    flash();
+  const handleCancelApt = async (apt: Appointment) => {
+    if (!confirm(`${apt.studentName} — ${apt.date} ${apt.startTime} randevusunu iptal etmek istediğinize emin misiniz?`)) return;
+    setSheetBusy(true);
+    try {
+      await adminCancelAppointment(apt.id);
+      setDetailApt(null);
+      await reload();
+    } catch (err) {
+      alert("İptal edilemedi: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSheetBusy(false);
+    }
   };
 
-  const handleSetAll = async (open: boolean) => {
-    await setAllOpen(selectedDate, open);
-    await reload();
-    flash();
+  const handleSaveNote = async (apt: Appointment) => {
+    setSheetBusy(true);
+    try {
+      await updateAppointment(apt.id, { notes: noteDraft.trim() || undefined });
+      setEditingNote(false);
+      await reload();
+    } catch (err) {
+      alert("Not kaydedilemedi: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSheetBusy(false);
+    }
   };
 
-  const handleClear = async () => {
-    await clearDate(selectedDate);
-    await reload();
-    flash();
-  };
-
-  /* ── Türetilmiş veriler — salt-okunur, allAppointments/todaySlots'tan ──
-     Hiçbir yeni hesaplama/iş mantığı yok, sadece görüntüleme için filtre/sort. */
+  /* ── Türetilmiş veriler — salt-okunur, iş mantığı DEĞİŞMEDİ ─────── */
   const selectedDayAppointments = useMemo(
     () => allAppointments.filter(a => a.date === selectedDate),
     [allAppointments, selectedDate],
   );
-  const todayAppointments = useMemo(
-    () => allAppointments.filter(a => a.date === todayStr && a.status !== "iptal").sort((a, b) => a.startTime.localeCompare(b.startTime)),
-    [allAppointments],
+  // Görüntüleme-katmanı güvence: aynı date+start_time için birden fazla
+  // time_slots satırı varsa (eski/bozuk veri — Supabase'ten hiçbir şey
+  // silinmez) istatistikler ve çizelgede aynı saat iki kez sayılmasın.
+  const uniqueSlots = useMemo(() => {
+    const seen = new Set<string>();
+    return slots.filter(s => (seen.has(s.start) ? false : (seen.add(s.start), true)));
+  }, [slots]);
+  const openSlots = useMemo(() => uniqueSlots.filter(s => s.open), [uniqueSlots]);
+  const bookedCount = useMemo(() => selectedDayAppointments.filter(a => a.status !== "iptal").length, [selectedDayAppointments]);
+  const emptySlots = useMemo(
+    () => openSlots.filter(s => !selectedDayAppointments.find(a => a.startTime === s.start && a.status !== "iptal")),
+    [openSlots, selectedDayAppointments],
   );
-  const upcomingAppointments = useMemo(
-    () => allAppointments
-      .filter(a => a.status === "onaylandi" && isFuture(parseISO(`${a.date}T${a.startTime}`)))
-      .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`))
-      .slice(0, 5),
-    [allAppointments],
-  );
-  const lastCompletedAppointment = useMemo(
-    () => allAppointments
-      .filter(a => a.status === "tamamlandi")
-      .sort((a, b) => `${b.date}T${b.startTime}`.localeCompare(`${a.date}T${a.startTime}`))[0] ?? null,
-    [allAppointments],
-  );
+  const occupancyRate = uniqueSlots.length > 0 ? Math.round((bookedCount / uniqueSlots.length) * 100) : 0;
 
-  const openCount  = slots.filter(s => s.open).length;
-  const totalCount = slots.length;
-
-  const emptyTodaySlots  = todaySlots.filter(s => s.open && !todayAppointments.find(a => a.startTime === s.start && a.status !== "iptal"));
-  const bookedTodayCount = todaySlots.filter(s => todayAppointments.find(a => a.startTime === s.start && a.status !== "iptal")).length;
-  const occupancyRate    = todaySlots.length > 0 ? Math.round((bookedTodayCount / todaySlots.length) * 100) : 0;
+  const isSelectedToday = selectedDate === todayStr;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
 
   const detailStudent = detailApt ? students.find(s => s.id === detailApt.studentId) : undefined;
   const detailGym = detailStudent?.gymId ? gyms.find(g => g.id === detailStudent.gymId) : undefined;
 
+  const weekDayItems: CalendarDay[] = weekDays.map(d => ({
+    iso: d,
+    dayLabel: format(parseISO(d), "EEE", { locale: tr }).toUpperCase(),
+    dayNum: format(parseISO(d), "d"),
+    hasBadge: (summary[d]?.open ?? 0) > 0,
+  }));
+
+  const timelineRows: TimelineRow[] = useMemo(() => uniqueSlots.map(s => {
+    const apt = selectedDayAppointments.find(a => a.startTime === s.start && a.status !== "iptal");
+    const key = s.id ?? s.start;
+    if (apt) {
+      const ongoing = isSelectedToday && nowMin >= toMin(apt.startTime) && nowMin < toMin(apt.endTime);
+      return {
+        key, time: s.start,
+        node: (
+          <AppointmentCard
+            title={apt.studentName}
+            subtitle={`${LESSON_TYPE_LABEL[apt.lessonType]} · ${apt.startTime}–${apt.endTime}`}
+            badgeLabel={STATUS_LABELS[apt.status]}
+            badgeColor={STATUS_COLOR[apt.status]}
+            accent={ongoing}
+            onClick={() => setDetailApt(apt)}
+          />
+        ),
+      };
+    }
+    return {
+      key, time: s.start,
+      node: (
+        <EmptySlot
+          label={s.open ? "Boş" : "Kapalı"}
+          muted={!s.open}
+          isOpen={s.open}
+          onToggle={() => handleToggle(s.start)}
+          onRemove={() => handleRemove(s.start)}
+          actionLabel={s.open ? "+ Randevu" : undefined}
+          onAction={s.open ? () => { setAptTime(s.start); setAptStudent(""); setAptStudent2(""); setAptType("bireysel"); setSheetMode("addAppt"); } : undefined}
+        />
+      ),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [uniqueSlots, selectedDayAppointments, isSelectedToday, nowMin, selectedDate]);
+
   return (
-    <>
-    <motion.div variants={stagger} initial="initial" animate="animate" className="max-w-6xl mx-auto space-y-6">
-
-      {/* Hero */}
-      <motion.div variants={fadeUp} className="glass-strong relative overflow-hidden rounded-3xl">
-        <div className="relative p-6 sm:p-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl text-white tracking-wide" style={{ fontFamily: "var(--font-display)" }}>
-                TAKVİM & RANDEVU YÖNETİMİ
-              </h1>
-              <p className="text-xs sm:text-sm text-white/40 mt-1" style={{ fontFamily: "var(--font-label)" }}>
-                Randevu saatlerini tanımlayın ve yönetin
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="glass flex rounded-xl p-1">
-                <button onClick={() => setViewMode("day")}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg tracking-wider transition-all"
-                  style={{
-                    background: viewMode === "day" ? "rgba(139,92,246,0.3)" : "transparent",
-                    color: viewMode === "day" ? "#fff" : "rgba(255,255,255,0.4)",
-                    fontFamily: "var(--font-label)",
-                  }}>
-                  <CalendarDays size={13} />Günlük
-                </button>
-                <button onClick={() => setViewMode("week")}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg tracking-wider transition-all"
-                  style={{
-                    background: viewMode === "week" ? "rgba(139,92,246,0.3)" : "transparent",
-                    color: viewMode === "week" ? "#fff" : "rgba(255,255,255,0.4)",
-                    fontFamily: "var(--font-label)",
-                  }}>
-                  <LayoutGrid size={13} />Haftalık
-                </button>
-              </div>
-              <AnimatePresence>
-                {saved && (
-                  <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
-                    className="flex items-center gap-1.5 text-xs" style={{ color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
-                    <Check size={13} />Kaydedildi
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6">
-            <TakvimStatCard label="Bugünkü Ders" value={todayAppointments.length}
-              sub={`${todayAppointments.filter(a => a.status === "tamamlandi").length} tamamlandı`}
-              icon={<Calendar size={16} />} color="#F87171" />
-            <TakvimStatCard label="Bugünkü Gelir" value={todayRevenue} prefix="₺"
-              sub="Ödenen tahsilat" icon={<Wallet size={16} />} color="var(--color-achievement)" />
-            <TakvimStatCard label="Boş Saat" value={emptyTodaySlots.length}
-              sub="Bugün için" icon={<CalendarClock size={16} />} color="#60A5FA" />
-            <TakvimStatCard label="Doluluk Oranı" value={occupancyRate} suffix="%"
-              sub="Bugünün doluluğu" icon={<PieChart size={16} />} color="#4ADE80" />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Haftalık mini takvim */}
-      <motion.div variants={fadeUp}>
-        <WeekStrip
-          weekDays={weekDays}
-          weekLabel={`${format(addDays(weekStart, 0), "dd MMM", { locale: tr })} – ${format(addDays(weekStart, 6), "dd MMM yyyy", { locale: tr })}`}
-          selectedDate={selectedDate}
-          todayStr={todayStr}
-          summary={summary}
-          onSelectDate={d => setSelectedDate(d)}
-          onPrevWeek={() => setWeekBase(d => addDays(d, -7))}
-          onNextWeek={() => setWeekBase(d => addDays(d, 7))}
-          onToday={() => { setWeekBase(new Date()); setSelectedDate(todayStr); }}
+    <div className="max-w-3xl mx-auto space-y-4 pb-10">
+      <motion.div variants={fadeUp} initial="initial" animate="animate">
+        <CalendarHeader
+          title="TAKVİM"
+          dateLabel={format(parseISO(selectedDate), "dd MMMM yyyy", { locale: tr }).toUpperCase()}
+          weekdayLabel={format(parseISO(selectedDate), "EEEE", { locale: tr })}
+          isToday={isSelectedToday}
+          onPrev={() => { const d = fmt(subDays(parseISO(selectedDate), 1)); setSelectedDate(d); setWeekBase(parseISO(d)); }}
+          onNext={() => { const d = fmt(addDays(parseISO(selectedDate), 1)); setSelectedDate(d); setWeekBase(parseISO(d)); }}
+          onToday={() => { setSelectedDate(todayStr); setWeekBase(new Date()); }}
         />
       </motion.div>
 
-      {/* Seçili gün başlığı — sadece günlük görünümde */}
-      {viewMode === "day" && (
-        <motion.div variants={fadeUp} className="flex flex-wrap items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-xl sm:text-2xl text-white tracking-wider leading-tight" style={{ fontFamily: "var(--font-display)" }}>
-              {format(parseISO(selectedDate), "EEEE", { locale: tr }).toUpperCase()} — {format(parseISO(selectedDate), "dd MMMM yyyy", { locale: tr })}
-            </h2>
-            <p className="text-xs text-white/35 mt-0.5" style={{ fontFamily: "var(--font-label)" }}>
-              {totalCount} saat tanımlı · {openCount} açık · {totalCount - openCount} kapalı
-              {loading && " · yükleniyor..."}
-            </p>
-          </div>
-          <input type="date" value={selectedDate}
-            onChange={e => { setSelectedDate(e.target.value); setWeekBase(parseISO(e.target.value)); }}
-            className="glass text-white px-3 py-2 text-sm outline-none transition-colors flex-shrink-0 rounded-xl"
-            style={{ fontFamily: "var(--font-label)" }}
-          />
+      <motion.div variants={fadeUp} initial="initial" animate="animate">
+        <CalendarStats
+          items={[
+            { label: "Ders", value: String(bookedCount) },
+            { label: "Boş", value: String(emptySlots.length) },
+            { label: "Doluluk", value: `%${occupancyRate}` },
+          ]}
+          secondary={`Bugün ₺${todayRevenue.toLocaleString("tr-TR")}`}
+        />
+      </motion.div>
+
+      {pendingGifts.length > 0 && (
+        <motion.div variants={fadeUp} initial="initial" animate="animate"
+          className="flex items-center gap-2 px-3 py-2 rounded-xl w-fit"
+          style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
+          <Gift size={13} style={{ color: "var(--color-achievement)" }} />
+          <span className="text-xs" style={{ color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>
+            {pendingGifts.length} bekleyen hediye ders onayı
+          </span>
         </motion.div>
       )}
 
-      <div className="grid lg:grid-cols-4 gap-5">
-
-        {/* Sol: Saat ekleme */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="glass-strong relative rounded-2xl overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange" />
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Zap size={15} style={{ color: "#A78BFA" }} />
-                <h3 className="text-sm text-white tracking-wider" style={{ fontFamily: "var(--font-display)" }}>SAAT ARALIK EKLE</h3>
-              </div>
-
-              <div className="space-y-2.5">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-white/35 tracking-wider uppercase mb-1" style={{ fontFamily: "var(--font-label)" }}>Başlangıç</label>
-                    <select value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
-                      className="w-full bg-steel/50 border border-white/10 focus:border-crimson/60 text-white px-2 py-2 text-sm outline-none appearance-none transition-colors"
-                      style={{ fontFamily: "var(--font-display)", fontSize: "1rem" }}>
-                      {TIME_OPTIONS.map(t => <option key={t} value={t} className="bg-carbon">{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/35 tracking-wider uppercase mb-1" style={{ fontFamily: "var(--font-label)" }}>Bitiş</label>
-                    <select value={rangeTo} onChange={e => setRangeTo(e.target.value)}
-                      className="w-full bg-steel/50 border border-white/10 focus:border-crimson/60 text-white px-2 py-2 text-sm outline-none appearance-none transition-colors"
-                      style={{ fontFamily: "var(--font-display)", fontSize: "1rem" }}>
-                      {TIME_OPTIONS.map(t => <option key={t} value={t} className="bg-carbon">{t}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-white/35 tracking-wider uppercase mb-1" style={{ fontFamily: "var(--font-label)" }}>Ders Süresi</label>
-                  <select value={intervalMin} onChange={e => setIntervalMin(e.target.value)}
-                    className="w-full bg-steel/50 border border-white/10 focus:border-crimson/60 text-white px-2 py-2 text-sm outline-none appearance-none transition-colors"
-                    style={{ fontFamily: "var(--font-label)" }}>
-                    <option value="30"  className="bg-carbon">30 dakika</option>
-                    <option value="45"  className="bg-carbon">45 dakika</option>
-                    <option value="60"  className="bg-carbon">60 dakika (1 saat)</option>
-                    <option value="90"  className="bg-carbon">90 dakika</option>
-                    <option value="120" className="bg-carbon">120 dakika (2 saat)</option>
-                  </select>
-                </div>
-
-                <button onClick={handleAddRange} disabled={loading}
-                  className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full flex items-center justify-center gap-2 disabled:opacity-50 text-white text-xs font-semibold tracking-widest uppercase py-3 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
-                  style={{ fontFamily: "var(--font-label)" }}>
-                  <Plus size={14} />{loading ? "Ekleniyor..." : "Saatleri Ekle"}
-                </button>
-              </div>
-
-              <div className="mt-3 pt-3 border-t border-white/5">
-                <p className="text-xs text-white/25 leading-relaxed" style={{ fontFamily: "var(--font-label)" }}>
-                  Örn: 09:00 → 22:00, 60 dk = 13 saat eklenir. Mevcut saatler tekrar eklenmez.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {totalCount > 0 && (
-            <div className="glass rounded-2xl p-4 space-y-2">
-              <h3 className="text-xs text-white/35 tracking-widest uppercase mb-2" style={{ fontFamily: "var(--font-label)" }}>Toplu İşlemler</h3>
-              <button onClick={() => handleSetAll(true)} disabled={loading}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold tracking-wider uppercase transition-transform hover:scale-[1.02] active:scale-95"
-                style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
-                <Unlock size={12} />Tüm Saatleri Aç
-              </button>
-              <button onClick={() => handleSetAll(false)} disabled={loading}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold tracking-wider uppercase transition-transform hover:scale-[1.02] active:scale-95"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>
-                <Lock size={12} />Tüm Saatleri Kapat
-              </button>
-              <button onClick={handleClear} disabled={loading}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold tracking-wider uppercase transition-transform hover:scale-[1.02] active:scale-95"
-                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
-                <Trash2 size={12} />Güne Ait Saatleri Sil
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Sağ: Randevu Oluştur + Saat listesi */}
-        <div className="lg:col-span-2 space-y-4">
-
-          {/* Randevu oluşturma */}
-          <div className="glass-strong relative rounded-2xl overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange" />
-            <button className="w-full flex items-center justify-between p-4"
-              onClick={() => setAptPanel(o => !o)}>
-              <div className="flex items-center gap-2">
-                <UserPlus size={15} style={{ color: "#A78BFA" }} />
-                <span className="text-sm text-white tracking-wider" style={{ fontFamily:"var(--font-display)" }}>
-                  RANDEVU OLUŞTUR
-                </span>
-              </div>
-              <span className="text-xs text-white/30" style={{ fontFamily:"var(--font-label)" }}>
-                {aptPanel ? "Kapat ▲" : "Aç ▼"}
-              </span>
-            </button>
-            <AnimatePresence>
-              {aptPanel && (
-                <motion.div initial={{ height:0, opacity:0 }} animate={{ height:"auto", opacity:1 }}
-                  exit={{ height:0, opacity:0 }} transition={{ duration:0.2 }}
-                  className="overflow-hidden" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="p-4 space-y-3">
-                    {/* Ders tipi */}
-                    <div>
-                      <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
-                        style={{ fontFamily:"var(--font-label)" }}>Ders Tipi</label>
-                      <div className="flex gap-2">
-                        {(["bireysel","duet","grup"] as LessonType[]).map(t => (
-                          <button key={t} onClick={() => { setAptType(t); if(t==="bireysel") setAptStudent2(""); }}
-                            className="flex-1 py-2 text-xs font-semibold tracking-wider uppercase transition-all"
-                            style={{
-                              fontFamily:"var(--font-label)",
-                              ...(aptType===t
-                                ? { background:"linear-gradient(135deg,#8B5CF6,#A855F7)", color:"#fff" }
-                                : { border:"1px solid rgba(139,92,246,0.2)", color:"rgba(139,92,246,0.6)" }),
-                            }}>
-                            {t==="bireysel"?"Bireysel":t==="duet"?"Düet":"Grup"}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {/* Öğrenci 1 */}
-                    <div>
-                      <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
-                        style={{ fontFamily:"var(--font-label)" }}>
-                        {aptType==="bireysel"?"Öğrenci":"Öğrenci A"}
-                      </label>
-                      <select value={aptStudent} onChange={e => setAptStudent(e.target.value)}
-                        className="w-full bg-carbon border border-violet/20 text-white px-3 py-2.5 text-sm outline-none appearance-none transition-colors"
-                        style={{ fontFamily:"var(--font-label)" }}>
-                        <option value="" className="bg-carbon">Öğrenci seçin...</option>
-                        {students.filter(s=>s.isActive).map(s => (
-                          <option key={s.id} value={s.id} className="bg-carbon">
-                            {s.fullName} ({s.code}) — {s.remainingLessons} ders kaldı
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {/* Öğrenci 2 (Düet/Grup) */}
-                    {aptType !== "bireysel" && (
-                      <div>
-                        <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
-                          style={{ fontFamily:"var(--font-label)" }}>Öğrenci B</label>
-                        <select value={aptStudent2} onChange={e => setAptStudent2(e.target.value)}
-                          className="w-full bg-carbon border border-violet/20 text-white px-3 py-2.5 text-sm outline-none appearance-none"
-                          style={{ fontFamily:"var(--font-label)" }}>
-                          <option value="" className="bg-carbon">İkinci öğrenci seçin...</option>
-                          {students.filter(s => s.isActive && s.id !== aptStudent).map(s => (
-                            <option key={s.id} value={s.id} className="bg-carbon">
-                              {s.fullName} ({s.code}) — {s.remainingLessons} ders kaldı
-                            </option>
-                          ))}
-                        </select>
-                        {/* Uyarı: 0 ders */}
-                        {aptStudent2 && (() => {
-                          const std = students.find(s => s.id === aptStudent2);
-                          return std && std.remainingLessons === 0 ? (
-                            <p className="text-xs text-gold mt-1" style={{ fontFamily:"var(--font-label)" }}>
-                              ⚠️ {std.fullName} adlı öğrencinin kalan dersi yok!
-                            </p>
-                          ) : null;
-                        })()}
-                      </div>
-                    )}
-                    {/* Saat seç */}
-                    <div>
-                      <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5"
-                        style={{ fontFamily:"var(--font-label)" }}>Saat (Boş slotlardan)</label>
-                      <select value={aptTime} onChange={e => setAptTime(e.target.value)}
-                        className="w-full bg-carbon border border-violet/20 text-white px-3 py-2.5 text-sm outline-none appearance-none"
-                        style={{ fontFamily:"var(--font-display)", fontSize:"1rem" }}>
-                        <option value="" className="bg-carbon">Saat seçin...</option>
-                        {slots.filter(s => s.open && !selectedDayAppointments.find(a=>a.startTime===s.start&&a.status!=="iptal"))
-                          .map((s, i) => (
-                          <option key={s.id ?? `${s.start}-${i}`} value={s.start} className="bg-carbon">
-                            {s.start} – {s.end}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button onClick={handleCreateApt} disabled={!aptStudent || !aptTime || aptSaving}
-                      className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full py-3 rounded-xl text-white text-xs font-semibold tracking-widest uppercase transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-40"
-                      style={{ fontFamily:"var(--font-label)" }}>
-                      {aptSaving ? "Oluşturuluyor..." : `${aptType==="duet"?"Düet ":""}Randevu Oluştur`}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Saat çizelgesi — Günlük veya Haftalık */}
-          {viewMode === "day" ? (
-            <DayTimeline
-              date={selectedDate}
-              slots={slots}
-              appointments={selectedDayAppointments}
-              isToday={selectedDate === todayStr}
-              now={now}
-              onToggle={handleToggle}
-              onRemove={handleRemove}
-              onApptClick={setDetailApt}
-            />
-          ) : (
-            <div className="overflow-x-auto overscroll-x-contain pb-2" style={{ WebkitOverflowScrolling: "touch" }}>
-              <div className="grid grid-cols-7 gap-2" style={{ minWidth: 900 }}>
-                {weekDays.map(d => (
-                  <DayTimeline
-                    key={d}
-                    date={d}
-                    slots={weekSlots[d] ?? []}
-                    appointments={allAppointments.filter(a => a.date === d)}
-                    isToday={d === todayStr}
-                    now={now}
-                    compact
-                    onApptClick={setDetailApt}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {slots.length > 0 && viewMode === "day" && (
-            <div className="glass flex items-center justify-between px-4 py-3 rounded-xl">
-              <div className="flex items-center gap-4 text-xs" style={{ fontFamily: "var(--font-label)" }}>
-                <span style={{ color: "var(--color-success)" }}>{openCount} açık</span>
-                <span className="text-white/25">{totalCount - openCount} kapalı</span>
-                <span style={{ color: "var(--color-achievement)" }}>{selectedDayAppointments.filter(a => a.status !== "iptal").length} randevulu</span>
-              </div>
-              <span className="text-xs text-white/20" style={{ fontFamily: "var(--font-label)" }}>{totalCount} saat toplam</span>
-            </div>
-          )}
-        </div>
-
-        {/* Sağ panel */}
-        <div className="lg:col-span-1">
-          <TakvimRightPanel
-            upcomingAppointments={upcomingAppointments}
-            todayAppointments={todayAppointments}
-            lastCompletedAppointment={lastCompletedAppointment}
-            pendingGifts={pendingGifts}
-            emptyTodaySlots={emptyTodaySlots}
+      <motion.div variants={fadeUp} initial="initial" animate="animate" className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <WeekDateSelector
+            days={weekDayItems}
+            selected={selectedDate}
+            todayIso={todayStr}
+            onSelect={setSelectedDate}
+            onPrevWeek={() => setWeekBase(d => addDays(d, -7))}
+            onNextWeek={() => setWeekBase(d => addDays(d, 7))}
           />
         </div>
-      </div>
-    </motion.div>
+        <CalendarActionMenu
+          disabled={loading}
+          onAdd={() => setSheetMode("addChoice")}
+          onOpenAll={() => handleSetAll(true)}
+          onCloseAll={() => handleSetAll(false)}
+          onClearDay={handleClear}
+        />
+      </motion.div>
 
-    <LessonDetailModal
-      appointment={detailApt}
-      student={detailStudent}
-      gym={detailGym}
-      onClose={() => setDetailApt(null)}
-    />
-    </>
+      <motion.div variants={fadeUp} initial="initial" animate="animate">
+        <CalendarTimeline rows={timelineRows} emptyText="Bu güne ait tanımlı saat yok — sağ üstten + Ekle ile saat aralığı tanımlayın" />
+      </motion.div>
+
+      {/* ── + Ekle seçim sayfası ─────────────────────────────────── */}
+      <AppointmentBottomSheet open={sheetMode === "addChoice"} onClose={() => setSheetMode(null)} title="EKLE">
+        <div className="flex flex-col gap-2">
+          <button onClick={() => setSheetMode("addRange")}
+            className="w-full text-left px-4 rounded-xl text-sm font-semibold transition-colors hover:bg-white/5"
+            style={{ minHeight: 52, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontFamily: "var(--font-label)" }}>
+            + Saat Aralığı
+            <div className="text-[11px] font-normal text-white/35 mt-0.5">Belirli bir zaman dilimine yeni randevu saatleri ekle</div>
+          </button>
+          <button onClick={() => { setAptTime(""); setAptStudent(""); setAptStudent2(""); setAptType("bireysel"); setSheetMode("addAppt"); }}
+            className="w-full text-left px-4 rounded-xl text-sm font-semibold transition-colors hover:bg-white/5"
+            style={{ minHeight: 52, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", fontFamily: "var(--font-label)" }}>
+            + Randevu
+            <div className="text-[11px] font-normal text-white/35 mt-0.5">Boş bir saate doğrudan randevu oluştur</div>
+          </button>
+        </div>
+      </AppointmentBottomSheet>
+
+      {/* ── Saat aralığı ekle ────────────────────────────────────── */}
+      <AppointmentBottomSheet open={sheetMode === "addRange"} onClose={() => setSheetMode(null)} title="SAAT ARALIĞI EKLE" subtitle={selectedDate}>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className="block text-xs text-white/35 tracking-wider uppercase mb-1" style={{ fontFamily: "var(--font-label)" }}>Başlangıç</label>
+              <select value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
+                className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none appearance-none rounded-lg">
+                {TIME_OPTIONS.map(t => <option key={t} value={t} className="bg-carbon">{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-white/35 tracking-wider uppercase mb-1" style={{ fontFamily: "var(--font-label)" }}>Bitiş</label>
+              <select value={rangeTo} onChange={e => setRangeTo(e.target.value)}
+                className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none appearance-none rounded-lg">
+                {TIME_OPTIONS.map(t => <option key={t} value={t} className="bg-carbon">{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-white/35 tracking-wider uppercase mb-1" style={{ fontFamily: "var(--font-label)" }}>Ders Süresi</label>
+            <select value={intervalMin} onChange={e => setIntervalMin(e.target.value)}
+              className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none appearance-none rounded-lg">
+              <option value="30" className="bg-carbon">30 dakika</option>
+              <option value="45" className="bg-carbon">45 dakika</option>
+              <option value="60" className="bg-carbon">60 dakika (1 saat)</option>
+              <option value="90" className="bg-carbon">90 dakika</option>
+              <option value="120" className="bg-carbon">120 dakika (2 saat)</option>
+            </select>
+          </div>
+          <p className="text-xs text-white/25 leading-relaxed" style={{ fontFamily: "var(--font-label)" }}>
+            Örn: 09:00 → 22:00, 60 dk = 13 saat eklenir. Mevcut saatler tekrar eklenmez.
+          </p>
+          <button onClick={handleAddRange} disabled={loading}
+            className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full flex items-center justify-center gap-2 disabled:opacity-50 text-white text-xs font-semibold tracking-widest uppercase rounded-xl transition-transform hover:scale-[1.01] active:scale-95"
+            style={{ minHeight: 48, fontFamily: "var(--font-label)" }}>
+            {loading ? "Ekleniyor..." : "Saatleri Ekle"}
+          </button>
+        </div>
+      </AppointmentBottomSheet>
+
+      {/* ── Randevu oluştur ──────────────────────────────────────── */}
+      <AppointmentBottomSheet open={sheetMode === "addAppt"} onClose={() => setSheetMode(null)} title="RANDEVU OLUŞTUR" subtitle={selectedDate}>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Ders Tipi</label>
+            <div className="flex gap-2">
+              {(["bireysel", "duet", "grup"] as LessonType[]).map(t => (
+                <button key={t} onClick={() => { setAptType(t); if (t === "bireysel") setAptStudent2(""); }}
+                  className="flex-1 text-xs font-semibold tracking-wider uppercase transition-all rounded-lg"
+                  style={{
+                    minHeight: 40, fontFamily: "var(--font-label)",
+                    ...(aptType === t
+                      ? { background: "linear-gradient(135deg,#8B5CF6,#A855F7)", color: "#fff" }
+                      : { border: "1px solid rgba(139,92,246,0.2)", color: "rgba(139,92,246,0.6)" }),
+                  }}>
+                  {t === "bireysel" ? "Bireysel" : t === "duet" ? "Düet" : "Grup"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>
+              {aptType === "bireysel" ? "Öğrenci" : "Öğrenci A"}
+            </label>
+            <select value={aptStudent} onChange={e => setAptStudent(e.target.value)}
+              className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none appearance-none rounded-lg">
+              <option value="" className="bg-carbon">Öğrenci seçin...</option>
+              {students.filter(s => s.isActive).map(s => (
+                <option key={s.id} value={s.id} className="bg-carbon">{s.fullName} ({s.code}) — {s.remainingLessons} ders kaldı</option>
+              ))}
+            </select>
+          </div>
+          {aptType !== "bireysel" && (
+            <div>
+              <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Öğrenci B</label>
+              <select value={aptStudent2} onChange={e => setAptStudent2(e.target.value)}
+                className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none appearance-none rounded-lg">
+                <option value="" className="bg-carbon">İkinci öğrenci seçin...</option>
+                {students.filter(s => s.isActive && s.id !== aptStudent).map(s => (
+                  <option key={s.id} value={s.id} className="bg-carbon">{s.fullName} ({s.code}) — {s.remainingLessons} ders kaldı</option>
+                ))}
+              </select>
+              {aptStudent2 && (() => {
+                const std = students.find(s => s.id === aptStudent2);
+                return std && std.remainingLessons === 0 ? (
+                  <p className="text-xs mt-1" style={{ color: "var(--color-achievement)", fontFamily: "var(--font-label)" }}>⚠️ {std.fullName} adlı öğrencinin kalan dersi yok!</p>
+                ) : null;
+              })()}
+            </div>
+          )}
+          <div>
+            <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Saat (Boş slotlardan)</label>
+            <select value={aptTime} onChange={e => setAptTime(e.target.value)}
+              className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none appearance-none rounded-lg">
+              <option value="" className="bg-carbon">Saat seçin...</option>
+              {uniqueSlots.filter(s => s.open && !selectedDayAppointments.find(a => a.startTime === s.start && a.status !== "iptal")).map((s, i) => (
+                <option key={s.id ?? `${s.start}-${i}`} value={s.start} className="bg-carbon">{s.start} – {s.end}</option>
+              ))}
+            </select>
+          </div>
+          <button onClick={handleCreateApt} disabled={!aptStudent || !aptTime || aptSaving}
+            className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full rounded-xl text-white text-xs font-semibold tracking-widest uppercase transition-transform hover:scale-[1.01] active:scale-95 disabled:opacity-40"
+            style={{ minHeight: 48, fontFamily: "var(--font-label)" }}>
+            {aptSaving ? "Oluşturuluyor..." : `${aptType === "duet" ? "Düet " : ""}Randevu Oluştur`}
+          </button>
+        </div>
+      </AppointmentBottomSheet>
+
+      {/* ── Ders detayı ──────────────────────────────────────────── */}
+      <AppointmentBottomSheet
+        open={!!detailApt}
+        onClose={() => { setDetailApt(null); setEditingNote(false); }}
+        title={detailApt?.studentName ?? ""}
+        subtitle={detailApt ? `${detailApt.startTime} – ${detailApt.endTime}` : undefined}>
+        {detailApt && (
+          <div className="space-y-4">
+            <span className="inline-flex items-center text-[10px] px-2.5 py-1 rounded-full font-semibold uppercase"
+              style={{ background: `${STATUS_COLOR[detailApt.status]}18`, color: STATUS_COLOR[detailApt.status], fontFamily: "var(--font-label)" }}>
+              {STATUS_LABELS[detailApt.status]}
+            </span>
+
+            <div className="space-y-2.5 text-sm" style={{ fontFamily: "var(--font-label)" }}>
+              <div className="flex items-center justify-between">
+                <span className="text-white/35 flex items-center gap-1.5"><PackageIcon size={13} />Paket</span>
+                <span className="text-white/80">
+                  {detailStudent
+                    ? (detailStudent.subscriptionType === "monthly" ? "Aylık Üyelik" : PACKAGES.find(p => p.type === detailStudent.packageType)?.name ?? "—")
+                    : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/35">Kalan Ders</span>
+                <span className="text-white/80">
+                  {detailStudent ? (detailStudent.subscriptionType === "monthly" ? "Sınırsız" : `${detailStudent.remainingLessons} / ${detailStudent.totalLessons}`) : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/35 flex items-center gap-1.5"><Clock size={13} />Ders Süresi</span>
+                <span className="text-white/80">{LESSON_DURATION_MINUTES} dk</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/35 flex items-center gap-1.5"><MapPin size={13} />Salon</span>
+                <span className="text-white/80">{detailGym?.name ?? TRAINER_LOCATION}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <span className="text-white/35 flex items-center gap-1.5"><UserIcon size={13} />Eğitmen</span>
+                <span className="text-white/80">{TRAINER_NAME}</span>
+              </div>
+            </div>
+
+            {editingNote ? (
+              <div className="space-y-2">
+                <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={3} placeholder="Not ekleyin..."
+                  className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none rounded-lg resize-none" style={{ fontFamily: "var(--font-label)" }} />
+                <div className="flex gap-2">
+                  <button onClick={() => setEditingNote(false)}
+                    className="flex-1 text-xs font-semibold uppercase rounded-lg border border-white/10 text-white/40"
+                    style={{ minHeight: 40, fontFamily: "var(--font-label)" }}>Vazgeç</button>
+                  <button onClick={() => handleSaveNote(detailApt)} disabled={sheetBusy}
+                    className="flex-1 text-xs font-semibold uppercase rounded-lg text-white disabled:opacity-40"
+                    style={{ minHeight: 40, background: "var(--color-achievement)", color: "#1a1005", fontFamily: "var(--font-label)" }}>Kaydet</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {detailApt.status === "onaylandi" && (
+                  <>
+                    <button onClick={() => handleComplete(detailApt)} disabled={sheetBusy}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors disabled:opacity-40"
+                      style={{ minHeight: 44, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
+                      <Check size={13} />{sheetBusy ? "İşleniyor..." : "Tamamlandı"}
+                    </button>
+                    <button onClick={() => handleCancelApt(detailApt)} disabled={sheetBusy}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors disabled:opacity-40"
+                      style={{ minHeight: 44, background: "transparent", border: "1px solid rgba(239,68,68,0.3)", color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
+                      İptal Et
+                    </button>
+                  </>
+                )}
+                <button onClick={() => { setNoteDraft(detailApt.notes ?? ""); setEditingNote(true); }}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors"
+                  style={{ minHeight: 44, border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-label)" }}>
+                  Düzenle (Not)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </AppointmentBottomSheet>
+    </div>
   );
 }
