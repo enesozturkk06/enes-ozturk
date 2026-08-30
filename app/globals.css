@@ -631,3 +631,19 @@ img, video, svg { max-width: 100%; height: auto; }
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+/* AppointmentBottomSheet panel yüksekliği — bilinçli olarak dvh/vh/svh
+   KULLANMIYOR: bazı gerçek mobil tarayıcılarda (özellikle uygulama-içi
+   WebView'ler, eski Android WebView sürümleri) dvh desteklenmiyor veya
+   yanlış hesaplanıyor; desteklenmeyen bir calc() değeri TÜM max-height
+   kuralını geçersiz kılıp sheet'i sınırsız büyütüyor, bu da alt footer'ı
+   (Randevuyu Onayla butonu) ekran dışına itiyor. Bunun yerine YÜZDE
+   kullanılıyor: bu değer, sheet'in doğrudan ebeveyni olan `position:fixed;
+   inset:0` backdrop'un GERÇEK render edilmiş yüksekliğine göre çözülür —
+   bu her tarayıcıda (adres çubuğu/araç çubuğu ne olursa olsun) doğru,
+   çünkü fixed+inset:0'ın yüksekliği zaten o an görünen gerçek viewport'a
+   eşit, herhangi bir viewport-unit desteğine ihtiyaç duymadan. */
+.appointment-sheet-panel { max-height: calc(100% - 24px); }
+@media (min-width: 640px) {
+  .appointment-sheet-panel { max-height: 85%; }
+}
+

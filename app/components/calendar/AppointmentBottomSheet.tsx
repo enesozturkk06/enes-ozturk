@@ -10,8 +10,14 @@ import { X } from "lucide-react";
  * children ile role'e göre değişir.
  *
  * Yapı (mobil taşma/erişilemeyen buton bug'ı düzeltmesi):
- *  - Sheet'in kendisi mobilde `100dvh - üst boşluk` ile sınırlı (desktop'ta
- *    ESKİ 85vh davranışı AYNEN korunuyor — sadece mobil breakpoint değişti).
+ *  - Sheet'in kendisi `.appointment-sheet-panel` (globals.css) ile sınırlı —
+ *    dvh/vh DEĞİL, sheet'in `position:fixed; inset:0` backdrop ebeveynine
+ *    göre YÜZDE kullanıyor (bkz. globals.css'teki açıklama): bazı gerçek
+ *    cihaz/WebView'lerde dvh desteklenmiyor/yanlış hesaplanıyor ve bu da
+ *    max-height kuralını tamamen geçersiz kılıp sheet'i sınırsız büyütüyor
+ *    — footer ekran dışına itiliyordu. Yüzde bazlı yaklaşım bu sınıftan
+ *    bağımsız, her tarayıcıda çalışır (desktop'ta ESKİ 85vh davranışı
+ *    AYNEN korunuyor, sadece hesaplama yöntemi değişti).
  *  - Başlık/handle sabit (flex-shrink-0), içerik `flex-1 min-h-0 overflow-y-auto`
  *    ile GERÇEKTEN kendi içinde scroll eder (önceki hata: bu satırda
  *    min-h-0 yoktu, flex çocuğu içeriğe göre büyüyüp dış overflow-hidden
@@ -36,9 +42,23 @@ export default function AppointmentBottomSheet({
 }) {
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    // Sadece `overflow:hidden` gerçek iOS Safari'de touch-scroll/rubber-band'i
+    // güvenilir şekilde engellemiyor — body'yi scroll konumunda sabitleyip
+    // kapanışta geri scroll ediyoruz (standart iOS-safe kilit tekniği).
+    const scrollY = window.scrollY;
+    const body = document.body.style;
+    const prevPosition = body.position, prevTop = body.top, prevWidth = body.width, prevOverflow = body.overflow;
+    body.position = "fixed";
+    body.top = `-${scrollY}px`;
+    body.width = "100%";
+    body.overflow = "hidden";
+    return () => {
+      body.position = prevPosition;
+      body.top = prevTop;
+      body.width = prevWidth;
+      body.overflow = prevOverflow;
+      window.scrollTo(0, scrollY);
+    };
   }, [open]);
 
   return (
@@ -51,7 +71,7 @@ export default function AppointmentBottomSheet({
           <motion.div
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 32, stiffness: 320 }}
-            className="glass-strong relative z-10 w-full sm:max-w-md rounded-t-[20px] sm:rounded-[20px] sm:mb-6 overflow-hidden flex flex-col max-h-[calc(100dvh-24px)] sm:max-h-[85vh]"
+            className="appointment-sheet-panel glass-strong relative z-10 w-full sm:max-w-md rounded-t-[20px] sm:rounded-[20px] sm:mb-6 overflow-hidden flex flex-col"
             onClick={e => e.stopPropagation()}>
             <div className="absolute top-0 left-0 right-0 h-px gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange" />
             {/* sürükleme tutamağı — mobil bottom-sheet imasını güçlendirir */}
