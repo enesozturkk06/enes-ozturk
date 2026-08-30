@@ -343,7 +343,14 @@ export default function TakvimPage() {
       </AppointmentBottomSheet>
 
       {/* ── Saat aralığı ekle ────────────────────────────────────── */}
-      <AppointmentBottomSheet open={sheetMode === "addRange"} onClose={() => setSheetMode(null)} title="SAAT ARALIĞI EKLE" subtitle={selectedDate}>
+      <AppointmentBottomSheet open={sheetMode === "addRange"} onClose={() => setSheetMode(null)} title="SAAT ARALIĞI EKLE" subtitle={selectedDate}
+        footer={
+          <button onClick={handleAddRange} disabled={loading}
+            className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full flex items-center justify-center gap-2 disabled:opacity-50 text-white text-xs font-semibold tracking-widest uppercase rounded-xl transition-transform hover:scale-[1.01] active:scale-95"
+            style={{ minHeight: 48, fontFamily: "var(--font-label)" }}>
+            {loading ? "Ekleniyor..." : "Saatleri Ekle"}
+          </button>
+        }>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2.5">
             <div>
@@ -375,16 +382,18 @@ export default function TakvimPage() {
           <p className="text-xs text-white/25 leading-relaxed" style={{ fontFamily: "var(--font-label)" }}>
             Örn: 09:00 → 22:00, 60 dk = 13 saat eklenir. Mevcut saatler tekrar eklenmez.
           </p>
-          <button onClick={handleAddRange} disabled={loading}
-            className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full flex items-center justify-center gap-2 disabled:opacity-50 text-white text-xs font-semibold tracking-widest uppercase rounded-xl transition-transform hover:scale-[1.01] active:scale-95"
-            style={{ minHeight: 48, fontFamily: "var(--font-label)" }}>
-            {loading ? "Ekleniyor..." : "Saatleri Ekle"}
-          </button>
         </div>
       </AppointmentBottomSheet>
 
       {/* ── Randevu oluştur ──────────────────────────────────────── */}
-      <AppointmentBottomSheet open={sheetMode === "addAppt"} onClose={() => setSheetMode(null)} title="RANDEVU OLUŞTUR" subtitle={selectedDate}>
+      <AppointmentBottomSheet open={sheetMode === "addAppt"} onClose={() => setSheetMode(null)} title="RANDEVU OLUŞTUR" subtitle={selectedDate}
+        footer={
+          <button onClick={handleCreateApt} disabled={!aptStudent || !aptTime || aptSaving}
+            className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full rounded-xl text-white text-xs font-semibold tracking-widest uppercase transition-transform hover:scale-[1.01] active:scale-95 disabled:opacity-40"
+            style={{ minHeight: 48, fontFamily: "var(--font-label)" }}>
+            {aptSaving ? "Oluşturuluyor..." : `${aptType === "duet" ? "Düet " : ""}Randevu Oluştur`}
+          </button>
+        }>
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-white/35 tracking-widest uppercase mb-1.5" style={{ fontFamily: "var(--font-label)" }}>Ders Tipi</label>
@@ -443,11 +452,6 @@ export default function TakvimPage() {
               ))}
             </select>
           </div>
-          <button onClick={handleCreateApt} disabled={!aptStudent || !aptTime || aptSaving}
-            className="gradient-animated gradient-slow gradient-violet-blue-cyan-pink-orange w-full rounded-xl text-white text-xs font-semibold tracking-widest uppercase transition-transform hover:scale-[1.01] active:scale-95 disabled:opacity-40"
-            style={{ minHeight: 48, fontFamily: "var(--font-label)" }}>
-            {aptSaving ? "Oluşturuluyor..." : `${aptType === "duet" ? "Düet " : ""}Randevu Oluştur`}
-          </button>
         </div>
       </AppointmentBottomSheet>
 
@@ -456,7 +460,45 @@ export default function TakvimPage() {
         open={!!detailApt}
         onClose={() => { setDetailApt(null); setEditingNote(false); }}
         title={detailApt?.studentName ?? ""}
-        subtitle={detailApt ? `${detailApt.startTime} – ${detailApt.endTime}` : undefined}>
+        subtitle={detailApt ? `${detailApt.startTime} – ${detailApt.endTime}` : undefined}
+        footer={detailApt && (
+          editingNote ? (
+            <div className="space-y-2">
+              <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={3} placeholder="Not ekleyin..."
+                className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none rounded-lg resize-none" style={{ fontFamily: "var(--font-label)" }} />
+              <div className="flex gap-2">
+                <button onClick={() => setEditingNote(false)}
+                  className="flex-1 text-xs font-semibold uppercase rounded-lg border border-white/10 text-white/40"
+                  style={{ minHeight: 40, fontFamily: "var(--font-label)" }}>Vazgeç</button>
+                <button onClick={() => handleSaveNote(detailApt)} disabled={sheetBusy}
+                  className="flex-1 text-xs font-semibold uppercase rounded-lg text-white disabled:opacity-40"
+                  style={{ minHeight: 40, background: "var(--color-achievement)", color: "#1a1005", fontFamily: "var(--font-label)" }}>Kaydet</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {detailApt.status === "onaylandi" && (
+                <>
+                  <button onClick={() => handleComplete(detailApt)} disabled={sheetBusy}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors disabled:opacity-40"
+                    style={{ minHeight: 44, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
+                    <Check size={13} />{sheetBusy ? "İşleniyor..." : "Tamamlandı"}
+                  </button>
+                  <button onClick={() => handleCancelApt(detailApt)} disabled={sheetBusy}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors disabled:opacity-40"
+                    style={{ minHeight: 44, background: "transparent", border: "1px solid rgba(239,68,68,0.3)", color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
+                    İptal Et
+                  </button>
+                </>
+              )}
+              <button onClick={() => { setNoteDraft(detailApt.notes ?? ""); setEditingNote(true); }}
+                className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors"
+                style={{ minHeight: 44, border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-label)" }}>
+                Düzenle (Not)
+              </button>
+            </div>
+          )
+        )}>
         {detailApt && (
           <div className="space-y-4">
             <span className="inline-flex items-center text-[10px] px-2.5 py-1 rounded-full font-semibold uppercase"
@@ -492,43 +534,6 @@ export default function TakvimPage() {
                 <span className="text-white/80">{TRAINER_NAME}</span>
               </div>
             </div>
-
-            {editingNote ? (
-              <div className="space-y-2">
-                <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={3} placeholder="Not ekleyin..."
-                  className="w-full bg-white/[0.03] border border-white/10 text-white px-3 py-2.5 text-base sm:text-sm outline-none rounded-lg resize-none" style={{ fontFamily: "var(--font-label)" }} />
-                <div className="flex gap-2">
-                  <button onClick={() => setEditingNote(false)}
-                    className="flex-1 text-xs font-semibold uppercase rounded-lg border border-white/10 text-white/40"
-                    style={{ minHeight: 40, fontFamily: "var(--font-label)" }}>Vazgeç</button>
-                  <button onClick={() => handleSaveNote(detailApt)} disabled={sheetBusy}
-                    className="flex-1 text-xs font-semibold uppercase rounded-lg text-white disabled:opacity-40"
-                    style={{ minHeight: 40, background: "var(--color-achievement)", color: "#1a1005", fontFamily: "var(--font-label)" }}>Kaydet</button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {detailApt.status === "onaylandi" && (
-                  <>
-                    <button onClick={() => handleComplete(detailApt)} disabled={sheetBusy}
-                      className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors disabled:opacity-40"
-                      style={{ minHeight: 44, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "var(--color-success)", fontFamily: "var(--font-label)" }}>
-                      <Check size={13} />{sheetBusy ? "İşleniyor..." : "Tamamlandı"}
-                    </button>
-                    <button onClick={() => handleCancelApt(detailApt)} disabled={sheetBusy}
-                      className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors disabled:opacity-40"
-                      style={{ minHeight: 44, background: "transparent", border: "1px solid rgba(239,68,68,0.3)", color: "var(--color-error)", fontFamily: "var(--font-label)" }}>
-                      İptal Et
-                    </button>
-                  </>
-                )}
-                <button onClick={() => { setNoteDraft(detailApt.notes ?? ""); setEditingNote(true); }}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase transition-colors"
-                  style={{ minHeight: 44, border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-label)" }}>
-                  Düzenle (Not)
-                </button>
-              </div>
-            )}
           </div>
         )}
       </AppointmentBottomSheet>

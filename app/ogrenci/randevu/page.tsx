@@ -547,7 +547,17 @@ export default function RandevuPage() {
 
       {/* Randevu onayı — paylaşılan bottom sheet */}
       <AppointmentBottomSheet open={!!selectedSlot} onClose={() => setSelectedSlot(null)} title="DERS BİLGİSİ"
-        subtitle={selectedSlot ? `${format(parseISO(selectedDate), "dd MMM yyyy", { locale: tr })} · ${selectedSlot.startTime}` : undefined}>
+        subtitle={selectedSlot ? `${format(parseISO(selectedDate), "dd MMM yyyy", { locale: tr })} · ${selectedSlot.startTime}` : undefined}
+        footer={selectedSlot && (
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => setSelectedSlot(null)} className="py-3 rounded-xl text-xs font-semibold uppercase" style={{ minHeight: 44, border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>Vazgeç</button>
+            <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
+              className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50 transition-transform active:scale-[0.97]"
+              style={{ minHeight: 44, fontFamily: "var(--font-label)", background: `linear-gradient(135deg, ${V}, #A855F7 55%, ${M})`, boxShadow: "0 4px 24px -6px rgba(139,92,246,0.5)" }}>
+              {saving ? "Oluşturuluyor..." : "Randevuyu Onayla"}
+            </button>
+          </div>
+        )}>
         {selectedSlot && (
           <div>
             <div className="space-y-0 mb-3">
@@ -562,17 +572,9 @@ export default function RandevuPage() {
             {bookError && (
               <div className="p-3 rounded-xl mb-3 text-xs text-red-400" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontFamily: "var(--font-label)" }}>⚠️ {bookError}</div>
             )}
-            <p className="text-xs mb-4" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-label)" }}>
               Ders, antrenör tamamla butonuna basınca düşer. {CANCEL_LIMIT_HOURS} saat içinde iptal edemezsiniz.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setSelectedSlot(null)} className="py-3 rounded-xl text-xs font-semibold uppercase" style={{ minHeight: 44, border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-label)" }}>Vazgeç</button>
-              <button onClick={confirmBook} disabled={saving || packageExpired || !rulesAccepted}
-                className="py-3 rounded-xl text-white text-xs font-semibold uppercase disabled:opacity-50 transition-transform active:scale-[0.97]"
-                style={{ minHeight: 44, fontFamily: "var(--font-label)", background: `linear-gradient(135deg, ${V}, #A855F7 55%, ${M})`, boxShadow: "0 4px 24px -6px rgba(139,92,246,0.5)" }}>
-                {saving ? "Oluşturuluyor..." : "Randevuyu Onayla"}
-              </button>
-            </div>
           </div>
         )}
       </AppointmentBottomSheet>
