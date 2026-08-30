@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -9,25 +9,34 @@ import { X } from "lucide-react";
  * VE öğrenci randevu onay/detay akışı AYNI kabuğu kullanır, içerik
  * children ile role'e göre değişir.
  *
- * Yapı (mobil taşma/erişilemeyen buton bug'ı düzeltmesi):
- *  - GEÇİCİ TEŞHİS AŞAMASINDA: gerçek iPhone Safari'de bu bug ısrar ediyor,
- *    hiçbir otomatik test aracında (Chromium + gerçek WebKit motoru)
- *    tekrarlanamıyor. `window.visualViewport` ile backdrop'u JS'te piksel
- *    olarak yeniden konumlandırma denemesi framer-motion'ın giriş
- *    animasyonuyla çakışıp KENDİ test ortamımda YENİ bir bug'a yol açtığı
- *    için GERİ ALINDI — karmaşıklığı artırıp kanıtlanmamış bir çözümü
- *    üretimde tutmak yerine sade CSS'e dönüldü. `.appointment-sheet-panel`
- *    (globals.css) max-height'i dvh/vh DEĞİL, backdrop'un `position:fixed;
- *    inset:0` kutusuna göre YÜZDE kullanıyor.
+ * Yapı (mobil taşma/erişilemeyen buton bug'ı düzeltmesi — kök neden):
+ *  - `StudentNav.tsx`'in mobil alt navigasyonu, Android'deki AYRI bir
+ *    scroll-render hatasını düzeltmek için `transform: translateZ(0)` +
+ *    `will-change: transform` + `isolation: isolate` ile kendi GPU
+ *    katmanına zorlanıyor. Gerçek iPhone Safari'de bu tür zorlanmış GPU
+ *    katmanları bazen DOM z-index sırasını yok sayıp kendi Core Animation
+ *    katman sırasına göre çiziliyor — sheet z-60 > nav z-46 olsa da nav
+ *    sheet'in ÜZERİNDE görünebiliyor (Android'de bu davranış yok, "Android'de
+ *    düzeldi, iPhone Safari'de düzelmedi" raporuyla tam örtüşüyor).
+ *  - ÇÖZÜM: z-index'e güvenmek yerine, sheet açıkken alt navigasyonu (ve
+ *    aynı GPU-katman/transform sorununa sahip WhatsApp butonunu) DOM'dan
+ *    render dışına almıyoruz ama `display:none` ile TAMAMEN kaldırıyoruz
+ *    (globals.css, `body[data-sheet-open="true"]` kuralı) — gizli bir
+ *    eleman hiçbir katmanlama/pointer-events belirsizliğine girmez.
+ *    StudentNav'daki Android fix'i AYNEN korunuyor, sadece sheet açıkken
+ *    geçici olarak devre dışı kalıyor.
+ *  - Sheet'in kendisi `.appointment-sheet-panel` (globals.css) ile sınırlı —
+ *    dvh/vh/svh katmanlı olarak denenir, hiçbiri desteklenmezse backdrop'un
+ *    `position:fixed; inset:0` kutusuna göre YÜZDE'ye düşer.
  *  - Başlık/handle sabit (flex-shrink-0), içerik `flex-1 min-h-0 overflow-y-auto`
- *    ile GERÇEKTEN kendi içinde scroll eder (önceki hata: bu satırda
- *    min-h-0 yoktu, flex çocuğu içeriğe göre büyüyüp dış overflow-hidden
- *    tarafından sessizce kırpılıyordu — buton hiç görünmüyordu).
+ *    ile GERÇEKTEN kendi içinde scroll eder (min-h-0 olmadan flex çocuğu
+ *    içeriğe göre büyür, kendi overflow'u devreye girmez).
  *  - `footer` verilirse (aksiyon butonları), içerikten AYRI, sheet'in en
  *    altına yapışık sabit bir alanda render edilir — scroll'dan etkilenmez,
  *    safe-area-inset-bottom + 16px min padding ile home indicator'ın
  *    üzerine binmez, içerikten ince bir üst gölge ile ayrılır.
- *  - Sheet açıkken arka sayfa scroll kilitlenir (body overflow hidden).
+ *  - Sheet açıkken arka sayfa scroll kilitlenir (iOS-safe: body position:fixed
+ *    + scrollY sabitleme, sadece overflow:hidden yeterli değil).
  */
 export default function AppointmentBottomSheet({
   open, onClose, title, subtitle, children, footer,
@@ -41,44 +50,6 @@ export default function AppointmentBottomSheet({
    * ayrı, her zaman görünür kalır (örn. "Randevuyu Onayla" / "Tamamlandı"). */
   footer?: React.ReactNode;
 }) {
-  // GEÇİCİ TEŞHİS — iPhone Safari'de kaydırılamayan/kesik footer sorunu
-  // gerçek cihazda ısrar ediyor, otomatik test araçlarında (Chromium +
-  // gerçek WebKit motoru) tekrarlanamıyor. ?debug=1 ile açılınca sheet'in
-  // üstünde gerçek cihazdan okunan ham sayıları gösterir. TEK SEFERLİK
-  // ölçüm — animasyon penceresinde tekrarlı setState/re-render, panelin
-  // giriş animasyonuyla çakışıp KENDİ BAŞINA ayrı bir bug'a yol açtığı
-  // görüldüğü için (bu, gerçek kullanıcı raporundan BAĞIMSIZ, teşhis
-  // kodunun kendi yan etkisiydi) artık sadece TEK bir gecikmeli ölçüm var.
-  // Sorun netleşince KALDIRILACAK — kalıcı bir özellik değil.
-  const [debugInfo, setDebugInfo] = useState<string>("");
-  const [debugOn] = useState(() =>
-    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1"
-  );
-  const footerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open || !debugOn) return;
-    const t1 = setTimeout(() => {
-      const vv = window.visualViewport;
-      const isStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true
-        || window.matchMedia("(display-mode: standalone)").matches;
-      const panelEl = document.querySelector<HTMLDivElement>(".appointment-sheet-panel");
-      const pr = panelEl?.getBoundingClientRect();
-      const fr = footerRef.current?.getBoundingClientRect();
-      const panelTransform = panelEl ? getComputedStyle(panelEl).transform : "?";
-      const backdrop = panelEl?.parentElement;
-      const backdropRect = backdrop?.getBoundingClientRect();
-      setDebugInfo(
-        `innerH:${window.innerHeight} vvH:${vv ? Math.round(vv.height) : "n/a"} vvTop:${vv ? Math.round(vv.offsetTop) : "n/a"} standalone:${isStandalone} dpr:${window.devicePixelRatio}\n` +
-        `backdrop: y=${backdropRect ? Math.round(backdropRect.y) : "?"} h=${backdropRect ? Math.round(backdropRect.height) : "?"}\n` +
-        `panelTransform: ${panelTransform}\n` +
-        `panel: y=${pr ? Math.round(pr.y) : "?"} h=${pr ? Math.round(pr.height) : "?"} bottom=${pr ? Math.round(pr.bottom) : "?"}\n` +
-        `footer: ${fr ? `y=${Math.round(fr.y)} h=${Math.round(fr.height)} bottom=${Math.round(fr.bottom)}` : "BULUNAMADI"}\n` +
-        `ua:${navigator.userAgent.slice(0, 70)}`
-      );
-    }, 1300);
-    return () => clearTimeout(t1);
-  }, [open, debugOn]);
-
   useEffect(() => {
     if (!open) return;
     // Sadece `overflow:hidden` gerçek iOS Safari'de touch-scroll/rubber-band'i
@@ -91,11 +62,13 @@ export default function AppointmentBottomSheet({
     body.top = `-${scrollY}px`;
     body.width = "100%";
     body.overflow = "hidden";
+    document.body.setAttribute("data-sheet-open", "true");
     return () => {
       body.position = prevPosition;
       body.top = prevTop;
       body.width = prevWidth;
       body.overflow = prevOverflow;
+      document.body.removeAttribute("data-sheet-open");
       window.scrollTo(0, scrollY);
     };
   }, [open]);
@@ -107,13 +80,6 @@ export default function AppointmentBottomSheet({
           className="fixed inset-0 z-[60] flex items-end justify-center"
           onClick={onClose}>
           <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)" }} />
-          {debugOn && (
-            <pre style={{
-              position: "fixed", top: 0, left: 0, right: 0, zIndex: 999,
-              background: "#ff0080", color: "#fff", fontSize: 10, lineHeight: 1.4,
-              padding: "6px 8px", margin: 0, whiteSpace: "pre-wrap", fontFamily: "monospace",
-            }}>{debugInfo || "ölçülüyor..."}</pre>
-          )}
           <motion.div
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 32, stiffness: 320 }}
@@ -144,7 +110,7 @@ export default function AppointmentBottomSheet({
             </div>
 
             {footer && (
-              <div ref={footerRef} className="flex-shrink-0 px-5 pt-3"
+              <div className="flex-shrink-0 px-5 pt-3"
                 style={{
                   borderTop: "1px solid rgba(255,255,255,0.08)",
                   background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12))",

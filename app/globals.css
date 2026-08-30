@@ -631,19 +631,38 @@ img, video, svg { max-width: 100%; height: auto; }
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
-/* AppointmentBottomSheet panel yüksekliği — bilinçli olarak dvh/vh/svh
-   KULLANMIYOR: bazı gerçek mobil tarayıcılarda (özellikle uygulama-içi
-   WebView'ler, eski Android WebView sürümleri) dvh desteklenmiyor veya
-   yanlış hesaplanıyor; desteklenmeyen bir calc() değeri TÜM max-height
-   kuralını geçersiz kılıp sheet'i sınırsız büyütüyor, bu da alt footer'ı
-   (Randevuyu Onayla butonu) ekran dışına itiyor. Bunun yerine YÜZDE
-   kullanılıyor: bu değer, sheet'in doğrudan ebeveyni olan `position:fixed;
-   inset:0` backdrop'un GERÇEK render edilmiş yüksekliğine göre çözülür —
-   bu her tarayıcıda (adres çubuğu/araç çubuğu ne olursa olsun) doğru,
-   çünkü fixed+inset:0'ın yüksekliği zaten o an görünen gerçek viewport'a
-   eşit, herhangi bir viewport-unit desteğine ihtiyaç duymadan. */
-.appointment-sheet-panel { max-height: calc(100% - 24px); }
+/* AppointmentBottomSheet panel yüksekliği — katmanlı fallback: önce YÜZDE
+   (backdrop'un `position:fixed; inset:0` kutusuna göre, HER tarayıcıda
+   çalışır, viewport-unit desteğine ihtiyaç duymaz), sonra desteklenirse
+   svh/dvh ile ÜZERİNE YAZILIR (daha isabetli — svh en küçük/garantili
+   görünen alan, dvh Safari araç çubuğu açılıp kapandıkça canlı güncellenir).
+   Desteklenmeyen bir calc() değeri o TEK satırı geçersiz kılar, bir ÖNCEKİ
+   geçerli satır (yüzde) korunur — hiçbir zaman "max-height hiç uygulanmadı,
+   sheet sınırsız büyüdü" durumuna düşülmez. */
+.appointment-sheet-panel {
+  max-height: calc(100% - 24px);
+  max-height: calc(100svh - 24px);
+  max-height: calc(100dvh - 24px);
+}
 @media (min-width: 640px) {
-  .appointment-sheet-panel { max-height: 85%; }
+  .appointment-sheet-panel {
+    max-height: 85%;
+    max-height: 85svh;
+    max-height: 85dvh;
+  }
+}
+
+/* AppointmentBottomSheet açıkken mobil alt navigasyonu ve WhatsApp butonunu
+   TAMAMEN kaldırır (z-index'e güvenmek yerine) — StudentNav.tsx'in mobil
+   alt navigasyonu Android'deki ayrı bir scroll-render hatası için kendi GPU
+   katmanına zorlanıyor (`translateZ(0)`/`isolation:isolate`); gerçek iPhone
+   Safari'de zorlanmış GPU katmanları bazen DOM z-index sırasını yok sayıp
+   sheet'in ÜZERİNDE çiziliyor. `display:none` bu belirsizliği tamamen
+   ortadan kaldırır — gizli eleman hiçbir katmanlama/pointer-events
+   sorununa girmez. Sheet kapanınca body'den `data-sheet-open` kaldırılır,
+   nav/WhatsApp normale döner. */
+body[data-sheet-open="true"] .student-bottom-nav,
+body[data-sheet-open="true"] a[aria-label="WhatsApp ile iletişime geç"] {
+  display: none !important;
 }
 

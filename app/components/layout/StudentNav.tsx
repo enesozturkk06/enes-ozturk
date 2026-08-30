@@ -199,7 +199,7 @@ export default function StudentNav() {
 
       {/* Mobile bottom navigation — ekrana tam birleşik (Instagram/Spotify tarzı) */}
       <div
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-[46]"
+        className="student-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-[46]"
         style={{
           // Android Chrome'da fixed + backdrop-blur kombinasyonu kaydırma sırasında
           // hatalı çiziliyor (kartlar üst üste biniyor gibi görünüyor) — kendi GPU
