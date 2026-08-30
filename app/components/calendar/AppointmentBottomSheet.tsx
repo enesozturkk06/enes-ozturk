@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -9,15 +9,30 @@ import { X } from "lucide-react";
  * VE öğrenci randevu onay/detay akışı AYNI kabuğu kullanır, içerik
  * children ile role'e göre değişir.
  *
- * Yapı (mobil taşma/erişilemeyen buton bug'ı düzeltmesi):
- *  - Sheet'in kendisi `.appointment-sheet-panel` (globals.css) ile sınırlı —
- *    dvh/vh DEĞİL, sheet'in `position:fixed; inset:0` backdrop ebeveynine
- *    göre YÜZDE kullanıyor (bkz. globals.css'teki açıklama): bazı gerçek
- *    cihaz/WebView'lerde dvh desteklenmiyor/yanlış hesaplanıyor ve bu da
- *    max-height kuralını tamamen geçersiz kılıp sheet'i sınırsız büyütüyor
- *    — footer ekran dışına itiliyordu. Yüzde bazlı yaklaşım bu sınıftan
- *    bağımsız, her tarayıcıda çalışır (desktop'ta ESKİ 85vh davranışı
- *    AYNEN korunuyor, sadece hesaplama yöntemi değişti).
+ * Yapı (mobil taşma/erişilemeyen buton bug'ı düzeltmesi — Safari/iPhone'a
+ * özel kök neden):
+ *  - Android'de (Chrome) `position:fixed; inset:0` her zaman GERÇEKTEN
+ *    görünen alana eşit render olur. Gerçek iPhone Safari'de İSE eski,
+ *    hâlâ kısmen geçerli bir davranış var: `fixed` elemanlar bazen
+ *    "layout viewport" (Safari'nin adres çubuğu hep gizliymiş gibi
+ *    varsaydığı, GERÇEKTEN görünenden daha uzun sanal alan) baz alınarak
+ *    boyutlandırılıyor/konumlandırılıyor — "visual viewport" (gerçekten
+ *    görünen, daha kısa alan) değil. Sonuç: backdrop'un kendisi görünenden
+ *    daha uzun render oluyor, `items-end` de sheet'i bu daha uzun kutunun
+ *    altına hizalıyor — yani sheet (ve footer'daki buton) gerçek ekranın
+ *    ALTINDA, görünmez bir bölgede konumlanıyor. Bu Android'de hiç
+ *    yaşanmayan, Safari'ye özgü bir davranış — "Android'de düzeldi,
+ *    iPhone Safari'de düzelmedi" raporuyla tam örtüşüyor.
+ *  - ÇÖZÜM: CSS viewport birimlerine (vh/dvh/%) GÜVENMİYORUZ. Bunun
+ *    yerine `window.visualViewport` (gerçekten görünen alanı ms hassasiyetle
+ *    veren, tüm modern iOS/Android'de desteklenen API) ile backdrop'un
+ *    `top`/`height` değerini JS'te PİKSEL olarak ölçüp inline style'a
+ *    yazıyoruz — Safari'nin toolbar'ı açılıp kapandıkça (`resize`/`scroll`
+ *    event'leri ile) canlı güncelleniyor. Backdrop artık HER ZAMAN gerçek
+ *    görünen alanla birebir aynı; `.appointment-sheet-panel` (globals.css)
+ *    içindeki yüzde bazlı max-height de bu doğru kutuya göre çözülüyor.
+ *    `visualViewport` yoksa (çok eski tarayıcı) eski `inset:0` davranışına
+ *    sessizce geri düşülüyor.
  *  - Başlık/handle sabit (flex-shrink-0), içerik `flex-1 min-h-0 overflow-y-auto`
  *    ile GERÇEKTEN kendi içinde scroll eder (önceki hata: bu satırda
  *    min-h-0 yoktu, flex çocuğu içeriğe göre büyüyüp dış overflow-hidden
@@ -40,6 +55,24 @@ export default function AppointmentBottomSheet({
    * ayrı, her zaman görünür kalır (örn. "Randevuyu Onayla" / "Tamamlandı"). */
   footer?: React.ReactNode;
 }) {
+  // Gerçekten görünen alanı (Safari'nin "layout viewport"u değil, "visual
+  // viewport"u) piksel cinsinden takip ediyoruz — bkz. üstteki açıklama.
+  const [viewport, setViewport] = useState<{ top: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setViewport({ top: vv.offsetTop, height: vv.height });
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     // Sadece `overflow:hidden` gerçek iOS Safari'de touch-scroll/rubber-band'i
@@ -66,6 +99,7 @@ export default function AppointmentBottomSheet({
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className="fixed inset-0 z-[60] flex items-end justify-center"
+          style={viewport ? { top: viewport.top, height: viewport.height, bottom: "auto" } : undefined}
           onClick={onClose}>
           <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)" }} />
           <motion.div
