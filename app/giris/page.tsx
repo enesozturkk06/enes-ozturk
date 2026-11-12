@@ -28,16 +28,18 @@ export default function GirisPage() {
     setLoading(true);
     setError("");
     try {
-      const found = await loginStudent(code);
-      if (found) {
-        saveStudentSession(found);
-        setStudent(found);
+      const result = await loginStudent(code);
+      if (result.status === "ok") {
+        saveStudentSession(result.student);
+        setStudent(result.student);
         router.push("/ogrenci");
-      } else {
+      } else if (result.status === "invalid-code") {
         setError("Geçersiz giriş kodu. Lütfen antrenörünüzle iletişime geçin.");
+      } else {
+        setError("İnternet bağlantınızda sorun olabilir. Lütfen tekrar deneyin.");
       }
     } catch {
-      setError("Bir hata oluştu. Tekrar deneyin.");
+      setError("İnternet bağlantınızda sorun olabilir. Lütfen tekrar deneyin.");
     } finally {
       setLoading(false);
     }

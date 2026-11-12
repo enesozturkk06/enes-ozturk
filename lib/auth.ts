@@ -36,15 +36,48 @@ function mapSalonOwner(row: any): SalonOwner {
 }
 
 /* ── Student ─────────────────────────────────────────────────── */
-export async function loginStudent(code: string): Promise<Student | null> {
+export type LoginStudentResult =
+  | { status: "ok"; student: Student }
+  | { status: "invalid-code" }
+  | { status: "network-error" };
+
+const LOGIN_STUDENT_TIMEOUT_MS = 10000;
+
+/**
+ * "Kod gerçekten yanlış" (PostgREST'in .single() ile sıfır satır dönmesi,
+ * PGRST116) ile "istek ağ/timeout/sunucu hatasıyla başarısız oldu" birbirinden
+ * AYRI ele alınır — öncesinde ikisi de "Geçersiz giriş kodu" olarak
+ * gösteriliyordu; geçerli kodu olan ama o an bağlantı sorunu yaşayan bir
+ * öğrenci, kodunun yanlış olduğunu sanıp antrenörüne gereksiz yere
+ * ulaşıyordu. Geçici hatalarda bir kez daha denenir.
+ */
+export async function loginStudent(code: string): Promise<LoginStudentResult> {
   const upper = code.trim().toUpperCase();
-  if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase
-      .from("students").select("*").eq("code", upper).eq("is_active", true).single();
-    if (error) { console.log("[loginStudent]", error.message); return null; }
-    return data ? mapStudent(data) : null;
+  if (!isSupabaseConfigured || !supabase) {
+    const found = MOCK_STUDENTS.find(s => s.code === upper && s.isActive);
+    return found ? { status: "ok", student: found } : { status: "invalid-code" };
   }
-  return MOCK_STUDENTS.find(s => s.code === upper && s.isActive) ?? null;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const queryPromise = supabase
+        .from("students").select("*").eq("code", upper).eq("is_active", true).single();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("LOGIN_STUDENT_TIMEOUT")), LOGIN_STUDENT_TIMEOUT_MS)
+      );
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+      if (error) {
+        if (error.code === "PGRST116") return { status: "invalid-code" };
+        console.log(`[loginStudent] İstek başarısız (deneme ${attempt}/2):`, error.message);
+      } else {
+        return data ? { status: "ok", student: mapStudent(data) } : { status: "invalid-code" };
+      }
+    } catch (e) {
+      console.log(`[loginStudent] İstek istisna fırlattı (deneme ${attempt}/2):`, e instanceof Error ? e.message : e);
+    }
+    if (attempt === 1) await new Promise(r => setTimeout(r, 1200));
+  }
+  return { status: "network-error" };
 }
 
 export function saveStudentSession(student: Student): void {
@@ -63,24 +96,48 @@ export function saveAdminSession(): void {
 }
 
 /* ── Salon Sahibi ────────────────────────────────────────────── */
-export async function loginSalonOwner(code: string): Promise<SalonOwner | null> {
+export type LoginSalonOwnerResult =
+  | { status: "ok"; owner: SalonOwner }
+  | { status: "invalid-code" }
+  | { status: "network-error" };
+
+const LOGIN_SALON_OWNER_TIMEOUT_MS = 10000;
+
+/**
+ * Şema hatası (tablo henüz yok) ve "kod gerçekten yanlış" durumları hâlâ
+ * "invalid-code" sayılır (davranış değişmedi). Ağ/timeout hatası AYRI ele
+ * alınır — bkz. loginStudent'taki aynı düzeltmenin gerekçesi.
+ */
+export async function loginSalonOwner(code: string): Promise<LoginSalonOwnerResult> {
   const upper = code.trim().toUpperCase();
-  if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase
-      .from("salon_owners").select("*")
-      .eq("access_code", upper).eq("is_active", true).maybeSingle();
-    if (error) {
-      // Tablo yoksa null döndür
-      if (error.message.includes("schema cache") || error.message.includes("table")) {
-        console.warn("[loginSalonOwner] salon_owners tablosu hazır değil:", error.message);
-        return null;
+  if (!isSupabaseConfigured || !supabase) return { status: "invalid-code" };
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const queryPromise = supabase
+        .from("salon_owners").select("*")
+        .eq("access_code", upper).eq("is_active", true).maybeSingle();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("LOGIN_SALON_OWNER_TIMEOUT")), LOGIN_SALON_OWNER_TIMEOUT_MS)
+      );
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+      if (error) {
+        // Tablo yoksa (şema henüz kurulmamış) invalid-code say — bu bir ağ
+        // sorunu değil, kalıcı bir yapılandırma eksikliği.
+        if (error.message.includes("schema cache") || error.message.includes("table")) {
+          console.warn("[loginSalonOwner] salon_owners tablosu hazır değil:", error.message);
+          return { status: "invalid-code" };
+        }
+        console.log(`[loginSalonOwner] İstek başarısız (deneme ${attempt}/2):`, error.message);
+      } else {
+        return data ? { status: "ok", owner: mapSalonOwner(data) } : { status: "invalid-code" };
       }
-      console.log("[loginSalonOwner]", error.message);
-      return null;
+    } catch (e) {
+      console.log(`[loginSalonOwner] İstek istisna fırlattı (deneme ${attempt}/2):`, e instanceof Error ? e.message : e);
     }
-    return data ? mapSalonOwner(data) : null;
+    if (attempt === 1) await new Promise(r => setTimeout(r, 1200));
   }
-  return null;
+  return { status: "network-error" };
 }
 
 export function saveSalonOwnerSession(owner: SalonOwner): void {
@@ -126,22 +183,63 @@ export function getSession(): AuthState {
   return { role: null, student: null, isAdmin: false, salonOwner: null };
 }
 
+export type VerifyStudentResult =
+  | { status: "ok"; student: Student }
+  | { status: "not-found" }
+  | { status: "network-error" };
+
+const VERIFY_STUDENT_TIMEOUT_MS = 10000;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function queryStudentOnce(studentId: string): Promise<{ data: any; error: any }> {
+  const queryPromise = supabase!
+    .from("students").select("*").eq("id", studentId).eq("is_active", true).maybeSingle();
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("VERIFY_STUDENT_TIMEOUT")), VERIFY_STUDENT_TIMEOUT_MS)
+  );
+  return Promise.race([queryPromise, timeoutPromise]);
+}
+
 /**
  * Öğrencinin Supabase'deki gerçek verisini çek ve localStorage'ı güncelle.
  * Sayfa yüklenince çağrılır — eski/mock session'ları temizler.
+ *
+ * ÖNEMLİ: "istek başarısız oldu" (ağ kopukluğu/timeout/geçici sunucu hatası)
+ * ile "istek başarılı oldu ama öğrenci gerçekten yok" (silinmiş/pasif)
+ * birbirinden AYRI ele alınır. Öncesinde ikisi de aynı şekilde "bulunamadı"
+ * sayılıp kullanıcı anında oturumdan atılıyordu — bir an için internet
+ * kesintisi yaşayan (ama hesabı tamamen geçerli olan) kullanıcılar, uygulamayı
+ * her açtıklarında rastgele login ekranına düşüyordu. Artık sadece Supabase'in
+ * GERÇEKTEN boş sonuç döndürdüğü (error yok, data yok) durumda oturum
+ * temizleniyor; ağ/timeout hatalarında mevcut (önbellekteki) oturum korunuyor.
+ * Geçici hatalarda bir kez daha denenir (kısa gecikmeyle) — kalıcı ağ
+ * sorunlarında sonsuz denemeye girmeden mevcut oturumla devam edilir.
  */
-export async function verifyAndRefreshStudent(student: Student): Promise<Student | null> {
-  if (!isSupabaseConfigured || !supabase) return student;
-  const { data, error } = await supabase
-    .from("students").select("*").eq("id", student.id).eq("is_active", true).maybeSingle();
-  if (error || !data) {
-    console.warn("[verifyAndRefreshStudent] Öğrenci Supabase'de bulunamadı, session temizleniyor:", student.id);
-    localStorage.removeItem(STUDENT_KEY);
-    return null;
+export async function verifyAndRefreshStudent(student: Student): Promise<VerifyStudentResult> {
+  if (!isSupabaseConfigured || !supabase) return { status: "ok", student };
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { data, error } = await queryStudentOnce(student.id);
+      if (error) {
+        console.warn(`[verifyAndRefreshStudent] Doğrulama isteği başarısız (deneme ${attempt}/2), session korunuyor:`, error.message ?? error);
+      } else if (!data) {
+        // İstek BAŞARILI oldu ve sonuç gerçekten boş — öğrenci silinmiş/pasif.
+        console.warn("[verifyAndRefreshStudent] Öğrenci Supabase'de bulunamadı, session temizleniyor:", student.id);
+        localStorage.removeItem(STUDENT_KEY);
+        return { status: "not-found" };
+      } else {
+        const fresh = mapStudent(data);
+        saveStudentSession(fresh);
+        return { status: "ok", student: fresh };
+      }
+    } catch (e) {
+      // Timeout veya network exception (fetch failed, abort, DNS, vs.)
+      console.warn(`[verifyAndRefreshStudent] Doğrulama isteği istisna fırlattı (deneme ${attempt}/2), session korunuyor:`, e instanceof Error ? e.message : e);
+    }
+    if (attempt === 1) await new Promise(r => setTimeout(r, 1200));
   }
-  const fresh = mapStudent(data);
-  saveStudentSession(fresh);
-  return fresh;
+  return { status: "network-error" };
 }
 
 export function logout(): void {

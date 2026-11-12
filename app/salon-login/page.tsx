@@ -12,7 +12,7 @@ import Link from "next/link";
 export default function SalonLoginPage() {
   const [code, setCode]         = useState("");
   const [visible, setVisible]   = useState(false);
-  const [status, setStatus]     = useState<"idle"|"loading"|"error"|"success">("idle");
+  const [status, setStatus]     = useState<"idle"|"loading"|"error"|"network-error"|"success">("idle");
   const [shake, setShake]       = useState(false);
   const { salonOwner, loaded, setSalonOwner } = useAuth();
   const router = useRouter();
@@ -33,16 +33,16 @@ export default function SalonLoginPage() {
     setStatus("loading");
 
     await new Promise(r => setTimeout(r, 600));
-    const owner = await loginSalonOwner(code);
+    const result = await loginSalonOwner(code);
 
-    if (owner) {
+    if (result.status === "ok") {
       setStatus("success");
-      saveSalonOwnerSession(owner);
-      setSalonOwner(owner);
+      saveSalonOwnerSession(result.owner);
+      setSalonOwner(result.owner);
       await new Promise(r => setTimeout(r, 500));
       router.push("/salon-panel");
     } else {
-      setStatus("error");
+      setStatus(result.status === "network-error" ? "network-error" : "error");
       setShake(true);
       setTimeout(() => { setShake(false); setStatus("idle"); setCode(""); inputRef.current?.focus(); }, 1200);
     }
@@ -87,7 +87,7 @@ export default function SalonLoginPage() {
           className="relative rounded-2xl overflow-hidden gradient-animated gradient-slow gradient-violet-pink-orange gradient-border-quiet p-[1px]"
         >
           <div className="glass-strong relative rounded-2xl overflow-hidden"
-            style={{ boxShadow: status==="error" ? "0 0 30px rgba(239,68,68,0.15)" : status==="success" ? "0 0 30px rgba(34,197,94,0.15)" : "none", transition:"box-shadow 0.3s" }}>
+            style={{ boxShadow: status==="error" ? "0 0 30px rgba(239,68,68,0.15)" : status==="network-error" ? "0 0 30px rgba(245,158,11,0.15)" : status==="success" ? "0 0 30px rgba(34,197,94,0.15)" : "none", transition:"box-shadow 0.3s" }}>
 
           <div className="p-8">
             {/* Durum */}
@@ -113,6 +113,13 @@ export default function SalonLoginPage() {
                     <span className="text-xs tracking-widest" style={{ color:"var(--color-error)", fontFamily:"var(--font-label)" }}>Geçersiz veya Pasif Kod</span>
                   </motion.div>
                 )}
+                {status === "network-error" && (
+                  <motion.div key="network-error" initial={{ opacity:0, scale:0.9 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0 }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background:"rgba(245,158,11,0.12)" }}>
+                    <AlertCircle size={13} style={{ color: "var(--color-achievement)" }} />
+                    <span className="text-xs tracking-widest" style={{ color:"var(--color-achievement)", fontFamily:"var(--font-label)" }}>Bağlantı Sorunu</span>
+                  </motion.div>
+                )}
                 {status === "success" && (
                   <motion.div key="success" initial={{ opacity:0, scale:0.9 }} animate={{ opacity:1, scale:1 }}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background:"rgba(34,197,94,0.12)" }}>
@@ -133,12 +140,12 @@ export default function SalonLoginPage() {
                     ref={inputRef}
                     type={visible ? "text" : "password"}
                     value={code}
-                    onChange={e => { setCode(e.target.value.toUpperCase()); if (status==="error") setStatus("idle"); }}
+                    onChange={e => { setCode(e.target.value.toUpperCase()); if (status==="error" || status==="network-error") setStatus("idle"); }}
                     placeholder="SALON-XXXX"
                     disabled={status==="loading" || status==="success"}
                     className="glass w-full px-4 py-3.5 pr-11 text-sm outline-none rounded-xl transition-all duration-300"
                     style={{
-                      borderColor: status==="error" ? "rgba(239,68,68,0.5)" : status==="success" ? "rgba(34,197,94,0.5)" : undefined,
+                      borderColor: status==="error" ? "rgba(239,68,68,0.5)" : status==="network-error" ? "rgba(245,158,11,0.5)" : status==="success" ? "rgba(34,197,94,0.5)" : undefined,
                       color:"#fff",
                       fontFamily:"var(--font-display)",
                       fontSize:"1.1rem",
@@ -155,6 +162,12 @@ export default function SalonLoginPage() {
                     <motion.p initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:"auto" }} exit={{ opacity:0, height:0 }}
                       className="text-xs pt-0.5" style={{ color: "var(--color-error)", fontFamily:"var(--font-label)" }}>
                       Girdiğiniz kod geçersiz veya pasif. Antrenörden doğru kodu alın.
+                    </motion.p>
+                  )}
+                  {status === "network-error" && (
+                    <motion.p initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:"auto" }} exit={{ opacity:0, height:0 }}
+                      className="text-xs pt-0.5" style={{ color: "var(--color-achievement)", fontFamily:"var(--font-label)" }}>
+                      İnternet bağlantınızda sorun olabilir. Lütfen tekrar deneyin.
                     </motion.p>
                   )}
                 </AnimatePresence>
